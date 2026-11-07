@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astart"
-version = "0.1.0"
+version = "0.1.1"
 description = "Mutable Python AST with loss-aware source preservation and semantic typing"
 readme = "README.md"
 requires-python = ">=3.13"
