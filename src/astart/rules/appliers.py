@@ -367,8 +367,8 @@ def _ancestor_index(*, module: ast.Module, node: ast.AST) -> int:
     """
     return next(
         position
-        for position, statement in enumerate(module.body)
-        if any(child is node for child in ast.walk(statement))
+        for position, statement in enumerate(iterable=module.body)
+        if any(child is node for child in ast.walk(node=statement))
     )
 
 
@@ -385,14 +385,14 @@ def _class_variables(*, module: ast.Module, function: ast.AST) -> set[str]:
     """
     names: set[str] = set()
     for statement in module.body:
-        for node in ast.walk(statement):
+        for node in ast.walk(node=statement):
             if isinstance(node, ast.ClassDef) and any(
-                child is function for child in ast.walk(node)
+                child is function for child in ast.walk(node=node)
             ):
                 for part in (*node.bases, *(k.value for k in node.keywords)):
                     names.update(
                         item.id
-                        for item in ast.walk(part)
+                        for item in ast.walk(node=part)
                         if isinstance(item, ast.Name)
                     )
                 names.update(item.name for item in node.type_params)
@@ -474,7 +474,7 @@ def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
             name="TypeVar",
             before=index,
         )
-        match ast.parse(f'{name} = {factory}("{name}")').body:
+        match ast.parse(source=f'{name} = {factory}("{name}")').body:
             case [ast.Assign() as declaration]:
                 _strip_locations(node=declaration)
                 module.body.insert(
@@ -484,7 +484,7 @@ def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
             case _:
                 return
     parameter.annotation = ast.Name(id=name, ctx=ast.Load())
-    function.returns = ast.parse(returns, mode="eval").body
+    function.returns = ast.parse(source=returns, mode="eval").body
 
 
 @final

@@ -15,7 +15,7 @@ def _module(*, source: str) -> ast.Module:
 
 
 def _text(*, module: ast.Module) -> str:
-    return ast.unparse(ast.fix_missing_locations(module))
+    return ast.unparse(ast_obj=ast.fix_missing_locations(node=module))
 
 
 def test_new_import_goes_after_existing_imports() -> None:
@@ -49,7 +49,11 @@ def test_new_import_goes_after_existing_imports() -> None:
 
 def test_name_joins_an_existing_from_import() -> None:
     """Check that name joins an existing from import."""
-    module = _module(source="from typing import Final\n")
+    module = _module(
+        source="""\
+from typing import Final
+""",
+    )
     insert_import(
         module=module,
         source="typing",
@@ -64,7 +68,11 @@ def test_name_joins_an_existing_from_import() -> None:
 
 def test_present_name_is_not_imported_twice() -> None:
     """Check that present name is not imported twice."""
-    module = _module(source="from typing import Final\n")
+    module = _module(
+        source="""\
+from typing import Final
+""",
+    )
     insert_import(
         module=module,
         source="typing",
@@ -79,7 +87,11 @@ def test_present_name_is_not_imported_twice() -> None:
 
 def test_ensure_names_imports_only_known_missing_names() -> None:
     """Check that ensure names imports only known missing names."""
-    module = _module(source="import os\n")
+    module = _module(
+        source="""\
+import os
+""",
+    )
     expression = ast.parse(
         source="dict[str, Sequence[Path]]",
         mode="eval",

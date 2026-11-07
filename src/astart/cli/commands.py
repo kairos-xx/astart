@@ -298,14 +298,14 @@ def _write_atomic(*, path: Path, text: str, encoding: str) -> None:
 
     """
     target: Path = path.resolve()
-    temporary: Path = target.with_name(target.name + ".astart-tmp")
+    temporary: Path = target.with_name(name=target.name + ".astart-tmp")
     try:
         with temporary.open(mode="wb") as handle:
             _ = handle.write(text.encode(encoding=encoding))
             handle.flush()
-            fsync(handle.fileno())
+            fsync(fd=handle.fileno())
         copymode(src=target, dst=temporary)
-        _ = temporary.replace(target)
+        _ = temporary.replace(target=target)
     finally:
         temporary.unlink(missing_ok=True)
 

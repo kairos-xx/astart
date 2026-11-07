@@ -73,7 +73,7 @@ def passthrough_return(
     if function.returns is not None:
         return None
     nodes: list[ast.AST] = [
-        node for statement in function.body for node in ast.walk(statement)
+        node for statement in function.body for node in ast.walk(node=statement)
     ]
     if any(parameter in names_bound_by(node=node) for node in nodes):
         return None
@@ -82,7 +82,7 @@ def passthrough_return(
     parents: dict[ast.AST, ast.AST] = {
         child: parent
         for parent in nodes
-        for child in ast.iter_child_nodes(parent)
+        for child in ast.iter_child_nodes(node=parent)
     }
     uses: list[ast.AST] = [
         node
@@ -102,6 +102,6 @@ def passthrough_return(
         return None
     mentioned: bool = any(
         isinstance(node, ast.Name) and node.id == variable
-        for node in ast.walk(ast.parse(source=result, mode="eval"))
+        for node in ast.walk(node=ast.parse(source=result, mode="eval"))
     )
     return result if mentioned else None

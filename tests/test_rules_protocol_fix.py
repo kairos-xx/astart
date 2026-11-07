@@ -64,9 +64,16 @@ def test_protocol_precedes_the_function_that_uses_it() -> None:
 
 def test_second_run_changes_nothing() -> None:
     """Check that second run changes nothing."""
-    first = _fix(source="def load(src):\n    return src.read(1)\n")
-    second = _fix(source=first.source)
-    expect_equal(actual=second.source, expected=first.source)
+    first = _fix(
+        source="""\
+def load(src):
+    return src.read(1)
+""",
+    )
+    expect_equal(
+        actual=(_fix(source=first.source)).source,
+        expected=first.source,
+    )
 
 
 def test_identical_usage_shares_one_protocol() -> None:
@@ -101,13 +108,23 @@ def test_existing_protocol_import_is_reused() -> None:
 
 def test_value_use_gets_no_protocol() -> None:
     """Check that value use gets no protocol."""
-    result = _fix(source="def load(src):\n    return src\n")
+    result = _fix(
+        source="""\
+def load(src):
+    return src
+""",
+    )
     expect_not_in(item="Protocol", container=result.source)
 
 
 def test_default_value_gets_no_protocol() -> None:
     """Check that default value gets no protocol."""
-    result = _fix(source="def load(src=None):\n    return src.read(1)\n")
+    result = _fix(
+        source="""\
+def load(src=None):
+    return src.read(1)
+""",
+    )
     expect_not_in(item="Protocol", container=result.source)
 
 
@@ -135,7 +152,10 @@ def test_proven_ceiling_does_not_synthesize() -> None:
     """Check that proven ceiling does not synthesize."""
     registries = default_registries()
     result = fix_source(
-        source="def load(src):\n    return src.read(1)\n",
+        source="""\
+def load(src):
+    return src.read(1)
+""",
         filename="m.py",
         catalog=load_default_catalog(registries=registries),
         registries=registries,

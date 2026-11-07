@@ -27,17 +27,17 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        indent: One indentation level in rendered source.
-        private_prefix: Prefix of attribute names that are never members.
-        generated_name: Names the rendered signature generates itself.
-        receiver: Name of the rendered receiver parameter.
-        docstring_marker: Start of the docstring of a synthesized protocol.
+        indent: Grouped module constant.
+        private_prefix: Grouped module constant.
+        generated_name: Grouped module constant.
+        receiver: Grouped module constant.
+        docstring_marker: Grouped module constant.
 
     """
 
     indent: Final[str] = "    "
     private_prefix: Final[str] = "__"
-    generated_name: Final[Pattern[str]] = compile_pattern(r"arg\d+")
+    generated_name: Final[Pattern[str]] = compile_pattern(pattern="arg\\d+")
     receiver: Final[str] = "self"
     docstring_marker: Final[str] = "Structural type of ``"
 
@@ -140,9 +140,7 @@ def names_bound_by(*, node: ast.AST) -> tuple[str, ...]:
     match node:
         case (
             ast.Name(id=found, ctx=ast.Store() | ast.Del())
-            | ast.arg(
-                arg=found,
-            )
+            | ast.arg(arg=found)
         ):
             names = (found,)
         case ast.Global(names=listed) | ast.Nonlocal(names=listed):
@@ -185,7 +183,7 @@ def _call_shape(
         return None
     if any(
         item.arg == Constants.receiver
-        or Constants.generated_name.fullmatch(item.arg or "")
+        or Constants.generated_name.fullmatch(string=item.arg or "")
         for item in call.keywords
     ):
         return None
@@ -199,7 +197,7 @@ def _call_shape(
             if item.arg is not None
         ),
     )
-    return positional, keywords
+    return (positional, keywords)
 
 
 def _same(*, values: list[str | None]) -> bool:
@@ -241,12 +239,14 @@ def _merge(*, name: str, draft: _Draft) -> Member | None:
     )
     merged_keywords: tuple[tuple[str, str | None], ...] = tuple(
         (
-            key,
-            first_keywords[index][1]
-            if _same(values=[call[1][index][1] for call in draft.calls])
-            else None,
-        )
-        for index, (key, _) in enumerate(iterable=first_keywords)
+            (
+                key,
+                first_keywords[index][1]
+                if _same(values=[call[1][index][1] for call in draft.calls])
+                else None,
+            )
+            for index, (key, _) in enumerate(iterable=first_keywords)
+        ),
     )
     return Member(
         name=name,
@@ -284,7 +284,7 @@ def _collect(
             isinstance(attribute, ast.Attribute)
             and attribute.value is node
             and isinstance(attribute.ctx, ast.Load)
-            and not attribute.attr.startswith(Constants.private_prefix)
+            and (not attribute.attr.startswith(Constants.private_prefix))
         ):
             return None
         draft: _Draft = drafts.setdefault(attribute.attr, _Draft(calls=[]))
@@ -368,21 +368,30 @@ def _member_source(*, member: Member) -> str:
     """
     pad: str = Constants.indent
     if not member.is_method:
-        return f"{pad}@property\n{pad}def {member.name}(self): ...\n"
+        return f"""\
+{pad}@property
+{pad}def {member.name}(self): ...
+"""
     parameters: list[str] = ["self"]
     parameters.extend(
-        _annotated(name=f"arg{index}", annotation=annotation)
-        for index, annotation in enumerate(iterable=member.positional)
+        (
+            _annotated(name=(f"arg{index}"), annotation=annotation)
+            for index, annotation in enumerate(iterable=member.positional)
+        ),
     )
     if member.positional:
         parameters.append("/")
     if member.keywords:
         parameters.append("*")
         parameters.extend(
-            _annotated(name=key, annotation=annotation)
-            for key, annotation in member.keywords
+            (
+                _annotated(name=key, annotation=annotation)
+                for key, annotation in member.keywords
+            ),
         )
-    return f"{pad}def {member.name}({', '.join(parameters)}): ...\n"
+    return f"""\
+{pad}def {member.name}({", ".join(parameters)}): ...
+"""
 
 
 def protocol_source(
@@ -404,12 +413,14 @@ def protocol_source(
         Python source for the class, ending with a newline.
 
     """
-    header: str = (
-        f"class {name}(Protocol):\n"
-        f'{Constants.indent}"""{Constants.docstring_marker}{parameter}`` in '
-        f'``{function}``."""\n'
-    )
-    body: str = "\n".join(
-        _member_source(member=member) for member in usage.members
-    )
-    return f"{header}\n{body}"
+    header: str = f"""\
+class {name}(Protocol):
+{Constants.indent}\"""{Constants.docstring_marker}{parameter}`` in \
+``{function}``.\"""
+"""
+    body: str = """\
+
+""".join(_member_source(member=member) for member in usage.members)
+    return f"""\
+{header}
+{body}"""

@@ -94,7 +94,7 @@ def _structure(
     """
     owners: dict[int, ast.ClassDef] = {}
     overloaded: set[int] = set()
-    for node in ast.walk(module):
+    for node in ast.walk(node=module):
         if isinstance(node, ast.ClassDef):
             owners.update(
                 {
@@ -121,7 +121,7 @@ def _structure(
             overloaded.update(
                 id(item) for item in functions if item.name in names
             )
-    return owners, frozenset(overloaded)
+    return (owners, frozenset(overloaded))
 
 
 def _no_counts() -> dict[str, int]:
@@ -174,6 +174,8 @@ class Constants:
     Attributes:
         typing_modules: Grouped module constant.
         node_kinds: Grouped module constant.
+        position_attributes: Grouped module constant.
+        function_nodes: Grouped module constant.
         type_constructors: Grouped module constant.
         applier_keys: Grouped module constant.
         immutable_literals: Grouped module constant.
@@ -493,10 +495,7 @@ def _annotation_missing(subject: Subject, facts: ModuleFacts) -> FactValue:
             ast.arg(annotation=None, arg=name),
             ast.FunctionDef() | ast.AsyncFunctionDef() as owner,
         ]:
-            first: list[ast.arg] = [
-                *owner.args.posonlyargs,
-                *owner.args.args,
-            ]
+            first: list[ast.arg] = [*owner.args.posonlyargs, *owner.args.args]
             is_receiver: bool = (
                 bool(first)
                 and first[0] is subject.node
@@ -544,7 +543,7 @@ def _plain_parameter(
         The parameter and its function, or ``None`` for any other subject.
 
     """
-    if subject.kind != "Parameter" or not _annotation_missing(subject, facts):
+    if subject.kind != "Parameter" or not _annotation_missing(subject=subject, facts=facts):
         return None
     match (subject.node, subject.statement):
         case [
@@ -560,7 +559,7 @@ def _plain_parameter(
                 parameter=parameter,
             ):
                 return None
-            return parameter, function
+            return (parameter, function)
         case _:
             return None
 
@@ -600,14 +599,10 @@ def _synthesis_allowed(
     )
     first: list[ast.arg] = [*function.args.posonlyargs, *function.args.args]
     is_first: bool = bool(first) and first[0] is parameter
-    return not (dunder or bool(owner.bases) or (is_first and not static))
+    return not (dunder or bool(owner.bases) or (is_first and (not static)))
 
 
-def _is_synthesized_member(
-    *,
-    function: ast.AST,
-    facts: ModuleFacts,
-) -> bool:
+def _is_synthesized_member(*, function: ast.AST, facts: ModuleFacts) -> bool:
     """Tell whether a function is a member of a synthesized ``Protocol``.
 
     Args:
@@ -621,7 +616,7 @@ def _is_synthesized_member(
     owner = facts.method_owner.get(id(function))
     if owner is None:
         return False
-    return (ast.get_docstring(owner) or "").startswith(
+    return (ast.get_docstring(node=owner) or "").startswith(
         ProtocolConstants.docstring_marker,
     )
 
@@ -640,7 +635,7 @@ def _has_structural_protocol(
         Whether a ``Protocol`` can be synthesized for it.
 
     """
-    plain = _plain_parameter(subject, facts)
+    plain = _plain_parameter(subject=subject, facts=facts)
     if plain is None:
         return False
     parameter, function = plain
@@ -657,8 +652,9 @@ def _has_structural_protocol(
     )
     if usage is None:
         return False
-    return facts.hints is None or (
-        facts.hints.index().hint_for(node=parameter) is None
+    return (
+        facts.hints is None
+        or facts.hints.index().hint_for(node=parameter) is None
     )
 
 
@@ -673,7 +669,7 @@ def _is_passthrough(subject: Subject, facts: ModuleFacts) -> FactValue:
         Whether a type variable can describe the parameter and the return.
 
     """
-    plain = _plain_parameter(subject, facts)
+    plain = _plain_parameter(subject=subject, facts=facts)
     if plain is None:
         return False
     parameter, function = plain

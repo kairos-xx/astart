@@ -29,8 +29,8 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        corpus_files: Vendored modules to fix.
-        stable_check_lines: Longest file whose rerun is checked.
+        corpus_files: Grouped module constant.
+        stable_check_lines: Grouped module constant.
 
     """
 
@@ -66,7 +66,7 @@ def _comments(*, text: str) -> list[str]:
     """
     return [
         token.string
-        for token in generate_tokens(StringIO(initial_value=text).readline)
+        for token in generate_tokens(readline=StringIO(initial_value=text).readline)
         if token.type == COMMENT
     ]
 
@@ -109,11 +109,16 @@ def test_synthesis_compiles_keeps_comments_and_is_stable(
     source = path.read_text(encoding="utf-8")
     result = _fix(source=source, name=path.name)
     expect_equal(actual=result.parse_error, expected=None)
-    _ = compile(result.source, path.name, "exec")
+    _ = compile(source=result.source, filename=path.name, mode="exec")
     expect_equal(
         actual=_comments(text=result.source),
         expected=_comments(text=source),
     )
-    if source.count("\n") <= Constants.stable_check_lines:
+    if (
+        source.count("""\
+
+""")
+        <= Constants.stable_check_lines
+    ):
         again = _fix(source=result.source, name=path.name)
         expect_true(condition=again.source == result.source)

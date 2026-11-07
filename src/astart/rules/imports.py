@@ -14,9 +14,8 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        known_imports: Names that may be imported automatically, with the
-            module that defines each.
-        constructors: Known imported classes whose call has the class as type.
+        known_imports: Grouped module constant.
+        constructors: Grouped module constant.
 
     """
 
@@ -121,7 +120,7 @@ def _record_import(
                 (node.module or "", alias.name) if plain else None
             )
         else:
-            out[alias.asname or alias.name.split(".")[0]] = None
+            out[alias.asname or alias.name.split(sep=".")[0]] = None
 
 
 def _visit(*, node: ast.AST, out: dict[str, tuple[str, str] | None]) -> None:
@@ -153,7 +152,7 @@ def _visit(*, node: ast.AST, out: dict[str, tuple[str, str] | None]) -> None:
         case ast.Name(id=name, ctx=ast.Store() | ast.Del()):
             out[name] = None
         case _:
-            for child in ast.iter_child_nodes(node):
+            for child in ast.iter_child_nodes(node=node):
                 _visit(node=child, out=out)
 
 
@@ -249,7 +248,7 @@ def insert_import(
         if (
             isinstance(statement, ast.ImportFrom)
             and statement.module == source
-            and statement.level == 0
+            and (statement.level == 0)
             and all(item.name != "*" for item in statement.names)
         ):
             statement.names.append(ast.alias(name=name))
@@ -277,7 +276,7 @@ def ensure_names(
         before: Index of the statement that will use the annotation.
 
     """
-    for node in ast.walk(expression):
+    for node in ast.walk(node=expression):
         if isinstance(node, ast.Name):
             source: str | None = Constants.known_imports.get(node.id)
             if source is not None:

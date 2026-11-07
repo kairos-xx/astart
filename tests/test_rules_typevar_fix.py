@@ -30,7 +30,12 @@ def _fix(*, source: str, ceiling: FixSafety = FixSafety.guarded) -> FixResult:
 
 def test_identity_function_becomes_generic() -> None:
     """Check that identity function becomes generic."""
-    result = _fix(source="def identity(x):\n    return x\n")
+    result = _fix(
+        source="""\
+def identity(x):
+    return x
+""",
+    )
     ast.parse(source=result.source)
     expect_in(item="from typing import TypeVar", container=result.source)
     expect_in(item="T = TypeVar(", container=result.source)
@@ -39,7 +44,12 @@ def test_identity_function_becomes_generic() -> None:
 
 def test_declaration_precedes_the_function() -> None:
     """Check that declaration precedes the function."""
-    result = _fix(source="def identity(x):\n    return x\n")
+    result = _fix(
+        source="""\
+def identity(x):
+    return x
+""",
+    )
     expect_in(item="T = TypeVar", container=result.source)
     assert_order = result.source.index("T = TypeVar") < result.source.index(
         "def identity",
@@ -49,15 +59,33 @@ def test_declaration_precedes_the_function() -> None:
 
 def test_container_of_the_parameter_keeps_the_variable() -> None:
     """Check that container of the parameter keeps the variable."""
-    wrapped = _fix(source="def wrap(x):\n    return [x]\n")
+    wrapped = _fix(
+        source="""\
+def wrap(x):
+    return [x]
+""",
+    )
     expect_in(item="def wrap(x: T) -> list[T]:", container=wrapped.source)
-    paired = _fix(source="def pair(x):\n    return (x, x)\n")
+    paired = _fix(
+        source="""\
+def pair(x):
+    return (x, x)
+""",
+    )
     expect_in(item="-> tuple[T, T]:", container=paired.source)
 
 
 def test_call_sites_do_not_override_the_variable() -> None:
     """Check that call sites do not override the variable."""
-    result = _fix(source="def identity(x):\n    return x\n\n\nidentity(1)\n")
+    result = _fix(
+        source="""\
+def identity(x):
+    return x
+
+
+identity(1)
+""",
+    )
     expect_in(item="def identity(x: T) -> T:", container=result.source)
 
 
@@ -84,20 +112,50 @@ def test_existing_declaration_is_reused() -> None:
 
 def test_name_collision_picks_a_fresh_variable() -> None:
     """Check that name collision picks a fresh variable."""
-    result = _fix(source="T = 3\n\n\ndef identity(x):\n    return x\n")
+    result = _fix(
+        source="""\
+T = 3
+
+
+def identity(x):
+    return x
+""",
+    )
     expect_in(item="def identity(x: T2) -> T2:", container=result.source)
 
 
 def test_constraining_uses_get_no_variable() -> None:
     """Check that constraining uses get no variable."""
     for source in (
-        "def f(x):\n    return x + 1\n",
-        "def f(x):\n    return x.name\n",
-        "def f(x):\n    print(x)\n    return x\n",
-        "def f(x):\n    print(x)\n",
-        "def f(x):\n    return 1\n",
-        "def f(x=1):\n    return x\n",
-        "def f(x):\n    yield x\n",
+        """\
+def f(x):
+    return x + 1
+""",
+        """\
+def f(x):
+    return x.name
+""",
+        """\
+def f(x):
+    print(x)
+    return x
+""",
+        """\
+def f(x):
+    print(x)
+""",
+        """\
+def f(x):
+    return 1
+""",
+        """\
+def f(x=1):
+    return x
+""",
+        """\
+def f(x):
+    yield x
+""",
     ):
         expect_not_in(
             item="TypeVar",
@@ -126,15 +184,25 @@ def test_method_declaration_precedes_the_class() -> None:
 
 def test_second_run_changes_nothing() -> None:
     """Check that second run changes nothing."""
-    first = _fix(source="def identity(x):\n    return x\n")
-    second = _fix(source=first.source)
-    expect_equal(actual=second.source, expected=first.source)
+    first = _fix(
+        source="""\
+def identity(x):
+    return x
+""",
+    )
+    expect_equal(
+        actual=(_fix(source=first.source)).source,
+        expected=first.source,
+    )
 
 
 def test_proven_ceiling_does_not_synthesize() -> None:
     """Check that proven ceiling does not synthesize."""
     result = _fix(
-        source="def identity(x):\n    return x\n",
+        source="""\
+def identity(x):
+    return x
+""",
         ceiling=FixSafety.proven,
     )
     expect_not_in(item="TypeVar", container=result.source)
