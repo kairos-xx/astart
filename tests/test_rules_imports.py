@@ -1,0 +1,99 @@
+"""Verify automatic import insertion."""
+
+from __future__ import annotations
+
+import ast
+from textwrap import dedent
+
+from astart.rules.imports import ensure_names, insert_import
+
+from tests.expectations import expect_equal
+
+
+def _module(*, source: str) -> ast.Module:
+    return ast.parse(source=dedent(text=source))
+
+
+def _text(*, module: ast.Module) -> str:
+    return ast.unparse(ast.fix_missing_locations(module))
+
+
+def test_new_import_goes_after_existing_imports() -> None:
+    """Check that new import goes after existing imports."""
+    module = _module(
+        source='''
+        """Doc."""
+        from __future__ import annotations
+        import os
+
+        X = 1
+        ''',
+    )
+    insert_import(
+        module=module,
+        source="pathlib",
+        name="Path",
+        before=len(module.body),
+    )
+    lines = _text(module=module).splitlines()
+    expect_equal(
+        actual=lines[:4],
+        expected=[
+            '"""Doc."""',
+            "from __future__ import annotations",
+            "import os",
+            "from pathlib import Path",
+        ],
+    )
+
+
+def test_name_joins_an_existing_from_import() -> None:
+    """Check that name joins an existing from import."""
+    module = _module(source="from typing import Final\n")
+    insert_import(
+        module=module,
+        source="typing",
+        name="Protocol",
+        before=len(module.body),
+    )
+    expect_equal(
+        actual=_text(module=module),
+        expected="from typing import Final, Protocol",
+    )
+
+
+def test_present_name_is_not_imported_twice() -> None:
+    """Check that present name is not imported twice."""
+    module = _module(source="from typing import Final\n")
+    insert_import(
+        module=module,
+        source="typing",
+        name="Final",
+        before=len(module.body),
+    )
+    expect_equal(
+        actual=_text(module=module),
+        expected="from typing import Final",
+    )
+
+
+def test_ensure_names_imports_only_known_missing_names() -> None:
+    """Check that ensure names imports only known missing names."""
+    module = _module(source="import os\n")
+    expression = ast.parse(
+        source="dict[str, Sequence[Path]]",
+        mode="eval",
+    ).body
+    ensure_names(
+        module=module,
+        expression=expression,
+        before=len(module.body),
+    )
+    expect_equal(
+        actual=_text(module=module).splitlines(),
+        expected=[
+            "import os",
+            "from collections.abc import Sequence",
+            "from pathlib import Path",
+        ],
+    )

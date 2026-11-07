@@ -1,0 +1,71 @@
+{
+  "fixes": [],
+  "profiles": [],
+  "relations": [],
+  "rules": [
+    {
+      "aliases": {
+        "exactus": "DOC002"
+      },
+      "code": "DOC002",
+      "domain": "docs",
+      "evidence": [
+        {
+          "name": "function",
+          "type": "str"
+        },
+        {
+          "name": "parameters",
+          "type": "list[str]"
+        }
+      ],
+      "examples": [
+        {
+          "note": "",
+          "source": "def run(a: int, b: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        a: First value.\n    \"\"\"\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "def run(a: int, b: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        a: First value.\n        b: Second value.\n    \"\"\"\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [],
+      "key": "docs.missing-parameter",
+      "maturity": "stable",
+      "message": "`{function}` does not document {parameters}.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "Every parameter of a documented function belongs in its Args section.",
+      "requires": [
+        "function.has_docstring",
+        "function.undocumented_parameter_count"
+      ],
+      "severity": "error",
+      "subject": [
+        "FunctionDef",
+        "AsyncFunctionDef"
+      ],
+      "title": "Parameter missing from docstring",
+      "when": {
+        "of": [
+          {
+            "cmp": "eq",
+            "fact": "function.has_docstring",
+            "op": "compare",
+            "value": true
+          },
+          {
+            "cmp": "gt",
+            "fact": "function.undocumented_parameter_count",
+            "op": "compare",
+            "value": 0
+          }
+        ],
+        "op": "all"
+      }
+    }
+  ]
+}

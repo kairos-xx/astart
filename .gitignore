@@ -1,0 +1,60 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test, lint & type-checker caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyrefly_cache/
+.dmypy.json
+.tox/
+.nox/
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+coverage/
+
+# Local tooling / generated reports
+.history/
+.remember/
+EXACTUS_RESULTS/
+mutants/
+.bkp/
+.build-cache/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+
+# Misc
+*.bak
+*.orig
+*.log

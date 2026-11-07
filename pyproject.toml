@@ -1,0 +1,128 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astart"
+version = "0.1.0"
+description = "Mutable Python AST with loss-aware source preservation and semantic typing"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+authors = [{ name = "João Lopes" }]
+keywords = ["ast", "typing", "source-transform", "static-analysis", "tokenizer"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+[project.scripts]
+astart = "astart.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["astart*"]
+
+[tool.setuptools.package-data]
+astart = ["py.typed", "rules/catalog/*.json", "rules/schema.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["astart"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 90
+skip_covered = false
+
+
+[tool.ruff]
+extend-exclude = [
+    ".dev",
+    ".history",
+    "mutants",
+    "build",
+    "dist",
+    ".bkp",
+    ".build-cache",
+    "node_modules",
+    "src/node_modules",
+    "EXACTUS_RESULTS/COVERAGE_TESTS/ARTIFACTS/COVERAGE/tmp",
+
+]
+line-length = 79
+src = ["."]
+target-version = "py313"
+
+[tool.ruff.lint]
+ignore = ["D203", "D213"]
+select = ["ALL"]
+
+#
+# BASEDPYRIGHT
+#
+
+[tool.basedpyright]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    "mutants",
+    "**/mutants",
+    "dist",
+    "build",
+    ".build-cache",
+    "vsix",
+    "EXACTUS_RESULTS/COVERAGE_TESTS/ARTIFACTS/COVERAGE/tmp",
+]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+# venvPath = "."
+# venv = ".venv"
+# extraPaths = ["tools"]
+
+#
+# PYREFLY
+#
+
+[tool.pyrefly]
+project-excludes = [
+    "**/node_modules/**",
+    "**/mutants/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.build-cache/**",
+    "**/vsix/**",
+]
+project-includes = ["**/district/**"]
+python-version = "3.13"
+search-path = ["src", ".", "tools"]
+
+
+[tool.exactus]
+collect-files = true                                                        # bundle FILES/{README,TREE,files.zip} with
+clear = true                                                                # clear reports before running; a list
+exclude = ["dev", "dev/**", "artifacts", "artifacts/**", "EXACTUS_RESULTS"]
+root = true
+
+
+[tool.exactus.lints]
+simple = false # true runs only the all_lints package audit and reports
+
+[tool.exactus.coverage_tests]
+fail-under = 90       # overall Python+JS coverage floor
+per-file-minimum = 80 # per-source-file coverage floor
+
+[tool.exactus.kwargs_typehints]
+# python = ".venv"
+
+[tool.exactus.docs]
+fail-on = "warning"

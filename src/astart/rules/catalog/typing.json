@@ -1,0 +1,324 @@
+{
+  "fixes": [
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "typing.add-none-return"
+      ],
+      "idempotent": true,
+      "key": "typing.add-none-return",
+      "min_confidence": 1.0,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "function.returns_nothing",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "typing.missing-annotation"
+      ],
+      "safety": "proven"
+    },
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "typing.add-inferred-annotation"
+      ],
+      "idempotent": true,
+      "key": "typing.add-inferred-annotation",
+      "min_confidence": 0.9,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "annotation.has_inferred_hint",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "typing.missing-annotation"
+      ],
+      "safety": "guarded"
+    },
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "typing.synthesize-protocol"
+      ],
+      "idempotent": true,
+      "key": "typing.synthesize-protocol",
+      "min_confidence": 0.9,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "parameter.has_structural_protocol",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "typing.missing-annotation"
+      ],
+      "safety": "guarded"
+    },
+    {
+      "after": [],
+      "before": [
+        "typing.add-inferred-annotation"
+      ],
+      "edits": [
+        "typing.synthesize-typevar"
+      ],
+      "idempotent": true,
+      "key": "typing.synthesize-typevar",
+      "min_confidence": 0.9,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "parameter.is_passthrough",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "typing.missing-annotation"
+      ],
+      "safety": "guarded"
+    },
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "typing.add-final"
+      ],
+      "idempotent": true,
+      "key": "typing.add-final",
+      "min_confidence": 1.0,
+      "preconditions": {
+        "of": [
+          {
+            "cmp": "eq",
+            "fact": "binding.value_is_immutable_literal",
+            "op": "compare",
+            "value": true
+          },
+          {
+            "cmp": "eq",
+            "fact": "binding.is_assigned_once",
+            "op": "compare",
+            "value": true
+          },
+          {
+            "cmp": "eq",
+            "fact": "binding.final_is_spellable",
+            "op": "compare",
+            "value": true
+          }
+        ],
+        "op": "all"
+      },
+      "rules": [
+        "typing.uppercase-global-not-final"
+      ],
+      "safety": "proven"
+    }
+  ],
+  "profiles": [],
+  "relations": [],
+  "rules": [
+    {
+      "aliases": {
+        "exactus": "CMP002"
+      },
+      "code": "TYP001",
+      "domain": "typing",
+      "evidence": [
+        {
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "examples": [
+        {
+          "note": "",
+          "source": "from typing import Any\n\nvalue: Any = 1\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "value: int = 1\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [],
+      "key": "typing.no-any",
+      "maturity": "stable",
+      "message": "`Any` is used in the annotation of `{name}`.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "Any switches type checking off for the value it annotates; use a precise type, a protocol or a generic.",
+      "requires": [
+        "annotation.uses_typing_any"
+      ],
+      "severity": "error",
+      "subject": [
+        "Annotation"
+      ],
+      "title": "typing.Any usage",
+      "when": {
+        "cmp": "eq",
+        "fact": "annotation.uses_typing_any",
+        "op": "compare",
+        "value": true
+      }
+    },
+    {
+      "aliases": {
+        "exactus": "KWARGS:missing-hint"
+      },
+      "code": "TYP003",
+      "domain": "typing",
+      "evidence": [
+        {
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "examples": [
+        {
+          "note": "",
+          "source": "def run(a: int):\n    print(a)\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "def run(a) -> int:\n    return 1\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "def run(a: int) -> int:\n    return a\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [
+        "typing.add-none-return",
+        "typing.add-inferred-annotation",
+        "typing.synthesize-protocol",
+        "typing.synthesize-typevar"
+      ],
+      "key": "typing.missing-annotation",
+      "maturity": "stable",
+      "message": "`{name}` has no type annotation.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "Parameters and return values need annotations so checkers and readers know the contract; hints are written only when the evidence supports them.",
+      "requires": [
+        "node.annotation_missing"
+      ],
+      "severity": "error",
+      "subject": [
+        "Parameter",
+        "FunctionDef",
+        "AsyncFunctionDef"
+      ],
+      "title": "Missing type annotation",
+      "when": {
+        "cmp": "eq",
+        "fact": "node.annotation_missing",
+        "op": "compare",
+        "value": true
+      }
+    },
+    {
+      "aliases": {
+        "exactus": "PY002"
+      },
+      "code": "TYP004",
+      "domain": "typing",
+      "evidence": [
+        {
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "examples": [
+        {
+          "note": "",
+          "source": "LIMIT = 3\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "from typing import Final\n\nLIMIT: Final[int] = 3\n",
+          "triggers": false
+        },
+        {
+          "note": "",
+          "source": "limit = 3\n",
+          "triggers": false
+        },
+        {
+          "note": "",
+          "source": "from typing import TypeVar\n\nT = TypeVar('T')\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [
+        "typing.add-final"
+      ],
+      "key": "typing.uppercase-global-not-final",
+      "maturity": "stable",
+      "message": "Module global `{name}` is uppercase but is not declared Final.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "An uppercase module global reads as a constant; declaring it Final makes the checker enforce that.",
+      "requires": [
+        "binding.is_final",
+        "binding.is_module_global",
+        "binding.is_type_declaration",
+        "binding.name_is_uppercase"
+      ],
+      "severity": "error",
+      "subject": [
+        "Assign"
+      ],
+      "title": "Uppercase module global is not Final",
+      "when": {
+        "of": [
+          {
+            "cmp": "eq",
+            "fact": "binding.is_module_global",
+            "op": "compare",
+            "value": true
+          },
+          {
+            "cmp": "eq",
+            "fact": "binding.name_is_uppercase",
+            "op": "compare",
+            "value": true
+          },
+          {
+            "of": {
+              "cmp": "eq",
+              "fact": "binding.is_final",
+              "op": "compare",
+              "value": true
+            },
+            "op": "not"
+          },
+          {
+            "of": {
+              "cmp": "eq",
+              "fact": "binding.is_type_declaration",
+              "op": "compare",
+              "value": true
+            },
+            "op": "not"
+          }
+        ],
+        "op": "all"
+      }
+    }
+  ]
+}

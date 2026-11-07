@@ -1,0 +1,446 @@
+{
+  "$defs": {
+    "EvidenceSlot": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "Example": {
+      "additionalProperties": false,
+      "properties": {
+        "note": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "triggers": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source",
+        "triggers"
+      ],
+      "type": "object"
+    },
+    "Fix": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "before": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "edits": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idempotent": {
+          "type": "boolean"
+        },
+        "key": {
+          "type": "string"
+        },
+        "min_confidence": {
+          "type": "number"
+        },
+        "preconditions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Predicate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rules": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "safety": {
+          "enum": [
+            "guarded",
+            "none",
+            "proven",
+            "suggest"
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "rules",
+        "safety",
+        "min_confidence",
+        "edits",
+        "preconditions",
+        "idempotent"
+      ],
+      "type": "object"
+    },
+    "Predicate": {
+      "oneOf": [
+        {
+          "properties": {
+            "of": {
+              "items": {
+                "$ref": "#/$defs/Predicate"
+              },
+              "type": "array"
+            },
+            "op": {
+              "enum": [
+                "all",
+                "any"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Predicate"
+            },
+            "op": {
+              "const": "not"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "cmp": {
+              "enum": [
+                "eq",
+                "ne",
+                "lt",
+                "le",
+                "gt",
+                "ge"
+              ]
+            },
+            "fact": {
+              "type": "string"
+            },
+            "op": {
+              "const": "compare"
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "fact",
+            "cmp",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "exists"
+            },
+            "selector": {
+              "type": "string"
+            },
+            "where": {
+              "$ref": "#/$defs/Predicate"
+            }
+          },
+          "required": [
+            "op",
+            "selector",
+            "where"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Profile": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ]
+          },
+          "type": "object"
+        },
+        "rules": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "safety_ceiling": {
+          "enum": [
+            "guarded",
+            "none",
+            "proven",
+            "suggest"
+          ]
+        },
+        "severities": {
+          "additionalProperties": {
+            "enum": [
+              "error",
+              "info",
+              "warning"
+            ]
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "key",
+        "rules",
+        "severities",
+        "params",
+        "safety_ceiling"
+      ],
+      "type": "object"
+    },
+    "Relation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "conflicts_with",
+            "delegates_to",
+            "equivalent_to",
+            "implies",
+            "ordered_before",
+            "requires_fact",
+            "supersedes"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "source",
+        "target"
+      ],
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "code": {
+          "type": "string"
+        },
+        "domain": {
+          "enum": [
+            "calls",
+            "config",
+            "docs",
+            "imports",
+            "naming",
+            "oop",
+            "parsing",
+            "simplification",
+            "structure",
+            "suppression",
+            "typing",
+            "whitespace"
+          ]
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceSlot"
+          },
+          "type": "array"
+        },
+        "examples": {
+          "items": {
+            "$ref": "#/$defs/Example"
+          },
+          "type": "array"
+        },
+        "fixes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key": {
+          "type": "string"
+        },
+        "maturity": {
+          "enum": [
+            "deprecated",
+            "experimental",
+            "stable"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "owner": {
+          "enum": [
+            "astart",
+            "ruff"
+          ]
+        },
+        "params": {
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ]
+          },
+          "type": "object"
+        },
+        "procedure": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "requires": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "info",
+            "warning"
+          ]
+        },
+        "subject": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Predicate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "code",
+        "title",
+        "rationale",
+        "domain",
+        "severity",
+        "maturity",
+        "owner",
+        "subject",
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "fixes": {
+      "items": {
+        "$ref": "#/$defs/Fix"
+      },
+      "type": "array"
+    },
+    "profiles": {
+      "items": {
+        "$ref": "#/$defs/Profile"
+      },
+      "type": "array"
+    },
+    "relations": {
+      "items": {
+        "$ref": "#/$defs/Relation"
+      },
+      "type": "array"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/Rule"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "rules"
+  ],
+  "title": "astart rule catalog",
+  "type": "object"
+}
