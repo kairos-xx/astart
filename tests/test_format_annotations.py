@@ -62,6 +62,9 @@ def _function(
     Returns:
         The function node.
 
+    Raises:
+        TypeError: If the matched node is not a function definition.
+
     """
     matches: list[AST] = [
         node
@@ -97,7 +100,7 @@ def _render(*, tree: CommentedModule) -> str:
 
 def test_return_annotation_is_inserted_in_place() -> None:
     """Add ``-> int`` without touching comments or neighbours."""
-    tree = _tree(
+    tree: CommentedModule = _tree(
         source="""\
         # lead
         def f(a, b):  # trailing
@@ -125,7 +128,7 @@ def test_return_annotation_is_inserted_in_place() -> None:
 
 def test_return_annotation_with_decorator_type_params_and_multiline() -> None:
     """Find the real closing parenthesis of a complex header."""
-    tree = _tree(
+    tree: CommentedModule = _tree(
         source="""\
         @deco(1)
         async def f[T: (int, str)](
@@ -153,7 +156,7 @@ def test_return_annotation_with_decorator_type_params_and_multiline() -> None:
 
 def test_return_annotation_is_removed_and_replaced() -> None:
     """Remove and change an existing return annotation."""
-    removed = _tree(
+    removed: CommentedModule = _tree(
         source="""\
 def f(a) -> int:  # c
     return a
@@ -167,7 +170,7 @@ def f(a):  # c
     return a
 """,
     )
-    changed = _tree(
+    changed: CommentedModule = _tree(
         source="""\
 def f(a) -> int:
     return a
@@ -185,12 +188,12 @@ def f(a) -> str:
 
 def test_parameter_annotations_cover_every_parameter_kind() -> None:
     """Annotate positional, defaulted, variadic and keyword-only names."""
-    tree = _tree(
+    tree: CommentedModule = _tree(
         source="""\
 def f(a, b=1, /, c=2, *args, d=3, **kw): ...
 """,
     )
-    function = _function(tree=tree)
+    function: FunctionDef | AsyncFunctionDef = _function(tree=tree)
     parameters: list[arg] = [
         *function.args.posonlyargs,
         *function.args.args,
@@ -215,12 +218,12 @@ int): ...
 
 def test_parameter_annotation_is_removed() -> None:
     """Drop an annotation, normalising the default's spacing."""
-    tree = _tree(
+    tree: CommentedModule = _tree(
         source="""\
 def f(a: int, b: str = "x", *args: int): ...
 """,
     )
-    function = _function(tree=tree)
+    function: FunctionDef | AsyncFunctionDef = _function(tree=tree)
     for item in (*function.args.args, function.args.vararg):
         expect_not_none(value=item).annotation = None
     expect_equal(
@@ -233,12 +236,12 @@ def f(a, b="x", *args): ...
 
 def test_adding_then_removing_restores_the_original_source() -> None:
     """Round-trip an edit and its undo."""
-    source = """\
+    source: str = """\
 def f(a, b=1):  # keep
     return a
 """
-    tree = _tree(source=source)
-    function = _function(tree=tree)
+    tree: CommentedModule = _tree(source=source)
+    function: FunctionDef | AsyncFunctionDef = _function(tree=tree)
     function.returns = _annotation(name="int")
     function.args.args[0].annotation = _annotation(name="int")
     expect_in(item="-> int", container=_render(tree=tree))
@@ -249,13 +252,13 @@ def f(a, b=1):  # keep
 
 def test_methods_and_crlf_are_preserved() -> None:
     """Edit a nested method in a CRLF file."""
-    source = """\
+    source: str = """\
 class K:\r
     def m(self, x):\r
         return x\r
 """
-    tree = _tree(source=source)
-    function = _function(tree=tree)
+    tree: CommentedModule = _tree(source=source)
+    function: FunctionDef | AsyncFunctionDef = _function(tree=tree)
     function.returns = _annotation(name="int")
     function.args.args[1].annotation = _annotation(name="str")
     expect_equal(
@@ -274,7 +277,7 @@ class K:\r
 
 def test_lambda_parameters_cannot_be_annotated() -> None:
     """Fail closed instead of writing invalid Python."""
-    tree = _tree(
+    tree: CommentedModule = _tree(
         source="""\
 f = lambda a: a
 """,
@@ -291,12 +294,12 @@ f = lambda a: a
 
 def test_complex_annotation_expressions_are_rendered() -> None:
     """Render subscripts and unions as source."""
-    tree = _tree(
+    tree: CommentedModule = _tree(
         source="""\
 def f(a): ...
 """,
     )
-    function = _function(tree=tree)
+    function: FunctionDef | AsyncFunctionDef = _function(tree=tree)
     function.args.args[0].annotation = parse(
         source="dict[str, list[int]] | None",
         mode="eval",

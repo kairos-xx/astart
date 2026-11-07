@@ -2,14 +2,46 @@
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    AST,
+    AnnAssign,
+    Assign,
+    AsyncFunctionDef,
+    Attribute,
+    Call,
+    ClassDef,
+    Constant,
+    Expression,
+    FunctionDef,
+    Import,
+    ImportFrom,
+    Module,
+    Name,
+    Starred,
+    Subscript,
+    arg,
+    arguments,
+    expr,
+    get_docstring,
+    iter_child_nodes,
+    parse,
+    unparse,
+    walk,
+)
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, cast, final
 
-from astart.rules.hints import HintBasis, HintCache, LazyHints, returns_nothing
+from astart.rules.hints import (
+    HintBasis,
+    HintCache,
+    LazyHints,
+    is_declaration,
+    returns_nothing,
+)
 from astart.rules.predicate import FactValue
 from astart.rules.protocols import Constants as ProtocolConstants
 from astart.rules.protocols import parameter_has_default, structural_usage
+from astart.rules.provable import never_returns
 from astart.rules.registry import FactSpec, Registries
 from astart.rules.resolve import CallBindings, binding_counts
 from astart.rules.typevars import passthrough_return
@@ -21,7 +53,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from astart import BoundCall, CommentedModule
+    from astart.rules.hints import Hint
     from astart.rules.jsonvalue import JsonValue
+    from astart.rules.protocols import StructuralUsage
 type FactProvider = Callable[[Subject, ModuleFacts], FactValue]
 type Applier = Callable[[Subject, ModuleFacts], None]
 type EvidenceProvider = Callable[[Subject, ModuleFacts], JsonValue]
@@ -43,14 +77,14 @@ class Subject:
     """
 
     kind: str
-    node: ast.AST
+    node: AST
     path: str
     scope: str
     name: str
-    statement: ast.AST | None = None
+    statement: AST | None = None
 
 
-def _no_owners() -> dict[int, ast.ClassDef]:
+def _no_owners() -> dict[int, ClassDef]:
     """Create an empty method-owner mapping.
 
     Returns:
@@ -60,7 +94,7 @@ def _no_owners() -> dict[int, ast.ClassDef]:
     return {}
 
 
-def _is_overload(*, function: ast.AST) -> bool:
+def _is_overload(*, function: AST) -> bool:
     """Tell whether a function is decorated with ``overload``.
 
     Args:
@@ -70,19 +104,19 @@ def _is_overload(*, function: ast.AST) -> bool:
         ``True`` for ``@overload`` and ``@typing.overload``.
 
     """
-    if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    if not isinstance(function, (FunctionDef, AsyncFunctionDef)):
         return False
     return any(
-        (isinstance(item, ast.Name) and item.id == "overload")
-        or (isinstance(item, ast.Attribute) and item.attr == "overload")
+        (isinstance(item, Name) and item.id == "overload")
+        or (isinstance(item, Attribute) and item.attr == "overload")
         for item in function.decorator_list
     )
 
 
 def _structure(
     *,
-    module: ast.Module,
-) -> tuple[dict[int, ast.ClassDef], frozenset[int]]:
+    module: Module,
+) -> tuple[dict[int, ClassDef], frozenset[int]]:
     """Find method owners and overload groups in one walk.
 
     Args:
@@ -92,30 +126,30 @@ def _structure(
         The owning class of every method and the ids of overloaded functions.
 
     """
-    owners: dict[int, ast.ClassDef] = {}
+    owners: dict[int, ClassDef] = {}
     overloaded: set[int] = set()
-    for node in ast.walk(node=module):
-        if isinstance(node, ast.ClassDef):
+    for node in walk(node=module):
+        if isinstance(node, ClassDef):
             owners.update(
                 {
                     id(child): node
                     for child in node.body
                     if isinstance(
                         child,
-                        (ast.FunctionDef, ast.AsyncFunctionDef),
+                        (FunctionDef, AsyncFunctionDef),
                     )
                 },
             )
         for field_name in ("body", "orelse", "finalbody"):
-            block = getattr(node, field_name, None)
+            block: None | list[AST] = getattr(node, field_name, None)
             if not isinstance(block, list):
                 continue
-            functions = [
-                item
+            functions: list[FunctionDef | AsyncFunctionDef] = [
+                cast(typ="FunctionDef | AsyncFunctionDef", val=item)
                 for item in block
                 if isinstance(item, Constants.function_nodes)
             ]
-            names = {
+            names: set[str] = {
                 item.name for item in functions if _is_overload(function=item)
             }
             overloaded.update(
@@ -161,7 +195,7 @@ class ModuleFacts:
     binding_counts: Mapping[str, int] = field(default_factory=_no_counts)
     hints: LazyHints | None = None
     calls: CallBindings | None = None
-    method_owner: Mapping[int, ast.ClassDef] = field(
+    method_owner: Mapping[int, ClassDef] = field(
         default_factory=_no_owners,
     )
     overloaded: frozenset[int] = field(default_factory=frozenset)
@@ -204,9 +238,9 @@ class Constants:
         "end_lineno",
         "end_col_offset",
     )
-    function_nodes: Final[tuple[type[ast.AST], ...]] = (
-        ast.FunctionDef,
-        ast.AsyncFunctionDef,
+    function_nodes: Final[tuple[type[AST], ...]] = (
+        FunctionDef,
+        AsyncFunctionDef,
     )
     type_constructors: Final[frozenset[str]] = frozenset(
         {"TypeVar", "ParamSpec", "TypeVarTuple", "NewType", "TypeAliasType"},
@@ -216,6 +250,7 @@ class Constants:
             "typing.add-final",
             "calls.add-keywords",
             "typing.add-none-return",
+            "typing.add-noreturn",
             "typing.add-inferred-annotation",
             "typing.synthesize-protocol",
             "typing.synthesize-typevar",
@@ -252,9 +287,9 @@ def module_facts(
     any_names: set[str] = set()
     final_names: set[str] = set()
     typing_names: set[str] = set()
-    for node in ast.walk(node=module):
+    for node in walk(node=module):
         match node:
-            case ast.ImportFrom(module=source, names=aliases) if (
+            case ImportFrom(module=source, names=aliases) if (
                 source in Constants.typing_modules
             ):
                 for alias in aliases:
@@ -263,7 +298,7 @@ def module_facts(
                         any_names.add(bound)
                     elif alias.name == "Final":
                         final_names.add(bound)
-            case ast.Import(names=aliases):
+            case Import(names=aliases):
                 typing_names.update(
                     alias.asname or alias.name
                     for alias in aliases
@@ -291,7 +326,7 @@ def module_facts(
     )
 
 
-def _mentions_any(*, root: ast.AST, facts: ModuleFacts) -> bool:
+def _mentions_any(*, root: AST, facts: ModuleFacts) -> bool:
     """Report whether a tree mentions ``typing.Any``, quoted or not.
 
     Args:
@@ -302,17 +337,17 @@ def _mentions_any(*, root: ast.AST, facts: ModuleFacts) -> bool:
         Whether ``Any`` appears, including inside string annotations.
 
     """
-    for node in ast.walk(node=root):
+    for node in walk(node=root):
         match node:
-            case ast.Name(id=name) if name in facts.any_names:
+            case Name(id=name) if name in facts.any_names:
                 return True
-            case ast.Attribute(attr="Any", value=ast.Name(id=owner)) if (
+            case Attribute(attr="Any", value=Name(id=owner)) if (
                 owner in facts.typing_names
             ):
                 return True
-            case ast.Constant(value=str() as text):
+            case Constant(value=str() as text):
                 try:
-                    quoted: ast.Expression = ast.parse(
+                    quoted: Expression = parse(
                         source=text,
                         mode="eval",
                     )
@@ -379,16 +414,16 @@ def _is_final(subject: Subject, facts: ModuleFacts) -> FactValue:
 
     """
     match subject.statement:
-        case ast.AnnAssign(annotation=annotation):
-            target: ast.expr = (
+        case AnnAssign(annotation=annotation):
+            target: expr = (
                 annotation.value
-                if isinstance(annotation, ast.Subscript)
+                if isinstance(annotation, Subscript)
                 else annotation
             )
             match target:
-                case ast.Name(id=name):
+                case Name(id=name):
                     return name in facts.final_names or name == "Final"
-                case ast.Attribute(attr="Final", value=ast.Name(id=owner)):
+                case Attribute(attr="Final", value=Name(id=owner)):
                     return owner in facts.typing_names
                 case _:
                     return False
@@ -411,7 +446,7 @@ def _value_is_immutable_literal(
 
     """
     match subject.statement:
-        case ast.Assign(targets=[ast.Name()], value=ast.Constant(value=value)):
+        case Assign(targets=[Name()], value=Constant(value=value)):
             return isinstance(value, Constants.immutable_literals)
         case _:
             return False
@@ -461,9 +496,9 @@ def _is_type_declaration(subject: Subject, _facts: ModuleFacts) -> FactValue:
 
     """
     match subject.statement:
-        case ast.Assign(value=ast.Call(func=func)):
+        case Assign(value=Call(func=func)):
             match func:
-                case ast.Name(id=name) | ast.Attribute(attr=name):
+                case Name(id=name) | Attribute(attr=name):
                     return name in Constants.type_constructors
                 case _:
                     return False
@@ -485,17 +520,17 @@ def _annotation_missing(subject: Subject, facts: ModuleFacts) -> FactValue:
         Whether the annotation is missing; receivers are exempt.
 
     """
-    function: ast.AST = (
+    function: AST = (
         subject.statement if subject.kind == "Parameter" else subject.node
     ) or subject.node
     if _is_synthesized_member(function=function, facts=facts):
         return False
     match (subject.node, subject.statement):
         case [
-            ast.arg(annotation=None, arg=name),
-            ast.FunctionDef() | ast.AsyncFunctionDef() as owner,
+            arg(annotation=None, arg=name),
+            FunctionDef() | AsyncFunctionDef() as owner,
         ]:
-            first: list[ast.arg] = [*owner.args.posonlyargs, *owner.args.args]
+            first: list[arg] = [*owner.args.posonlyargs, *owner.args.args]
             is_receiver: bool = (
                 bool(first)
                 and first[0] is subject.node
@@ -503,7 +538,7 @@ def _annotation_missing(subject: Subject, facts: ModuleFacts) -> FactValue:
             )
             return not is_receiver
         case [
-            ast.FunctionDef(returns=None) | ast.AsyncFunctionDef(returns=None),
+            FunctionDef(returns=None) | AsyncFunctionDef(returns=None),
             _,
         ]:
             return subject.kind != "Parameter"
@@ -523,7 +558,7 @@ def _returns_nothing(subject: Subject, _facts: ModuleFacts) -> FactValue:
 
     """
     match subject.node:
-        case ast.FunctionDef() | ast.AsyncFunctionDef() as function:
+        case FunctionDef() | AsyncFunctionDef() as function:
             return returns_nothing(function=function)
         case _:
             return False
@@ -532,7 +567,7 @@ def _returns_nothing(subject: Subject, _facts: ModuleFacts) -> FactValue:
 def _plain_parameter(
     subject: Subject,
     facts: ModuleFacts,
-) -> tuple[ast.arg, ast.FunctionDef | ast.AsyncFunctionDef] | None:
+) -> tuple[arg, FunctionDef | AsyncFunctionDef] | None:
     """Select unannotated, defaultless, non-variadic, non-receiver parameters.
 
     Args:
@@ -543,12 +578,15 @@ def _plain_parameter(
         The parameter and its function, or ``None`` for any other subject.
 
     """
-    if subject.kind != "Parameter" or not _annotation_missing(subject=subject, facts=facts):
+    if subject.kind != "Parameter" or not _annotation_missing(
+        subject=subject,
+        facts=facts,
+    ):
         return None
     match (subject.node, subject.statement):
         case [
-            ast.arg() as parameter,
-            ast.FunctionDef() | ast.AsyncFunctionDef() as function,
+            arg() as parameter,
+            FunctionDef() | AsyncFunctionDef() as function,
         ]:
             variadic: bool = parameter in {
                 function.args.vararg,
@@ -566,8 +604,8 @@ def _plain_parameter(
 
 def _synthesis_allowed(
     *,
-    function: ast.FunctionDef | ast.AsyncFunctionDef,
-    parameter: ast.arg,
+    function: FunctionDef | AsyncFunctionDef,
+    parameter: arg,
     facts: ModuleFacts,
 ) -> bool:
     """Tell whether a parameter may get a synthesized type.
@@ -587,22 +625,22 @@ def _synthesis_allowed(
     """
     if id(function) in facts.overloaded:
         return False
-    owner = facts.method_owner.get(id(function))
+    owner: ClassDef | None = facts.method_owner.get(id(function))
     if owner is None:
         return True
     dunder: bool = function.name.startswith("__") and function.name.endswith(
         "__",
     )
     static: bool = any(
-        isinstance(item, ast.Name) and item.id == "staticmethod"
+        isinstance(item, Name) and item.id == "staticmethod"
         for item in function.decorator_list
     )
-    first: list[ast.arg] = [*function.args.posonlyargs, *function.args.args]
+    first: list[arg] = [*function.args.posonlyargs, *function.args.args]
     is_first: bool = bool(first) and first[0] is parameter
     return not (dunder or bool(owner.bases) or (is_first and (not static)))
 
 
-def _is_synthesized_member(*, function: ast.AST, facts: ModuleFacts) -> bool:
+def _is_synthesized_member(*, function: AST, facts: ModuleFacts) -> bool:
     """Tell whether a function is a member of a synthesized ``Protocol``.
 
     Args:
@@ -613,10 +651,10 @@ def _is_synthesized_member(*, function: ast.AST, facts: ModuleFacts) -> bool:
         ``True`` when the owning class carries the synthesized docstring.
 
     """
-    owner = facts.method_owner.get(id(function))
+    owner: ClassDef | None = facts.method_owner.get(id(function))
     if owner is None:
         return False
-    return (ast.get_docstring(node=owner) or "").startswith(
+    return (get_docstring(node=owner) or "").startswith(
         ProtocolConstants.docstring_marker,
     )
 
@@ -635,7 +673,9 @@ def _has_structural_protocol(
         Whether a ``Protocol`` can be synthesized for it.
 
     """
-    plain = _plain_parameter(subject=subject, facts=facts)
+    plain: tuple[arg, FunctionDef | AsyncFunctionDef] | None = (
+        _plain_parameter(subject=subject, facts=facts)
+    )
     if plain is None:
         return False
     parameter, function = plain
@@ -645,7 +685,7 @@ def _has_structural_protocol(
         facts=facts,
     ):
         return False
-    usage = structural_usage(
+    usage: StructuralUsage | None = structural_usage(
         function=function,
         parameter=parameter.arg,
         counts=facts.binding_counts,
@@ -669,7 +709,9 @@ def _is_passthrough(subject: Subject, facts: ModuleFacts) -> FactValue:
         Whether a type variable can describe the parameter and the return.
 
     """
-    plain = _plain_parameter(subject=subject, facts=facts)
+    plain: tuple[arg, FunctionDef | AsyncFunctionDef] | None = (
+        _plain_parameter(subject=subject, facts=facts)
+    )
     if plain is None:
         return False
     parameter, function = plain
@@ -690,6 +732,28 @@ def _is_passthrough(subject: Subject, facts: ModuleFacts) -> FactValue:
     )
 
 
+def _never_returns(subject: Subject, _facts: ModuleFacts) -> FactValue:
+    """Report whether a function provably never returns a value.
+
+    Args:
+        subject: Function subject.
+        _facts: Unused resolved imports.
+
+    Returns:
+        Whether every path raises and the function is not a declaration.
+
+    """
+    match subject.node:
+        case FunctionDef() | AsyncFunctionDef() as function:
+            return (
+                function.returns is None
+                and not is_declaration(function=function)
+                and never_returns(function=function)
+            )
+        case _:
+            return False
+
+
 def _has_inferred_hint(subject: Subject, facts: ModuleFacts) -> FactValue:
     """Report whether a corroborated hint other than ``None`` exists.
 
@@ -703,7 +767,7 @@ def _has_inferred_hint(subject: Subject, facts: ModuleFacts) -> FactValue:
     """
     if facts.hints is None:
         return False
-    hint = facts.hints.index().hint_for(node=subject.node)
+    hint: Hint | None = facts.hints.index().hint_for(node=subject.node)
     return hint is not None and hint.basis is not HintBasis.proven_none
 
 
@@ -719,7 +783,7 @@ def bound_call(subject: Subject, facts: ModuleFacts) -> BoundCall | None:
 
     """
     match subject.node:
-        case ast.Call() as call if facts.calls is not None:
+        case Call() as call if facts.calls is not None:
             return facts.calls.get(call=call)
         case _:
             return None
@@ -744,9 +808,7 @@ def keyword_candidates(subject: Subject, facts: ModuleFacts) -> list[str]:
         for argument in bound.arguments
     ):
         return []
-    if any(
-        isinstance(arg, ast.Starred) for arg in _call_args(subject=subject)
-    ):
+    if any(isinstance(arg, Starred) for arg in _call_args(subject=subject)):
         return []
     return [
         argument.parameter.name
@@ -796,8 +858,8 @@ def _has_docstring(subject: Subject, _facts: ModuleFacts) -> FactValue:
 
     """
     match subject.node:
-        case ast.FunctionDef() | ast.AsyncFunctionDef() as function:
-            return ast.get_docstring(node=function) is not None
+        case FunctionDef() | AsyncFunctionDef() as function:
+            return get_docstring(node=function) is not None
         case _:
             return False
 
@@ -814,7 +876,7 @@ def _undocumented(subject: Subject, facts: ModuleFacts) -> list[str]:
 
     """
     match subject.node:
-        case ast.FunctionDef() | ast.AsyncFunctionDef() as function:
+        case FunctionDef() | AsyncFunctionDef() as function:
             pass
         case _:
             return []
@@ -829,7 +891,7 @@ def _undocumented(subject: Subject, facts: ModuleFacts) -> list[str]:
             }
     if documented is None:
         return []
-    arguments: ast.arguments = function.args
+    arguments: arguments = function.args
     names: list[str] = [
         arg.arg
         for arg in (
@@ -917,10 +979,16 @@ def call_parameters_evidence(
 
     """
     match subject.node:
-        case ast.Call():
-            return list(keyword_candidates(subject=subject, facts=facts))
+        case Call():
+            return cast(
+                typ="JsonValue",
+                val=list(keyword_candidates(subject=subject, facts=facts)),
+            )
         case _:
-            return list(_undocumented(subject=subject, facts=facts))
+            return cast(
+                typ="JsonValue",
+                val=list(_undocumented(subject=subject, facts=facts)),
+            )
 
 
 @final
@@ -982,6 +1050,11 @@ class Registry:
             cost=Cost.syntactic,
         ),
         FactSpec(
+            name="function.never_returns",
+            value_type="bool",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
             name="annotation.has_inferred_hint",
             value_type="bool",
             cost=Cost.semantic,
@@ -1028,6 +1101,7 @@ class Registry:
         "binding.is_type_declaration": _is_type_declaration,
         "node.annotation_missing": _annotation_missing,
         "function.returns_nothing": _returns_nothing,
+        "function.never_returns": _never_returns,
         "annotation.has_inferred_hint": _has_inferred_hint,
         "parameter.has_structural_protocol": _has_structural_protocol,
         "parameter.is_passthrough": _is_passthrough,
@@ -1086,7 +1160,7 @@ def collect_subjects(
 
 def _visit(
     *,
-    node: ast.AST,
+    node: AST,
     kinds: frozenset[str],
     site: _Site,
     out: list[Subject],
@@ -1103,14 +1177,14 @@ def _visit(
     kind: str = type(node).__name__
     inner: _Site = site
     match node:
-        case ast.FunctionDef() | ast.AsyncFunctionDef():
+        case FunctionDef() | AsyncFunctionDef():
             _emit_function(node=node, kinds=kinds, site=site, out=out)
             inner = _Site(trail=(*site.trail, node.name), scope="function")
-        case ast.ClassDef():
+        case ClassDef():
             if kind in kinds:
                 out.append(site.subject(kind=kind, node=node, name=node.name))
             inner = _Site(trail=(*site.trail, node.name), scope="class")
-        case ast.Assign():
+        case Assign():
             if kind in kinds:
                 out.extend(
                     site.subject(
@@ -1120,11 +1194,11 @@ def _visit(
                         statement=node,
                     )
                     for target in node.targets
-                    if isinstance(target, ast.Name)
+                    if isinstance(target, Name)
                 )
-        case ast.AnnAssign():
+        case AnnAssign():
             _emit_annotated(node=node, kinds=kinds, site=site, out=out)
-        case ast.Call() | ast.Module():
+        case Call() | Module():
             if kind in kinds:
                 out.append(
                     site.subject(
@@ -1135,7 +1209,7 @@ def _visit(
                 )
         case _:
             pass
-    for child in ast.iter_child_nodes(node=node):
+    for child in iter_child_nodes(node=node):
         _visit(node=child, kinds=kinds, site=inner, out=out)
 
 
@@ -1156,9 +1230,9 @@ class _Site:
     def subject(
         self,
         kind: str,
-        node: ast.AST,
+        node: AST,
         name: str,
-        statement: ast.AST | None = None,
+        statement: AST | None = None,
     ) -> Subject:
         """Build a subject whose path extends the scope trail.
 
@@ -1183,7 +1257,7 @@ class _Site:
         )
 
 
-def _call_args(subject: Subject) -> list[ast.expr]:
+def _call_args(subject: Subject) -> list[expr]:
     """Return the positional argument expressions of a call subject.
 
     Args:
@@ -1194,13 +1268,13 @@ def _call_args(subject: Subject) -> list[ast.expr]:
 
     """
     match subject.node:
-        case ast.Call(args=args):
+        case Call(args=args):
             return list(args)
         case _:
             return []
 
 
-def _call_name(node: ast.AST) -> str:
+def _call_name(node: AST) -> str:
     """Name a subject node for path purposes.
 
     Args:
@@ -1211,15 +1285,15 @@ def _call_name(node: ast.AST) -> str:
 
     """
     match node:
-        case ast.Call(func=func):
-            return ast.unparse(ast_obj=func)
+        case Call(func=func):
+            return unparse(ast_obj=func)
         case _:
             return ""
 
 
 def _emit_function(
     *,
-    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    node: FunctionDef | AsyncFunctionDef,
     kinds: frozenset[str],
     site: _Site,
     out: list[Subject],
@@ -1239,8 +1313,8 @@ def _emit_function(
     if not kinds & {"Annotation", "Parameter"}:
         return
     inner: _Site = _Site(trail=(*site.trail, node.name), scope="function")
-    arguments: ast.arguments = node.args
-    parameters: list[ast.arg] = [
+    arguments: arguments = node.args
+    parameters: list[arg] = [
         *arguments.posonlyargs,
         *arguments.args,
         *arguments.kwonlyargs,
@@ -1275,7 +1349,7 @@ def _emit_function(
 
 def _emit_annotated(
     *,
-    node: ast.AnnAssign,
+    node: AnnAssign,
     kinds: frozenset[str],
     site: _Site,
     out: list[Subject],
@@ -1289,7 +1363,7 @@ def _emit_annotated(
         out: Destination list, extended in place.
 
     """
-    if not isinstance(node.target, ast.Name):
+    if not isinstance(node.target, Name):
         return
     name: str = node.target.id
     if "AnnAssign" in kinds:

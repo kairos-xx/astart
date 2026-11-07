@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from typing import TextIO
 
     from astart.rules.model import Catalog
+    from astart.rules.registry import Registries
 
 
 @final
@@ -343,7 +344,7 @@ def _fix_file(
         ceiling=settings.ceiling,
         stubs_path=settings.stubs_path,
     )
-    registries = default_registries()
+    registries: Registries = default_registries()
     note: str = ""
     if settings.run_formatter:
         fixed, formatted = fix_and_format(
@@ -359,7 +360,7 @@ def _fix_file(
         text: str = formatted.source
         note = formatted.note
     else:
-        fixed = fix_source(
+        fixed: FixResult = fix_source(
             source=source.text,
             filename=str(object=path),
             catalog=catalog,

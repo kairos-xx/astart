@@ -432,10 +432,8 @@ class InferenceResolver:
         reason: Reason = Reason(
             kind=request.evidence,
             message=(
-                f"graph inference annotated "
-                f"{request.name!r}"
-                f" as "
-                f"{annotation_source}"
+                f"graph inference annotated {request.name!r} "
+                f"as {annotation_source}"
             ),
             confidence=confidence,
             node_id=request.node_id,

@@ -25,6 +25,7 @@ from tests.expectations import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     import pytest
@@ -44,7 +45,10 @@ def _index(
         The index and the function definitions in source order.
 
     """
-    module = parse(source=dedent(text=source), filename="s.py")
+    module: CommentedModule = parse(
+        source=dedent(text=source),
+        filename="s.py",
+    )
     functions: list[FunctionDef | AsyncFunctionDef] = [
         node
         for node in walk(node=module)
@@ -79,7 +83,9 @@ def test_default_literal_corroborates_parameter() -> None:
             return sep.join([])
         """,
     )
-    hint = index.hint_for(node=_first_parameter(function=functions[0]))
+    hint: Hint | None = index.hint_for(
+        node=_first_parameter(function=functions[0]),
+    )
     expect_equal(
         actual=hint,
         expected=Hint(source="str", basis=HintBasis.default_literal),
@@ -98,7 +104,9 @@ def test_call_sites_corroborate_parameter() -> None:
         scale(4)
         """,
     )
-    hint = index.hint_for(node=_first_parameter(function=functions[0]))
+    hint: Hint | None = index.hint_for(
+        node=_first_parameter(function=functions[0]),
+    )
     expect_equal(
         actual=hint,
         expected=Hint(source="int", basis=HintBasis.call_sites),
@@ -113,7 +121,7 @@ def test_uncorroborated_candidate_is_refused() -> None:
             return "hi " + name
         """,
     )
-    node = _first_parameter(function=functions[0])
+    node: arg = _first_parameter(function=functions[0])
     expect_is(actual=index.hint_for(node=node), expected=None)
     expect_equal(
         actual=index.rejection_for(node=node),
@@ -133,7 +141,7 @@ def test_disagreeing_call_sites_give_no_hint() -> None:
         f("a")
         """,
     )
-    node = _first_parameter(function=functions[0])
+    node: arg = _first_parameter(function=functions[0])
     expect_is(actual=index.hint_for(node=node), expected=None)
     expect_equal(
         actual=index.rejection_for(node=node),
@@ -149,7 +157,7 @@ def test_candidates_with_object_or_unknown_names_are_refused() -> None:
             return len(items)
         """,
     )
-    node = _first_parameter(function=functions[0])
+    node: arg = _first_parameter(function=functions[0])
     expect_is(actual=index.hint_for(node=node), expected=None)
     expect_equal(
         actual=index.rejection_for(node=node),
@@ -168,7 +176,9 @@ def test_container_call_sites_are_corroborated() -> None:
         count([1])
         """,
     )
-    hint = index.hint_for(node=_first_parameter(function=functions[0]))
+    hint: Hint | None = index.hint_for(
+        node=_first_parameter(function=functions[0]),
+    )
     expect_equal(
         actual=hint,
         expected=Hint(source="list[int]", basis=HintBasis.call_sites),
@@ -205,7 +215,7 @@ def test_self_cls_varargs_and_none_default_are_never_hinted() -> None:
         K().m(1)
         """,
     )
-    function = functions[0]
+    function: FunctionDef | AsyncFunctionDef = functions[0]
     nodes: list[AST] = [
         *function.args.args,
         *[a for a in (function.args.vararg, function.args.kwarg) if a],
@@ -216,7 +226,7 @@ def test_self_cls_varargs_and_none_default_are_never_hinted() -> None:
 
 def test_is_allowed_source_accepts_builtins_and_imported_names() -> None:
     """Allow builtins and known names; refuse object and Any."""
-    known = frozenset({"Sequence"})
+    known: frozenset[str] = frozenset({"Sequence"})
     for source in (
         "int",
         "list[int]",
@@ -258,7 +268,9 @@ def _return_hint(*, source: str, name: str) -> tuple[Hint | None, str | None]:
 
     """
     index, functions = _index(source=source)
-    function = next(f for f in functions if f.name == name)
+    function: FunctionDef | AsyncFunctionDef = next(
+        f for f in functions if f.name == name
+    )
     return (
         index.hint_for(node=function),
         index.rejection_for(node=function),
@@ -290,7 +302,7 @@ class K:
         self.x = 1
 """,
     ):
-        name = "__init__" if "__init__" in source else "f"
+        name: str = "__init__" if "__init__" in source else "f"
         hint, _ = _return_hint(source=source, name=name)
         expect_equal(
             actual=hint,
@@ -633,7 +645,7 @@ def f(a: int):
 
 def test_hints_survive_reparsing_the_same_source() -> None:
     """Look hints up by position, not by node identity."""
-    source = dedent(
+    source: str = dedent(
         text="""\
         def scale(x):
             return x * 2
@@ -642,12 +654,14 @@ def test_hints_survive_reparsing_the_same_source() -> None:
         scale(3)
         """,
     )
-    index = HintIndex.create(
+    index: HintIndex = HintIndex.create(
         module=(parse(source=source, filename="s.py")),
         stubs_path=None,
     )
-    second = parse(source=source, filename="s.py")
-    function = next(n for n in walk(node=second) if isinstance(n, FunctionDef))
+    second: CommentedModule = parse(source=source, filename="s.py")
+    function: FunctionDef = next(
+        n for n in walk(node=second) if isinstance(n, FunctionDef)
+    )
     expect_equal(
         actual=index.hint_for(node=function.args.args[0]),
         expected=Hint(source="int", basis=HintBasis.call_sites),
@@ -662,9 +676,14 @@ def test_cache_shares_one_inference_across_parses(
     *,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Infer once per distinct source text."""
-    calls = {"convert": 0}
-    original = CommentedModule.convert
+    """Infer once per distinct source text.
+
+    Args:
+        monkeypatch: Fixture replacing ``CommentedModule.convert``.
+
+    """
+    calls: dict[str, int] = {"convert": 0}
+    original: Callable[..., GraphConversion] = CommentedModule.convert
 
     def counting(
         self: CommentedModule,
@@ -673,6 +692,18 @@ def test_cache_shares_one_inference_across_parses(
         filename: str = "<memory>",
         apply: bool = False,
     ) -> GraphConversion:
+        """Count the call and delegate to the real conversion.
+
+        Args:
+            self: Module being converted.
+            stubs_path: Stub directory.
+            filename: Reported filename.
+            apply: Whether to apply the conversion.
+
+        Returns:
+            The conversion result.
+
+        """
         calls["convert"] += 1
         return original(
             self=self,
@@ -682,13 +713,13 @@ def test_cache_shares_one_inference_across_parses(
         )
 
     monkeypatch.setattr(target=CommentedModule, name="convert", value=counting)
-    cache = HintCache()
-    source = """\
+    cache: HintCache = HintCache()
+    source: str = """\
 def f(a=1):
     return a
 """
     for _ in range(3):
-        module = parse(source=source, filename="s.py")
+        module: CommentedModule = parse(source=source, filename="s.py")
         LazyHints(
             module=module,
             stubs_path=None,
@@ -696,7 +727,7 @@ def f(a=1):
             cache=cache,
         ).index()
     expect_equal(actual=calls["convert"], expected=1)
-    other = """\
+    other: str = """\
 def g(a=1):
     return a
 """

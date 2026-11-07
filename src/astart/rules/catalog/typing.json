@@ -24,6 +24,26 @@
       "after": [],
       "before": [],
       "edits": [
+        "typing.add-noreturn"
+      ],
+      "idempotent": true,
+      "key": "typing.add-noreturn",
+      "min_confidence": 1.0,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "function.never_returns",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "typing.missing-annotation"
+      ],
+      "safety": "proven"
+    },
+    {
+      "after": [],
+      "before": [],
+      "edits": [
         "typing.add-inferred-annotation"
       ],
       "idempotent": true,
@@ -201,6 +221,7 @@
       ],
       "fixes": [
         "typing.add-none-return",
+        "typing.add-noreturn",
         "typing.add-inferred-annotation",
         "typing.synthesize-protocol",
         "typing.synthesize-typevar"

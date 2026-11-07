@@ -169,8 +169,8 @@ class Rule:
         """
         if (self.when is None) == (self.procedure is None):
             msg: str = (
-                f"rule {self.key!r} needs exactly one of 'when' and "
-                "'procedure'"
+                f"rule {self.key!r} needs exactly one of"
+                " 'when' and 'procedure'"
             )
             raise ValueError(msg)
 
@@ -752,6 +752,9 @@ def rule_from_json(*, value: JsonValue) -> Rule:
 
     Returns:
         The rule.
+
+    Raises:
+        ValueError: If the value does not describe a valid rule.
 
     """
     reader: _Reader = _Reader(value=value, what="rule")

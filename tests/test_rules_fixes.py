@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import ast
+from ast import Pass
 from dataclasses import replace
 from textwrap import dedent
 from typing import TYPE_CHECKING
@@ -141,7 +141,7 @@ def _catalog(
         The catalog.
 
     """
-    glob = _rule(
+    glob: Rule = _rule(
         key="glob",
         subject="Assign",
         when=AllOf(
@@ -158,7 +158,7 @@ def _catalog(
         ),
         fix="typing.add-final",
     )
-    keyword = _rule(
+    keyword: Rule = _rule(
         key="kw",
         subject="Call",
         when=Compare(
@@ -206,7 +206,7 @@ def _fix_all(*, source: str, catalog: Catalog, key: str) -> tuple[str, int]:
     ]
     if not offering:
         return source, 0
-    fixed = apply_fix(
+    fixed: str = apply_fix(
         source=source,
         finding=offering[0],
         fix=catalog.fix(key=key),
@@ -217,7 +217,7 @@ def _fix_all(*, source: str, catalog: Catalog, key: str) -> tuple[str, int]:
 
 def test_add_final_rewrites_literal_global() -> None:
     """Annotate the literal and import Final, keeping comments."""
-    source = dedent(
+    source: str = dedent(
         text='''\
         """Doc."""
         from __future__ import annotations
@@ -239,7 +239,7 @@ def test_add_final_rewrites_literal_global() -> None:
 
 def test_add_final_reuses_existing_final_alias() -> None:
     """Use the module's own spelling of Final."""
-    source = """\
+    source: str = """\
 from typing import Final as F
 
 NAME = 'x'
@@ -251,7 +251,7 @@ NAME = 'x'
     )
     expect_in(item="NAME: F[str] = 'x'", container=fixed)
     expect_equal(actual=fixed.count("import"), expected=1)
-    aliased = """\
+    aliased: str = """\
 import typing as t
 
 NAME = 1.5
@@ -266,7 +266,7 @@ NAME = 1.5
 
 def test_add_final_skips_non_literal_value() -> None:
     """Leave computed values alone."""
-    source = """\
+    source: str = """\
 LIMIT = compute()
 """
     fixed, offered = _fix_all(
@@ -280,7 +280,7 @@ LIMIT = compute()
 
 def test_add_keywords_rewrites_resolved_call() -> None:
     """Pass the keyword-capable arguments by name."""
-    source = """\
+    source: str = """\
 def f(a, /, b, c): ...
 
 
@@ -297,13 +297,13 @@ f(1, 2, 3)  # call
 
 def test_add_keywords_leaves_unsafe_calls() -> None:
     """Report nothing for positional-only and absorbed arguments."""
-    source = """\
+    source: str = """\
 def f(a, /): ...
 def g(a, *rest): ...
 f(1)
 g(1, 2)
 """
-    result = check(
+    result: CheckResult = check(
         source=source,
         filename="s.py",
         catalog=_catalog(),
@@ -317,7 +317,7 @@ g(1, 2)
 
 def test_fixes_are_idempotent() -> None:
     """Applying a fix again changes nothing."""
-    catalog = _catalog()
+    catalog: Catalog = _catalog()
     for source, key in (
         (
             """\
@@ -342,7 +342,7 @@ f(1, 2)
 
 def test_validate_behavior_accepts_correct_examples() -> None:
     """Accept examples that trigger exactly their rule."""
-    catalog = _catalog(
+    catalog: Catalog = _catalog(
         final_examples=(
             Example(
                 source="""\
@@ -379,7 +379,7 @@ f(a=1)
 
 def test_validate_behavior_reports_wrong_example() -> None:
     """Report an example that does not trigger its rule."""
-    catalog = _catalog(
+    catalog: Catalog = _catalog(
         final_examples=(
             Example(
                 source="""\
@@ -401,9 +401,16 @@ def test_validate_behavior_reports_non_idempotent_fix() -> None:
     """Report a fix that changes its own output again."""
 
     def growing(_subject: Subject, facts: ModuleFacts) -> None:
-        facts.module.body.append(ast.Pass())
+        """Append a statement so the fix never stabilises.
 
-    catalog = _catalog(
+        Args:
+            _subject: Unused subject.
+            facts: Resolved imports and the parsed module.
+
+        """
+        facts.module.body.append(Pass())
+
+    catalog: Catalog = _catalog(
         final_examples=(
             Example(
                 source="""\
@@ -427,8 +434,8 @@ LIMIT = 3
 
 def test_apply_fix_rejects_unknown_applier() -> None:
     """Name the missing applier."""
-    catalog = _catalog(final_fix=_final_fix(edits=("nope",)))
-    result = check(
+    catalog: Catalog = _catalog(final_fix=_final_fix(edits=("nope",)))
+    result: CheckResult = check(
         source="""\
 LIMIT = 3
 """,

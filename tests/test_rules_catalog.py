@@ -222,7 +222,7 @@ def _mentions(*, problems: tuple[str, ...], text: str) -> None:
 
 def test_duplicate_code_is_reported() -> None:
     """Reject two rules sharing a code."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(rules=(_rule(), _rule(key="r.two"))),
     )
     _mentions(problems=problems, text="duplicate rule code 'AAA001'")
@@ -230,7 +230,7 @@ def test_duplicate_code_is_reported() -> None:
 
 def test_duplicate_key_is_reported() -> None:
     """Reject two rules sharing a key."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(rules=(_rule(), _rule(code="AAA002"))),
     )
     _mentions(problems=problems, text="duplicate rule key 'r.one'")
@@ -256,7 +256,7 @@ def test_unknown_fact_is_reported() -> None:
 
 def test_unknown_fix_and_applier_and_procedure_are_reported() -> None:
     """Reject dangling references."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(
             rules=(
                 _rule(fixes=("f.missing",)),
@@ -277,7 +277,7 @@ def test_unknown_fix_and_applier_and_procedure_are_reported() -> None:
 
 def test_ordered_before_cycle_is_reported() -> None:
     """Reject circular ordering."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(
             relations=(
                 Relation(
@@ -298,7 +298,7 @@ def test_ordered_before_cycle_is_reported() -> None:
 
 def test_conflicting_rules_in_one_profile_are_reported() -> None:
     """Reject a profile enabling two conflicting rules."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(
             rules=(_rule(), _rule(key="r.two", code="AAA002")),
             profiles=(
@@ -324,14 +324,14 @@ def test_conflicting_rules_in_one_profile_are_reported() -> None:
 
 def test_proven_fix_cannot_need_semantic_fact() -> None:
     """Keep proven fixes independent of inference."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(
             rules=(_rule(fixes=("f.one",)),),
             fixes=(_fix(safety=FixSafety.proven, fact="m"),),
         ),
     )
     _mentions(problems=problems, text="proven fix 'f.one'")
-    clean = _problems(
+    clean: tuple[str, ...] = _problems(
         catalog=_catalog(
             rules=(_rule(fixes=("f.one",)),),
             fixes=(_fix(safety=FixSafety.proven, fact="s"),),
@@ -342,7 +342,7 @@ def test_proven_fix_cannot_need_semantic_fact() -> None:
 
 def test_declared_requires_must_match_predicate_facts() -> None:
     """Derive cost from what the trigger reads."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(rules=(_rule(fact="a", requires=("a", "m")),)),
     )
     _mentions(problems=problems, text="requires must equal")
@@ -350,7 +350,7 @@ def test_declared_requires_must_match_predicate_facts() -> None:
 
 def test_duplicate_alias_per_system_is_reported() -> None:
     """Reject one external id mapped to two rules."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(
             rules=(
                 _rule(aliases={"exactus": "CMP002"}),
@@ -367,7 +367,7 @@ def test_duplicate_alias_per_system_is_reported() -> None:
 
 def test_all_problems_are_collected_in_one_error() -> None:
     """Report everything wrong at once."""
-    problems = _problems(
+    problems: tuple[str, ...] = _problems(
         catalog=_catalog(
             rules=(_rule(subject=("Nope",), fact="zzz"), _rule()),
         ),
@@ -379,7 +379,7 @@ def test_all_problems_are_collected_in_one_error() -> None:
 
 def test_valid_catalog_has_no_problems() -> None:
     """Accept a consistent catalog, including procedural rules."""
-    catalog = _catalog(
+    catalog: Catalog = _catalog(
         rules=(
             _rule(fixes=("f.one",)),
             _rule(
@@ -396,18 +396,18 @@ def test_valid_catalog_has_no_problems() -> None:
 
 def test_empty_catalog_round_trips() -> None:
     """Load and dump a catalog with no entities."""
-    text = dump_catalog(catalog=_catalog())
-    loaded = load_catalog(text=text, registries=_registries())
+    text: str = dump_catalog(catalog=_catalog())
+    loaded: Catalog = load_catalog(text=text, registries=_registries())
     expect_equal(actual=loaded, expected=_catalog())
     expect_equal(actual=dump_catalog(catalog=loaded), expected=text)
 
 
 def test_dump_load_is_idempotent() -> None:
     """Reach a fixed point after one dump."""
-    first = dump_catalog(
+    first: str = dump_catalog(
         catalog=(_catalog(rules=(_rule(fixes=("f.one",)),), fixes=(_fix(),))),
     )
-    second = dump_catalog(
+    second: str = dump_catalog(
         catalog=load_catalog(text=first, registries=_registries()),
     )
     expect_equal(actual=second, expected=first)
@@ -417,14 +417,14 @@ def test_load_rejects_invalid_json_and_invalid_catalog() -> None:
     """Surface parse and validation failures."""
     with pytest.raises(expected_exception=ValueError, match="Expecting"):
         load_catalog(text="{", registries=_registries())
-    bad = dump_catalog(catalog=_catalog(rules=(_rule(fact="zzz"),)))
+    bad: str = dump_catalog(catalog=_catalog(rules=(_rule(fact="zzz"),)))
     with pytest.raises(expected_exception=CatalogError, match="unknown fact"):
         load_catalog(text=bad, registries=_registries())
 
 
 def test_rule_needs_both_kinds_of_example() -> None:
     """Report rules with no examples or one-sided examples."""
-    base = _rule()
+    base: Rule = _rule()
     for examples in (
         (),
         (
@@ -444,7 +444,7 @@ x = 1
             ),
         ),
     ):
-        problems = _problems(
+        problems: tuple[str, ...] = _problems(
             catalog=_catalog(rules=(replace(base, examples=examples),)),
         )
         _mentions(

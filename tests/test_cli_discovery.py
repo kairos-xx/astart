@@ -13,6 +13,16 @@ if TYPE_CHECKING:
 
 
 def _touch(*, root: Path, name: str) -> Path:
+    """Write a minimal Python file under a root.
+
+    Args:
+        root: Directory the file is created under.
+        name: Relative path of the file.
+
+    Returns:
+        The written file's path.
+
+    """
     path: Path = root / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -25,7 +35,12 @@ x = 1
 
 
 def test_directory_walk_finds_python_files_sorted(*, tmp_path: Path) -> None:
-    """Check that directory walk finds python files sorted."""
+    """Check that directory walk finds python files sorted.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
     second: Path = _touch(root=tmp_path, name="b.py")
     first: Path = _touch(root=tmp_path, name="a.py")
     nested: Path = _touch(root=tmp_path, name="pkg/c.py")
@@ -35,7 +50,12 @@ def test_directory_walk_finds_python_files_sorted(*, tmp_path: Path) -> None:
 
 
 def test_skips_virtualenv_and_cache_directories(*, tmp_path: Path) -> None:
-    """Check that skips virtualenv and cache directories."""
+    """Check that skips virtualenv and cache directories.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
     kept: Path = _touch(root=tmp_path, name="app.py")
     skipped: list[Path] = [
         _touch(root=tmp_path, name=".venv/x.py"),
@@ -49,14 +69,24 @@ def test_skips_virtualenv_and_cache_directories(*, tmp_path: Path) -> None:
 
 
 def test_explicit_file_honoured_even_in_skipped_dir(*, tmp_path: Path) -> None:
-    """Check that explicit file honoured even in skipped dir."""
+    """Check that explicit file honoured even in skipped dir.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
     explicit: Path = _touch(root=tmp_path, name=".venv/x.py")
     result: DiscoveryResult = discover_files(paths=[explicit])
     expect_equal(actual=result.files, expected=(explicit,))
 
 
 def test_missing_path_reported_not_raised(*, tmp_path: Path) -> None:
-    """Check that missing path reported not raised."""
+    """Check that missing path reported not raised.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
     missing: Path = tmp_path / "nope.py"
     result: DiscoveryResult = discover_files(paths=[missing])
     expect_equal(actual=result.missing, expected=(missing,))
@@ -64,7 +94,12 @@ def test_missing_path_reported_not_raised(*, tmp_path: Path) -> None:
 
 
 def test_duplicate_arguments_collapse(*, tmp_path: Path) -> None:
-    """Check that duplicate arguments collapse."""
+    """Check that duplicate arguments collapse.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
     only: Path = _touch(root=tmp_path, name="a.py")
     result: DiscoveryResult = discover_files(paths=[only, tmp_path, only])
     expect_equal(actual=result.files, expected=(only,))

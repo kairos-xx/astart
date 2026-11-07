@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from ast import AsyncFunctionDef, FunctionDef, walk
 from textwrap import dedent
+from typing import TYPE_CHECKING
 
 from astart import parse
 from astart.rules.hints import HintIndex
 
 from tests.expectations import expect_equal, expect_is
+
+if TYPE_CHECKING:
+    from astart.ast import CommentedModule
+    from astart.rules.hints import Hint
 
 
 def _index(*, source: str) -> tuple[HintIndex, dict[str, FunctionDef]]:
@@ -21,7 +26,10 @@ def _index(*, source: str) -> tuple[HintIndex, dict[str, FunctionDef]]:
         The index and the function definitions by name.
 
     """
-    module = parse(source=dedent(text=source), filename="s.py")
+    module: CommentedModule = parse(
+        source=dedent(text=source),
+        filename="s.py",
+    )
     functions: dict[str, FunctionDef] = {
         node.name: node
         for node in walk(node=module)
@@ -43,7 +51,7 @@ def _parameter(*, source: str, function: str, name: str) -> str | None:
 
     """
     index, functions = _index(source=source)
-    hint = index.hint_for(
+    hint: Hint | None = index.hint_for(
         node=(next(a for a in functions[function].args.args if a.arg == name)),
     )
     return None if hint is None else hint.source
@@ -61,7 +69,7 @@ def _returns(*, source: str, function: str) -> str | None:
 
     """
     index, functions = _index(source=source)
-    hint = index.hint_for(node=functions[function])
+    hint: Hint | None = index.hint_for(node=functions[function])
     return None if hint is None else hint.source
 
 
@@ -275,7 +283,7 @@ def a():
 def test_nonlocal_rebinding_defeats_single_assignment_typing() -> None:
     """Do not type a local that a nested function rebinds."""
     for value in ("'s'", "2.5"):
-        source = f"""\
+        source: str = f"""\
 def outer():
     x = 1
 
@@ -327,7 +335,7 @@ j(True & False)
 
 def test_async_functions_that_escape_are_also_refused() -> None:
     """Apply the escape rule to coroutines too."""
-    module = parse(
+    module: CommentedModule = parse(
         source=dedent(
             text="""\
             async def f(a):
@@ -339,10 +347,10 @@ def test_async_functions_that_escape_are_also_refused() -> None:
         ),
         filename="s.py",
     )
-    function = next(
+    function: AsyncFunctionDef = next(
         n for n in walk(node=module) if isinstance(n, AsyncFunctionDef)
     )
-    index = HintIndex.create(module=module, stubs_path=None)
+    index: HintIndex = HintIndex.create(module=module, stubs_path=None)
     expect_is(
         actual=index.hint_for(node=function.args.args[0]),
         expected=None,

@@ -917,9 +917,8 @@ class _SignatureBinder:
             return False
         if parameter.kind is ParameterKind.POSITIONAL_ONLY:
             self.errors.append(
-                f"positional-only argument '"
-                f"{parameter.name}"
-                f"' passed by keyword",
+                f"positional-only argument '{parameter.name}' "
+                "passed by keyword",
             )
             return False
         index, source, actual = matches[0]
@@ -1473,8 +1472,8 @@ class ContractIndex:
                     ContractDiagnostic(
                         code="final_method_overridden",
                         description=(
-                            f"{method.qualified_name}"
-                            f" overrides final inherited method"
+                            f"{method.qualified_name} "
+                            "overrides final inherited method"
                         ),
                         node=source,
                     ),
@@ -1489,8 +1488,7 @@ class ContractIndex:
                     ContractDiagnostic(
                         code="override_incompatible",
                         description=(
-                            f"{method.qualified_name}"
-                            f": "
+                            f"{method.qualified_name}: "
                             f"{', '.join(relation.evidence)}"
                         ),
                         node=source,
@@ -1501,8 +1499,7 @@ class ContractIndex:
                     ContractDiagnostic(
                         code="override_unresolved",
                         description=(
-                            f"{method.qualified_name}"
-                            f": "
+                            f"{method.qualified_name}: "
                             f"{', '.join(relation.evidence)}"
                         ),
                         node=source,

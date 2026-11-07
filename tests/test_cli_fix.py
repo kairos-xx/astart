@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from io import StringIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, final
 
 from astart.cli.commands import FixCommandSettings, FixMode, run_fix
 from astart.rules.vocabulary import FixSafety
@@ -17,7 +17,18 @@ from tests.expectations import (
 
 if TYPE_CHECKING:
     from pathlib import Path
-SAMPLE = """\
+
+
+@final
+class Constants:
+    """Group module-level constants.
+
+    Attributes:
+        sample: Grouped module constant.
+
+    """
+
+    sample: Final[str] = """\
 # header
 LIMIT = 3  # limit
 
@@ -37,6 +48,18 @@ def _run(
     mode: FixMode = FixMode.write,
     run_formatter: bool = False,
 ) -> tuple[int, str]:
+    """Run the fix command while capturing its output.
+
+    Args:
+        paths: Files or directories to fix.
+        ceiling: Highest fix safety to apply.
+        mode: Whether to write, diff, or only check.
+        run_formatter: Whether to run the formatter afterwards.
+
+    Returns:
+        The exit code and the captured output.
+
+    """
     out: StringIO = StringIO()
     code: int = run_fix(
         settings=FixCommandSettings(
@@ -48,17 +71,32 @@ def _run(
         ),
         out=out,
     )
-    return code, out.getvalue()
+    return (code, out.getvalue())
 
 
-def _sample(*, tmp_path: Path, text: str = SAMPLE) -> Path:
+def _sample(*, tmp_path: Path, text: str = Constants.sample) -> Path:
+    """Write a sample module into a temporary directory.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+        text: Source text of the sample file.
+
+    Returns:
+        The written file's path.
+
+    """
     path: Path = tmp_path / "m.py"
     path.write_text(data=text, encoding="utf-8")
     return path
 
 
 def test_write_mode_applies_proven_fixes_only(*, tmp_path: Path) -> None:
-    """Check that write mode applies proven fixes only."""
+    """Check that write mode applies proven fixes only.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     code, _ = _run(paths=[path], ceiling=FixSafety.proven)
     text: str = path.read_text(encoding="utf-8")
@@ -69,7 +107,12 @@ def test_write_mode_applies_proven_fixes_only(*, tmp_path: Path) -> None:
 
 
 def test_guarded_ceiling_adds_keywords_and_hints(*, tmp_path: Path) -> None:
-    """Check that guarded ceiling adds keywords and hints."""
+    """Check that guarded ceiling adds keywords and hints.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     _ = _run(paths=[path])
     text: str = path.read_text(encoding="utf-8")
@@ -78,24 +121,45 @@ def test_guarded_ceiling_adds_keywords_and_hints(*, tmp_path: Path) -> None:
 
 
 def test_diff_mode_prints_diff_and_leaves_file(*, tmp_path: Path) -> None:
-    """Check that diff mode prints diff and leaves file."""
+    """Check that diff mode prints diff and leaves file.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     code, text = _run(paths=[path], mode=FixMode.diff)
     expect_equal(actual=code, expected=1)
     expect_in(item="+LIMIT: Final[int] = 3", container=text)
-    expect_equal(actual=path.read_text(encoding="utf-8"), expected=SAMPLE)
+    expect_equal(
+        actual=path.read_text(encoding="utf-8"),
+        expected=Constants.sample,
+    )
 
 
 def test_check_mode_exits_one_without_writing(*, tmp_path: Path) -> None:
-    """Check that check mode exits one without writing."""
+    """Check that check mode exits one without writing.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     code, _ = _run(paths=[path], mode=FixMode.check)
     expect_equal(actual=code, expected=1)
-    expect_equal(actual=path.read_text(encoding="utf-8"), expected=SAMPLE)
+    expect_equal(
+        actual=path.read_text(encoding="utf-8"),
+        expected=Constants.sample,
+    )
 
 
 def test_unchanged_file_not_rewritten(*, tmp_path: Path) -> None:
-    """Check that unchanged file not rewritten."""
+    """Check that unchanged file not rewritten.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(
         tmp_path=tmp_path,
         text="""\
@@ -109,7 +173,12 @@ x: int = 1
 
 
 def test_second_run_is_noop(*, tmp_path: Path) -> None:
-    """Check that second run is noop."""
+    """Check that second run is noop.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     _ = _run(paths=[path])
     code, _ = _run(paths=[path])
@@ -117,7 +186,12 @@ def test_second_run_is_noop(*, tmp_path: Path) -> None:
 
 
 def test_latin1_file_keeps_encoding(*, tmp_path: Path) -> None:
-    """Check that latin1 file keeps encoding."""
+    """Check that latin1 file keeps encoding.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = tmp_path / "l.py"
     path.write_bytes(
         data="""\
@@ -132,7 +206,12 @@ NAME = 3  # café
 
 
 def test_unparsable_file_untouched_exit_two(*, tmp_path: Path) -> None:
-    """Check that unparsable file untouched exit two."""
+    """Check that unparsable file untouched exit two.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(
         tmp_path=tmp_path,
         text="""\
@@ -150,7 +229,12 @@ def (:
 
 
 def test_summary_reports_counts_and_skips(*, tmp_path: Path) -> None:
-    """Check that summary reports counts and skips."""
+    """Check that summary reports counts and skips.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     _, text = _run(paths=[path])
     expect_in(item="files changed", container=text)
@@ -158,7 +242,12 @@ def test_summary_reports_counts_and_skips(*, tmp_path: Path) -> None:
 
 
 def test_formatter_runs_when_requested(*, tmp_path: Path) -> None:
-    """Check that formatter runs when requested."""
+    """Check that formatter runs when requested.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(
         tmp_path=tmp_path,
         text="""\

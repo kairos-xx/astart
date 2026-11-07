@@ -22,7 +22,8 @@ from tests.expectations import (
 
 if TYPE_CHECKING:
     from astart.rules.facts import ModuleFacts
-    from astart.rules.predicate import FactValue
+    from astart.rules.model import Finding
+    from astart.rules.predicate import FactValue, Predicate
     from astart.rules.registry import Registries
 
 
@@ -63,7 +64,7 @@ def _rule(
         The rule.
 
     """
-    items = tuple(
+    items: tuple[Predicate, ...] = tuple(
         Compare(fact=name, op=CompareOp.eq, value=True) for name in facts
     ) + tuple(
         Not(item=Compare(fact=name, op=CompareOp.eq, value=True))
@@ -169,7 +170,7 @@ def test_finding_span_and_subject_path() -> None:
     )
     expect_is(actual=result.parse_error, expected=None)
     expect_equal(actual=len(result.findings), expected=1)
-    finding = result.findings[0]
+    finding: Finding = result.findings[0]
     expect_equal(actual=finding.rule_key, expected="any")
     expect_equal(actual=finding.subject_path, expected="K.run.value")
     expect_equal(actual=finding.span.start_line, expected=5)
@@ -184,13 +185,35 @@ def test_only_required_facts_are_computed() -> None:
     registries: Registries = default_registries()
 
     def counting(name: str) -> FactProvider:
+        """Return a provider that records its name when called.
+
+        Args:
+            name: Provider name to record.
+
+        Returns:
+            The recording provider.
+
+        """
+
         def provider(_subject: Subject, _facts: ModuleFacts) -> FactValue:
+            """Record the call and report the fact as absent.
+
+            Args:
+                _subject: Unused subject.
+                _facts: Unused resolved imports.
+
+            Returns:
+                ``False``.
+
+            """
             calls.append(name)
             return False
 
         return provider
 
-    providers = {name: counting(name=name) for name in registries.facts}
+    providers: dict[str, FactProvider] = {
+        name: counting(name=name) for name in registries.facts
+    }
     check(
         source="""\
 x: int = 1
@@ -205,12 +228,12 @@ x: int = 1
 
 def test_fingerprint_survives_leading_blank_lines() -> None:
     """Keep a finding's identity when code moves."""
-    body = """\
+    body: str = """\
 from typing import Any
 x: Any = 1
 """
-    first = _run(source=body, rules=(_any_rule(),)).findings[0]
-    moved = _run(
+    first: Finding = _run(source=body, rules=(_any_rule(),)).findings[0]
+    moved: Finding = _run(
         source="""\
 
 

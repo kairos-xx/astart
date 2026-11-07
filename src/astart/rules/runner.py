@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import ast
+from ast import parse as ast_parse
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Final, final
 
@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
+    from astart import CommentedModule
+    from astart.rules.engine import CheckResult
     from astart.rules.facts import Applier, ModuleFacts, Subject
     from astart.rules.model import Catalog, Finding, Fix
     from astart.rules.registry import Registries
@@ -263,7 +265,7 @@ def fix_source(
             settled = outcome.findings
             break
     if settled is None:
-        final = check(
+        final: CheckResult = check(
             source=current,
             filename=filename,
             catalog=catalog,
@@ -378,7 +380,7 @@ def _run_round(*, source: str, job: _Job) -> _Round:
         The pass outcome.
 
     """
-    found = check(
+    found: CheckResult = check(
         source=source,
         filename=job.filename,
         catalog=job.catalog,
@@ -418,7 +420,7 @@ def _attempt(
         The outcome, or ``None`` when the tree cannot be written back.
 
     """
-    module = parse(source=source, filename=job.filename)
+    module: CommentedModule = parse(source=source, filename=job.filename)
     settings: FixSettings = job.settings
     state: _Pass = _Pass(
         index=subject_index(module=module),
@@ -463,7 +465,7 @@ def _attempt(
         )
     try:
         text: str = unparse(tree=module, preserve_formatting=True)
-        _ = ast.parse(source=text)
+        _ = ast_parse(source=text)
     except (FormatPreservationError, SyntaxError):
         return None
     return _Round(
@@ -555,7 +557,7 @@ def _rematch(
     """
     if current == previous:
         return pairs
-    found = check(
+    found: CheckResult = check(
         source=current,
         filename=job.filename,
         catalog=job.catalog,
@@ -600,7 +602,8 @@ def _apply_one(*, finding: Finding, fix: Fix, state: _Pass) -> str | None:
         return "preconditions no longer hold"
     try:
         for key in fix.edits:
-            state.table[key](subject, state.facts)
+            applier: Applier = state.table[key]
+            applier(subject, state.facts)
     except Constants.applier_errors as error:
         return f"applier failed: {error}"
     state.edited.add(id(subject.node))

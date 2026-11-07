@@ -25,7 +25,11 @@ from astart.rules.vocabulary import FixSafety
 from tests.expectations import expect_equal, expect_false, expect_true
 
 if TYPE_CHECKING:
-    from astart.rules import Catalog
+    from ast import Module
+
+    from astart import CommentedModule
+    from astart.rules.hints import Hint
+    from astart.rules.model import Catalog
 type Expected = dict[str, str | None]
 
 
@@ -356,16 +360,17 @@ def _hints(*, source: str) -> Expected:
         ``None`` for refusals.
 
     """
-    module = parse(source=source, filename="gold.py")
-    index = HintIndex.create(module=module, stubs_path=None)
+    module: CommentedModule = parse(source=source, filename="gold.py")
+    index: HintIndex = HintIndex.create(module=module, stubs_path=None)
     found: Expected = {}
+    hint: Hint | None
     for function in walk(node=module):
         if not isinstance(function, (FunctionDef, AsyncFunctionDef)):
             continue
         if function.returns is None:
             hint = index.hint_for(node=function)
             found[function.name] = None if hint is None else hint.source
-        parameters = [
+        parameters: list[arg] = [
             *function.args.posonlyargs,
             *function.args.args,
             *function.args.kwonlyargs,
@@ -407,8 +412,11 @@ def _typing_catalog() -> Catalog:
         A catalog containing only TYP003 and the two hint fixes.
 
     """
-    catalog = load_default_catalog(registries=default_registries())
-    allowed = {"typing.add-none-return", "typing.add-inferred-annotation"}
+    catalog: Catalog = load_default_catalog(registries=default_registries())
+    allowed: set[str] = {
+        "typing.add-none-return",
+        "typing.add-inferred-annotation",
+    }
     return replace(
         catalog,
         rules=tuple(
@@ -452,7 +460,7 @@ def _stripped(*, source: str) -> str:
         The textual dump of the stripped tree.
 
     """
-    tree = parse_python(source=source)
+    tree: Module = parse_python(source=source)
     for node in walk(node=tree):
         if isinstance(node, (FunctionDef, AsyncFunctionDef)):
             node.returns = None
@@ -523,8 +531,8 @@ def test_corpus_fixes_parse_keep_comments_and_are_stable(
         path: Vendored module under test.
 
     """
-    source = path.read_text(encoding="utf-8")
-    result = _fix(source=source, name=path.name)
+    source: str = path.read_text(encoding="utf-8")
+    result: FixResult = _fix(source=source, name=path.name)
     expect_equal(actual=result.parse_error, expected=None)
     parse_python(source=result.source)
     expect_equal(
@@ -535,10 +543,10 @@ def test_corpus_fixes_parse_keep_comments_and_are_stable(
         actual=_comments(text=result.source),
         expected=_comments(text=source),
     )
-    before = _annotations(source=source)
-    after = _annotations(source=result.source)
+    before: list[str | None] = _annotations(source=source)
+    after: list[str | None] = _annotations(source=result.source)
     expect_equal(actual=len(before), expected=len(after))
-    added = [
+    added: list[str] = [
         new
         for old, new in zip(before, after, strict=True)
         if old is None and new is not None
@@ -558,17 +566,17 @@ def test_corpus_fixes_parse_keep_comments_and_are_stable(
 """)
         <= Constants.stable_check_lines
     ):
-        again = _fix(source=result.source, name=path.name)
+        again: FixResult = _fix(source=result.source, name=path.name)
         expect_equal(actual=again.source, expected=result.source)
         expect_equal(actual=again.applied, expected=())
 
 
 def test_runner_changes_realistic_code() -> None:
     """Guard against a vacuous pass: the fixer does write hints."""
-    path = next(
+    path: Path = next(
         p for p in Constants.corpus_files if p.name == "patterns.py.txt"
     )
-    source = path.read_text(encoding="utf-8")
-    result = _fix(source=source, name=path.name)
+    source: str = path.read_text(encoding="utf-8")
+    result: FixResult = _fix(source=source, name=path.name)
     expect_true(condition=len(result.applied) > 0)
     expect_true(condition=result.source != source)

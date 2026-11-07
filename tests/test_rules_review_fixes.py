@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    Name,
+    parse,
+    walk,
+)
 from dataclasses import replace
 from pathlib import Path
 from textwrap import dedent
@@ -29,7 +33,10 @@ from tests.expectations import (
 )
 
 if TYPE_CHECKING:
+    from ast import Module, expr
+
     from astart.rules import CheckResult
+    from astart.rules.model import FixOffer, Rule
 
 
 def _catalog() -> Catalog:
@@ -105,7 +112,7 @@ def _apply(*, source: str, rule_key: str, fix_key: str) -> str:
 
 def test_shadowed_or_decorated_callee_is_not_reported() -> None:
     """Never invent keywords for a callable that is not the definition."""
-    cases = (
+    cases: tuple[str, str, str] = (
         """\
 def f(a, b): ...
 
@@ -157,7 +164,7 @@ f(1, 2)
 
 def test_method_named_like_a_function_does_not_hide_the_function() -> None:
     """Class-level names do not shadow module functions."""
-    source = dedent(
+    source: str = dedent(
         text="""\
     def run(a, b): ...
 
@@ -177,7 +184,7 @@ def test_method_named_like_a_function_does_not_hide_the_function() -> None:
 
 def test_apply_fix_survives_unpreservable_formatting() -> None:
     """Return parseable source instead of raising."""
-    cases = (
+    cases: tuple[tuple[str, ...], ...] = (
         (
             """\
 def f(a, b): ...
@@ -209,13 +216,13 @@ B = 2
         ),
     )
     for source, rule_key, fix_key in cases:
-        result = _apply(source=source, rule_key=rule_key, fix_key=fix_key)
-        ast.parse(source=result)
+        result: str = _apply(source=source, rule_key=rule_key, fix_key=fix_key)
+        parse(source=result)
 
 
 def test_final_fix_is_not_offered_when_it_would_be_wrong() -> None:
     """Offer Final only for names bound once and spellable."""
-    cases = (
+    cases: tuple[str, str, str, str, str, str] = (
         """\
 A = 1
 A = 2
@@ -247,13 +254,13 @@ A = B = 1
 """,
     )
     for source in cases:
-        offers = [
+        offers: list[FixOffer] = [
             offer
             for finding in _check(source=source).findings
             for offer in finding.fix_offers
         ]
         expect_equal(actual=offers, expected=[], message=source)
-    clean = _check(
+    clean: CheckResult = _check(
         source="""\
 A = 1
 """,
@@ -263,7 +270,7 @@ A = 1
 
 def test_check_never_raises_on_hostile_source() -> None:
     """Report problems as parse errors, whatever the input."""
-    deep = (
+    deep: str = (
         "A = "
         + "+".join(["1"] * 3000)
         + """\
@@ -276,15 +283,15 @@ def test_check_never_raises_on_hostile_source() -> None:
 A = 1\x00
 """,
     ):
-        result = _check(source=source)
+        result: CheckResult = _check(source=source)
         expect_true(condition=hasattr(result, "parse_error"))
 
 
 def test_rule_needs_one_bad_and_one_good_example() -> None:
     """Reject rules whose examples are one-sided."""
-    catalog = _catalog()
-    rule = catalog.rules[0]
-    bare = replace(
+    catalog: Catalog = _catalog()
+    rule: Rule = catalog.rules[0]
+    bare: Catalog = replace(
         catalog,
         rules=(replace(rule, examples=()), *catalog.rules[1:]),
     )
@@ -293,7 +300,7 @@ def test_rule_needs_one_bad_and_one_good_example() -> None:
         match="at least one triggering",
     ):
         verify_catalog(catalog=bare, registries=default_registries())
-    one_sided = replace(
+    one_sided: Catalog = replace(
         catalog,
         rules=(
             replace(
@@ -320,17 +327,17 @@ x = 1
 
 def test_repeated_subjects_have_distinct_fingerprints() -> None:
     """Keep two same-name findings apart."""
-    result = _check(
+    result: CheckResult = _check(
         source="""\
 A = 1
 A = 2
 """,
     )
-    prints = [f.fingerprint for f in result.findings]
-    paths = [f.subject_path for f in result.findings]
+    prints: list[str] = [f.fingerprint for f in result.findings]
+    paths: list[str] = [f.subject_path for f in result.findings]
     expect_equal(actual=paths, expected=["A", "A#2"])
     expect_equal(actual=len(set(prints)), expected=2)
-    annotated = _check(
+    annotated: CheckResult = _check(
         source="""\
 from typing import Any
 x: Any = 1
@@ -398,12 +405,17 @@ USER = NewType('USER', int)
 
 def test_rules_package_has_no_object_or_any_annotations() -> None:
     """Keep the package within the repository's typing conventions."""
-    package = Path(__file__).parent.parent / "src" / "astart" / "rules"
+    package: Path = Path(__file__).parent.parent / "src" / "astart" / "rules"
     offenders: list[str] = []
     for path in sorted(package.glob(pattern="*.py")):
-        tree = ast.parse(source=path.read_text("utf-8"))
-        for node in ast.walk(node=tree):
-            annotation = getattr(node, "annotation", None) or getattr(
+        file: Path = path
+        tree: Module = parse(source=file.read_text(encoding="utf-8"))
+        for node in walk(node=tree):
+            annotation: expr | None = getattr(
+                node,
+                "annotation",
+                None,
+            ) or getattr(
                 node,
                 "returns",
                 None,
@@ -412,9 +424,8 @@ def test_rules_package_has_no_object_or_any_annotations() -> None:
                 continue
             offenders.extend(
                 f"{path.name}:{inner.lineno}"
-                for inner in ast.walk(node=annotation)
-                if isinstance(inner, ast.Name)
-                and inner.id in {"object", "Any"}
+                for inner in walk(node=annotation)
+                if isinstance(inner, Name) and inner.id in {"object", "Any"}
             )
     expect_equal(actual=offenders, expected=[])
     expect_in(item="x", container="xy")

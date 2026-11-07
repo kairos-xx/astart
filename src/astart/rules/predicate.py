@@ -276,7 +276,11 @@ def _compare_from_json(*, value: dict[str, JsonValue]) -> Compare:
         case (str() as fact, str() as cmp, list() | dict()):
             msg: str = f"'compare' value for {fact!r} must be a scalar"
             raise ValueError(msg)
-        case (str() as fact, str() as cmp, constant):
+        case (
+            str() as fact,
+            str() as cmp,
+            (str() | int() | float() | bool() | None) as constant,
+        ):
             return Compare(fact=fact, op=CompareOp(cmp), value=constant)
         case _:
             msg = "'compare' needs string 'fact' and 'cmp'"

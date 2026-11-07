@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    ClassDef,
+    FunctionDef,
+    parse,
+)
 from textwrap import dedent
 
 from astart.rules.protocols import (
@@ -24,16 +28,26 @@ from tests.expectations import (
 
 
 def _usage(*, source: str, parameter: str) -> StructuralUsage | None:
-    function: ast.FunctionDef = expect_instance(
-        value=ast.parse(source=dedent(text=source)).body[0],
-        kind=ast.FunctionDef,
+    """Return the structural usage of one parameter.
+
+    Args:
+        source: Python source holding one function.
+        parameter: Parameter name to analyse.
+
+    Returns:
+        The structural usage, or ``None``.
+
+    """
+    function: FunctionDef = expect_instance(
+        value=parse(source=dedent(text=source)).body[0],
+        kind=FunctionDef,
     )
     return structural_usage(function=function, parameter=parameter, counts={})
 
 
 def test_method_call_and_property_become_members() -> None:
     """Check that method call and property become members."""
-    usage = _usage(
+    usage: StructuralUsage | None = _usage(
         source="""
         def load(src):
             data = src.read(1)
@@ -57,7 +71,7 @@ def test_method_call_and_property_become_members() -> None:
 
 def test_keyword_arguments_become_keyword_only_slots() -> None:
     """Check that keyword arguments become keyword only slots."""
-    usage = _usage(
+    usage: StructuralUsage | None = _usage(
         source="""
         def send(sink, payload):
             sink.write(payload, mode="w")
@@ -79,7 +93,7 @@ def test_keyword_arguments_become_keyword_only_slots() -> None:
 
 def test_same_member_with_different_types_loses_the_type() -> None:
     """Check that same member with different types loses the type."""
-    usage = _usage(
+    usage: StructuralUsage | None = _usage(
         source="""
         def f(src):
             src.read(1)
@@ -95,7 +109,7 @@ def test_same_member_with_different_types_loses_the_type() -> None:
 
 def test_refusals() -> None:
     """Check that unsafe uses give no protocol."""
-    refused = {
+    refused: dict[str, str] = {
         "bare use": """\
 def f(p):
     return p
@@ -165,7 +179,7 @@ def f(p):
     }
     for label, source in refused.items():
         function: FunctionStatement = expect_function_node(
-            value=ast.parse(source=source).body[0],
+            value=parse(source=source).body[0],
         )
         expect_equal(
             actual=structural_usage(
@@ -180,7 +194,7 @@ def f(p):
 
 def test_protocol_source_renders_members() -> None:
     """Check that protocol source renders members."""
-    usage = _usage(
+    usage: StructuralUsage | None = _usage(
         source="""
         def load(src):
             src.write(1, mode="w")
@@ -195,7 +209,7 @@ def test_protocol_source_renders_members() -> None:
         usage=expect_not_none(value=usage),
     )
     expect_true(
-        condition=isinstance((ast.parse(source=text)).body[0], ast.ClassDef),
+        condition=isinstance((parse(source=text)).body[0], ClassDef),
     )
     expect_in(item="class LoadSrcProtocol(Protocol):", container=text)
     expect_in(

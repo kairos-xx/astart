@@ -11,7 +11,13 @@ from astart.rules.facts import Registry, collect_subjects, module_facts
 from tests.expectations import expect_equal, expect_false, expect_true
 
 if TYPE_CHECKING:
-    from astart.rules.facts import ModuleFacts, Subject
+    from astart import CommentedModule
+    from astart.rules.facts import (
+        EvidenceProvider,
+        FactProvider,
+        ModuleFacts,
+        Subject,
+    )
     from astart.rules.jsonvalue import JsonValue
     from astart.rules.predicate import FactValue
 
@@ -33,7 +39,10 @@ def _subject(
         The subject and the module facts.
 
     """
-    module = parse(source=dedent(text=source), filename="s.py")
+    module: CommentedModule = parse(
+        source=dedent(text=source),
+        filename="s.py",
+    )
     facts: ModuleFacts = module_facts(module=module)
     found: list[Subject] = [
         subject
@@ -57,7 +66,8 @@ def _fact(*, source: str, kind: str, path: str, fact: str) -> FactValue:
 
     """
     subject, facts = _subject(source=source, kind=kind, path=path)
-    return Registry.providers[fact](subject, facts)
+    provider: FactProvider = Registry.providers[fact]
+    return provider(subject, facts)
 
 
 def _evidence(*, source: str, kind: str, path: str, slot: str) -> JsonValue:
@@ -74,12 +84,13 @@ def _evidence(*, source: str, kind: str, path: str, slot: str) -> JsonValue:
 
     """
     subject, facts = _subject(source=source, kind=kind, path=path)
-    return Registry.evidence[slot](subject, facts)
+    provider: EvidenceProvider = Registry.evidence[slot]
+    return provider(subject, facts)
 
 
 def test_candidates_count_only_keyword_capable_parameters() -> None:
     """Skip positional-only parameters and calls absorbed by *args."""
-    source = """\
+    source: str = """\
     def f(a, /, b, *args, c=1): ...
     def g(x, y): ...
     f(1, 2, 3)
@@ -87,7 +98,7 @@ def test_candidates_count_only_keyword_capable_parameters() -> None:
     g(1, y=2)
     g(1, 2)
     """
-    count = "call.positional_keyword_candidates"
+    count: str = "call.positional_keyword_candidates"
     expect_equal(
         actual=(_fact(source=source, kind="Call", path="f", fact=count)),
         expected=0,
@@ -121,13 +132,13 @@ def test_candidates_count_only_keyword_capable_parameters() -> None:
 
 def test_unresolved_callee_is_not_resolved() -> None:
     """Treat builtins and unknown names as unresolved."""
-    source = """\
+    source: str = """\
     def f(a): ...
     f(1)
     print(1)
     unknown(1)
     """
-    resolved = "call.is_resolved_in_module"
+    resolved: str = "call.is_resolved_in_module"
     expect_true(
         condition=bool(
             _fact(source=source, kind="Call", path="f", fact=resolved),
@@ -152,7 +163,7 @@ def test_unresolved_callee_is_not_resolved() -> None:
 
 def test_undocumented_parameters_ignore_self_and_cls() -> None:
     """Count only parameters missing from the Args section."""
-    source = '''\
+    source: str = '''\
     class K:
         def m(self, x, y):
             """Do.
@@ -169,7 +180,7 @@ def test_undocumented_parameters_ignore_self_and_cls() -> None:
                 z: documented.
             """
     '''
-    fact = "function.undocumented_parameter_count"
+    fact: str = "function.undocumented_parameter_count"
     expect_equal(
         actual=_fact(source=source, kind="FunctionDef", path="K.m", fact=fact),
         expected=1,
@@ -200,7 +211,7 @@ def test_undocumented_parameters_ignore_self_and_cls() -> None:
 
 def test_starred_parameters_match_their_entries() -> None:
     """Accept *args and **kwargs documented with or without stars."""
-    source = '''\
+    source: str = '''\
     def f(a, *args, **kwargs):
         """Do.
 
@@ -218,7 +229,7 @@ def test_starred_parameters_match_their_entries() -> None:
             args: extra.
         """
     '''
-    fact = "function.undocumented_parameter_count"
+    fact: str = "function.undocumented_parameter_count"
     expect_equal(
         actual=_fact(source=source, kind="FunctionDef", path="f", fact=fact),
         expected=0,
@@ -231,7 +242,7 @@ def test_starred_parameters_match_their_entries() -> None:
 
 def test_function_without_docstring_has_no_docstring_fact() -> None:
     """Report no docstring and no undocumented parameters."""
-    source = """\
+    source: str = """\
     def f(a): ...
     """
     expect_false(

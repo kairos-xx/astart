@@ -2745,7 +2745,10 @@ class TypeConstraintSolver:
                 ),
             )
             scored: tuple[int, dict[str, TypeShape]] | None = (
-                self._score_variant(signature=signature, bound=bound)
+                self._score_variant(
+                    signature=signature,
+                    bound=bound,
+                )
             )
             if scored is None:
                 continue
@@ -2787,8 +2790,8 @@ class TypeConstraintSolver:
                 node=node,
                 shape=shape,
                 kind=(
-                    f"signature:"
-                    f"{signature.source_path or signature.qualified_name}"
+                    f"signature:\
+                        {signature.source_path or signature.qualified_name}"
                 ),
             )
         return answer
@@ -2933,7 +2936,9 @@ class TypeConstraintSolver:
         if site.name is None or site.name not in self.contracts.classes:
             return None
         constructor_contract: CallableContract | None = (
-            self.contracts.constructor(name=site.name)
+            self.contracts.constructor(
+                name=site.name,
+            )
         )
         return self._contract_call(
             node=site.node,

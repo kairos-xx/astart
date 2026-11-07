@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    Module,
+    expr,
+    fix_missing_locations,
+    parse,
+    unparse,
+)
 from textwrap import dedent
 
 from astart.rules.imports import ensure_names, insert_import
@@ -10,17 +16,35 @@ from astart.rules.imports import ensure_names, insert_import
 from tests.expectations import expect_equal
 
 
-def _module(*, source: str) -> ast.Module:
-    return ast.parse(source=dedent(text=source))
+def _module(*, source: str) -> Module:
+    """Parse a dedented snippet.
+
+    Args:
+        source: Python source.
+
+    Returns:
+        The parsed module.
+
+    """
+    return parse(source=dedent(text=source))
 
 
-def _text(*, module: ast.Module) -> str:
-    return ast.unparse(ast_obj=ast.fix_missing_locations(node=module))
+def _text(*, module: Module) -> str:
+    """Render a module back to source.
+
+    Args:
+        module: Parsed module.
+
+    Returns:
+        The regenerated source.
+
+    """
+    return unparse(ast_obj=fix_missing_locations(node=module))
 
 
 def test_new_import_goes_after_existing_imports() -> None:
     """Check that new import goes after existing imports."""
-    module = _module(
+    module: Module = _module(
         source='''
         """Doc."""
         from __future__ import annotations
@@ -35,7 +59,7 @@ def test_new_import_goes_after_existing_imports() -> None:
         name="Path",
         before=len(module.body),
     )
-    lines = _text(module=module).splitlines()
+    lines: list[str] = _text(module=module).splitlines()
     expect_equal(
         actual=lines[:4],
         expected=[
@@ -49,7 +73,7 @@ def test_new_import_goes_after_existing_imports() -> None:
 
 def test_name_joins_an_existing_from_import() -> None:
     """Check that name joins an existing from import."""
-    module = _module(
+    module: Module = _module(
         source="""\
 from typing import Final
 """,
@@ -68,7 +92,7 @@ from typing import Final
 
 def test_present_name_is_not_imported_twice() -> None:
     """Check that present name is not imported twice."""
-    module = _module(
+    module: Module = _module(
         source="""\
 from typing import Final
 """,
@@ -87,12 +111,12 @@ from typing import Final
 
 def test_ensure_names_imports_only_known_missing_names() -> None:
     """Check that ensure names imports only known missing names."""
-    module = _module(
+    module: Module = _module(
         source="""\
 import os
 """,
     )
-    expression = ast.parse(
+    expression: expr = parse(
         source="dict[str, Sequence[Path]]",
         mode="eval",
     ).body

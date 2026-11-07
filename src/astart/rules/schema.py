@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import MISSING, fields
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, final
 
 from astart.rules.jsonvalue import JsonValue, canonical_dumps
 from astart.rules.model import (
@@ -26,31 +26,45 @@ from astart.rules.vocabulary import (
 
 if TYPE_CHECKING:
     from enum import StrEnum
-_ENUMS: dict[str, type[StrEnum]] = {
-    "Domain": Domain,
-    "Severity": Severity,
-    "Maturity": Maturity,
-    "Owner": Owner,
-    "FixSafety": FixSafety,
-    "RelationKind": RelationKind,
-}
-_ENTITIES: dict[str, type] = {
-    "Rule": Rule,
-    "Fix": Fix,
-    "Profile": Profile,
-    "Relation": Relation,
-    "EvidenceSlot": EvidenceSlot,
-    "Example": Example,
-}
-_SCALAR: dict[str, JsonValue] = {
-    "type": ["string", "number", "boolean", "null"],
-}
-_PRIMITIVES: dict[str, str] = {
-    "str": "string",
-    "int": "integer",
-    "float": "number",
-    "bool": "boolean",
-}
+
+
+@final
+class Constants:
+    """Group module-level constants.
+
+    Attributes:
+        enums: Grouped module constant.
+        entities: Grouped module constant.
+        scalar: Grouped module constant.
+        primitives: Grouped module constant.
+
+    """
+
+    enums: Final[dict[str, type[StrEnum]]] = {
+        "Domain": Domain,
+        "Severity": Severity,
+        "Maturity": Maturity,
+        "Owner": Owner,
+        "FixSafety": FixSafety,
+        "RelationKind": RelationKind,
+    }
+    entities: Final[dict[str, type]] = {
+        "Rule": Rule,
+        "Fix": Fix,
+        "Profile": Profile,
+        "Relation": Relation,
+        "EvidenceSlot": EvidenceSlot,
+        "Example": Example,
+    }
+    scalar: Final[dict[str, JsonValue]] = {
+        "type": ["string", "number", "boolean", "null"],
+    }
+    primitives: Final[dict[str, str]] = {
+        "str": "string",
+        "int": "integer",
+        "float": "number",
+        "bool": "boolean",
+    }
 
 
 def _type_schema(*, text: str) -> JsonValue:
@@ -74,14 +88,15 @@ def _type_schema(*, text: str) -> JsonValue:
                 {"type": "null"},
             ],
         }
-    if text in _PRIMITIVES:
-        return {"type": _PRIMITIVES[text]}
-    if text in _ENUMS:
+    if text in Constants.primitives:
+        return {"type": Constants.primitives[text]}
+    if text in Constants.enums:
         names: list[JsonValue] = [
-            m.value for m in sorted(_ENUMS[text], key=lambda m: m.value)
+            m.value
+            for m in sorted(Constants.enums[text], key=lambda m: m.value)
         ]
         return {"enum": names}
-    if text in _ENTITIES or text == "Predicate":
+    if text in Constants.entities or text == "Predicate":
         return {"$ref": f"#/$defs/{text}"}
     if text.startswith("tuple[") and text.endswith(", ...]"):
         inner: str = text.removeprefix("tuple[").removesuffix(", ...]")
@@ -89,7 +104,9 @@ def _type_schema(*, text: str) -> JsonValue:
     if text.startswith("Mapping[str, ") and text.endswith("]"):
         inner = text.removeprefix("Mapping[str, ").removesuffix("]")
         values: JsonValue = (
-            _SCALAR if inner == "FactValue" else _type_schema(text=inner)
+            Constants.scalar
+            if inner == "FactValue"
+            else _type_schema(text=inner)
         )
         return {"type": "object", "additionalProperties": values}
     msg: str = f"unsupported annotation {text!r}"
@@ -150,7 +167,7 @@ def _predicate_schema() -> JsonValue:
                     "op": {"const": "compare"},
                     "fact": {"type": "string"},
                     "cmp": {"enum": ["eq", "ne", "lt", "le", "gt", "ge"]},
-                    "value": _SCALAR,
+                    "value": Constants.scalar,
                 },
                 "required": ["op", "fact", "cmp", "value"],
             },
@@ -175,7 +192,8 @@ def catalog_schema() -> JsonValue:
 
     """
     definitions: dict[str, JsonValue] = {
-        name: _entity_schema(kind=kind) for name, kind in _ENTITIES.items()
+        name: _entity_schema(kind=kind)
+        for name, kind in Constants.entities.items()
     }
     definitions["Predicate"] = _predicate_schema()
     return {

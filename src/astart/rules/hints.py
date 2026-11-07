@@ -2,7 +2,47 @@
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    AST,
+    Assign,
+    AsyncFor,
+    AsyncFunctionDef,
+    Attribute,
+    AugAssign,
+    BinOp,
+    BitOr,
+    Call,
+    ClassDef,
+    Constant,
+    Expr,
+    Expression,
+    For,
+    FunctionDef,
+    Lambda,
+    List,
+    Load,
+    Module,
+    Name,
+    NamedExpr,
+    Pass,
+    Raise,
+    Return,
+    Store,
+    Subscript,
+    Tuple,
+    Yield,
+    YieldFrom,
+    alias,
+    arg,
+    arguments,
+    expr,
+    iter_child_nodes,
+    parse,
+    stmt,
+    unparse,
+    walk,
+    withitem,
+)
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -11,15 +51,19 @@ from typing import TYPE_CHECKING, Final, Self, final
 
 from astart.rules.imports import Constants as ImportConstants
 from astart.rules.imports import bound_names
-from astart.rules.provable import expression_type, provable_return
+from astart.rules.provable import (
+    expression_type,
+    never_returns,
+    provable_return,
+)
 from astart.rules.resolve import CallBindings, binding_counts
 from astart.semantic import ArgumentOrigin
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-    from astart import BoundArgument, CommentedModule
-type Function = ast.FunctionDef | ast.AsyncFunctionDef
+    from astart import BoundArgument, BoundCall, CommentedModule
+type Function = FunctionDef | AsyncFunctionDef
 
 
 class HintBasis(StrEnum):
@@ -91,35 +135,35 @@ class Constants:
     scalar_types: Final[frozenset[str]] = frozenset(
         {"bool", "bytes", "float", "int", "str"},
     )
-    expression_nodes: Final[tuple[type[ast.AST], ...]] = (
-        ast.Expression,
-        ast.Name,
-        ast.Attribute,
-        ast.Subscript,
-        ast.Tuple,
-        ast.List,
-        ast.BinOp,
-        ast.BitOr,
-        ast.Load,
-        ast.Constant,
+    expression_nodes: Final[tuple[type[AST], ...]] = (
+        Expression,
+        Name,
+        Attribute,
+        Subscript,
+        Tuple,
+        List,
+        BinOp,
+        BitOr,
+        Load,
+        Constant,
     )
     proposal_roles: Final[frozenset[str]] = frozenset({"parameter", "return"})
     skipped_names: Final[frozenset[str]] = frozenset({"self", "cls"})
     declaration_decorators: Final[frozenset[str]] = frozenset(
         {"overload", "abstractmethod"},
     )
-    scope_nodes: Final[tuple[type[ast.AST], ...]] = (
-        ast.FunctionDef,
-        ast.AsyncFunctionDef,
-        ast.ClassDef,
-        ast.Lambda,
+    scope_nodes: Final[tuple[type[AST], ...]] = (
+        FunctionDef,
+        AsyncFunctionDef,
+        ClassDef,
+        Lambda,
     )
 
 
 type Key = tuple[str, int, int]
 
 
-def _key(*, node: ast.AST) -> Key:
+def _key(*, node: AST) -> Key:
     """Identify a parameter or function by kind and source position.
 
     Positions are identical in every parse of the same text, so hints
@@ -133,7 +177,7 @@ def _key(*, node: ast.AST) -> Key:
 
     """
     return (
-        "arg" if isinstance(node, ast.arg) else "def",
+        "arg" if isinstance(node, arg) else "def",
         getattr(node, "lineno", 0),
         getattr(node, "col_offset", 0),
     )
@@ -152,18 +196,18 @@ def is_allowed_source(*, source: str, known_names: frozenset[str]) -> bool:
 
     """
     try:
-        tree: ast.Expression = ast.parse(source=source, mode="eval")
+        tree: Expression = parse(source=source, mode="eval")
     except SyntaxError:
         return False
     allowed: frozenset[str] = Constants.builtin_names | known_names
-    for node in ast.walk(node=tree):
+    for node in walk(node=tree):
         if not isinstance(node, Constants.expression_nodes):
             return False
         match node:
-            case ast.Name(id=name):
+            case Name(id=name):
                 if name in Constants.banned_names or name not in allowed:
                     return False
-            case ast.Constant(value=value):
+            case Constant(value=value):
                 if value is not None and value is not Ellipsis:
                     return False
             case _:
@@ -171,7 +215,7 @@ def is_allowed_source(*, source: str, known_names: frozenset[str]) -> bool:
     return True
 
 
-def _importable(*, module: ast.Module) -> frozenset[str]:
+def _importable(*, module: Module) -> frozenset[str]:
     """List known names a new annotation may use because they can be imported.
 
     Args:
@@ -186,7 +230,7 @@ def _importable(*, module: ast.Module) -> frozenset[str]:
     )
 
 
-def _imported_names(*, module: ast.Module) -> frozenset[str]:
+def _imported_names(*, module: Module) -> frozenset[str]:
     """Collect names bound by imports and by top-level definitions.
 
     Args:
@@ -197,11 +241,11 @@ def _imported_names(*, module: ast.Module) -> frozenset[str]:
 
     """
     names: set[str] = set()
-    for node in ast.walk(node=module):
+    for node in walk(node=module):
         match node:
-            case ast.alias(name=name, asname=asname):
+            case alias(name=name, asname=asname):
                 names.add(asname or name.split(sep=".")[0])
-            case ast.ClassDef(name=name):
+            case ClassDef(name=name):
                 names.add(name)
             case _:
                 continue
@@ -210,8 +254,8 @@ def _imported_names(*, module: ast.Module) -> frozenset[str]:
 
 def _parameters(
     *,
-    function: ast.FunctionDef | ast.AsyncFunctionDef,
-) -> list[tuple[ast.arg, ast.expr | None]]:
+    function: FunctionDef | AsyncFunctionDef,
+) -> list[tuple[arg, expr | None]]:
     """Pair each plain parameter with its default.
 
     Args:
@@ -221,10 +265,10 @@ def _parameters(
         Positional-only, positional and keyword-only parameters.
 
     """
-    arguments: ast.arguments = function.args
-    positional: list[ast.arg] = [*arguments.posonlyargs, *arguments.args]
+    arguments: arguments = function.args
+    positional: list[arg] = [*arguments.posonlyargs, *arguments.args]
     offset: int = len(positional) - len(arguments.defaults)
-    pairs: list[tuple[ast.arg, ast.expr | None]] = [
+    pairs: list[tuple[arg, expr | None]] = [
         (
             parameter,
             arguments.defaults[index - offset] if index >= offset else None,
@@ -235,7 +279,7 @@ def _parameters(
     return pairs
 
 
-def own_nodes(*, function: Function) -> Iterator[ast.AST]:
+def own_nodes(*, function: Function) -> Iterator[AST]:
     """Walk a function body without entering nested scopes.
 
     Args:
@@ -245,22 +289,22 @@ def own_nodes(*, function: Function) -> Iterator[ast.AST]:
         Every node that belongs to the function itself.
 
     """
-    stack: list[ast.AST] = [
+    stack: list[AST] = [
         statement
         for statement in reversed(function.body)
         if not isinstance(statement, Constants.scope_nodes)
     ]
     while stack:
-        node: ast.AST = stack.pop()
+        node: AST = stack.pop()
         yield node
         stack.extend(
             child
-            for child in reversed(list(ast.iter_child_nodes(node=node)))
+            for child in reversed(list(iter_child_nodes(node=node)))
             if not isinstance(child, Constants.scope_nodes)
         )
 
 
-def _is_stub_statement(*, statement: ast.stmt) -> bool:
+def _is_stub_statement(*, statement: stmt) -> bool:
     """Report whether a statement carries no behaviour.
 
     Args:
@@ -272,15 +316,12 @@ def _is_stub_statement(*, statement: ast.stmt) -> bool:
 
     """
     match statement:
-        case ast.Pass() | ast.Expr(value=ast.Constant()):
+        case Pass() | Expr(value=Constant()):
             return True
-        case ast.Raise(exc=exc):
-            target: ast.expr | None = (
-                exc.func if isinstance(exc, ast.Call) else exc
-            )
+        case Raise(exc=exc):
+            target: expr | None = exc.func if isinstance(exc, Call) else exc
             return (
-                isinstance(target, ast.Name)
-                and target.id == "NotImplementedError"
+                isinstance(target, Name) and target.id == "NotImplementedError"
             )
         case _:
             return False
@@ -299,9 +340,9 @@ def is_declaration(*, function: Function) -> bool:
     for decorator in function.decorator_list:
         name: str | None = (
             decorator.id
-            if isinstance(decorator, ast.Name)
+            if isinstance(decorator, Name)
             else decorator.attr
-            if isinstance(decorator, ast.Attribute)
+            if isinstance(decorator, Attribute)
             else None
         )
         if name in Constants.declaration_decorators:
@@ -309,7 +350,7 @@ def is_declaration(*, function: Function) -> bool:
     return all(_is_stub_statement(statement=s) for s in function.body)
 
 
-def _value_returns(*, function: Function) -> list[ast.expr]:
+def _value_returns(*, function: Function) -> list[expr]:
     """Collect the expressions of ``return <value>`` statements.
 
     Args:
@@ -322,13 +363,10 @@ def _value_returns(*, function: Function) -> list[ast.expr]:
     return [
         node.value
         for node in own_nodes(function=function)
-        if isinstance(node, ast.Return)
+        if isinstance(node, Return)
         and node.value is not None
         and (
-            not (
-                isinstance(node.value, ast.Constant)
-                and node.value.value is None
-            )
+            not (isinstance(node.value, Constant) and node.value.value is None)
         )
     ]
 
@@ -344,7 +382,7 @@ def _is_generator(*, function: Function) -> bool:
 
     """
     return any(
-        isinstance(node, (ast.Yield, ast.YieldFrom))
+        isinstance(node, (Yield, YieldFrom))
         for node in own_nodes(function=function)
     )
 
@@ -364,10 +402,11 @@ def returns_nothing(*, function: Function) -> bool:
         is_declaration(function=function)
         or _is_generator(function=function)
         or _value_returns(function=function)
+        or never_returns(function=function)
     )
 
 
-def _mentions(*, node: ast.AST, names: dict[str, str]) -> str | None:
+def _mentions(*, node: AST, names: dict[str, str]) -> str | None:
     """Find the first tainted name an expression mentions.
 
     Args:
@@ -378,13 +417,13 @@ def _mentions(*, node: ast.AST, names: dict[str, str]) -> str | None:
         The originating parameter, or ``None``.
 
     """
-    for inner in ast.walk(node=node):
-        if isinstance(inner, ast.Name) and inner.id in names:
+    for inner in walk(node=node):
+        if isinstance(inner, Name) and inner.id in names:
             return names[inner.id]
     return None
 
 
-def _targets(*, node: ast.AST) -> list[str]:
+def _targets(*, node: AST) -> list[str]:
     """List the names bound by an assignment target.
 
     Args:
@@ -396,12 +435,12 @@ def _targets(*, node: ast.AST) -> list[str]:
     """
     return [
         inner.id
-        for inner in ast.walk(node=node)
-        if isinstance(inner, ast.Name) and isinstance(inner.ctx, ast.Store)
+        for inner in walk(node=node)
+        if isinstance(inner, Name) and isinstance(inner.ctx, Store)
     ]
 
 
-def _spread(*, node: ast.AST, names: dict[str, str]) -> bool:
+def _spread(*, node: AST, names: dict[str, str]) -> bool:
     """Spread taint through one statement or expression.
 
     Args:
@@ -412,20 +451,20 @@ def _spread(*, node: ast.AST, names: dict[str, str]) -> bool:
         Whether a new name became tainted.
 
     """
-    pairs: list[tuple[ast.AST, ast.AST]] = []
+    pairs: list[tuple[AST, AST]] = []
     match node:
-        case ast.Assign(targets=targets, value=value):
+        case Assign(targets=targets, value=value):
             pairs = [(target, value) for target in targets]
-        case ast.AugAssign(target=target, value=value):
+        case AugAssign(target=target, value=value):
             pairs = [(target, value)]
         case (
-            ast.For(target=target, iter=source)
-            | ast.AsyncFor(target=target, iter=source)
+            For(target=target, iter=source)
+            | AsyncFor(target=target, iter=source)
         ):
             pairs = [(target, source)]
-        case ast.NamedExpr(target=target, value=value):
+        case NamedExpr(target=target, value=value):
             pairs = [(target, value)]
-        case ast.withitem(context_expr=source, optional_vars=target) if (
+        case withitem(context_expr=source, optional_vars=target) if (
             target is not None
         ):
             pairs = [(target, source)]
@@ -458,8 +497,8 @@ def _taint_origins(
         Tainted names mapped to the parameter that taints them.
 
     """
-    arguments: ast.arguments = function.args
-    parameters: list[ast.arg] = [
+    arguments: arguments = function.args
+    parameters: list[arg] = [
         *arguments.posonlyargs,
         *arguments.args,
         *arguments.kwonlyargs,
@@ -501,6 +540,24 @@ def tainted_names(
 
 @final
 @dataclass(frozen=True, slots=True)
+class _Site:
+    """What one direct call shows about one parameter.
+
+    Attributes:
+        definite: Whether the argument type is trustworthy.
+        types: Rendered type spellings.
+        proven: Whether the argument expression's syntax alone proves the
+            type, independent of the analyzer.
+
+    """
+
+    definite: bool
+    types: tuple[str, ...]
+    proven: bool = False
+
+
+@final
+@dataclass(frozen=True, slots=True)
 class _Evidence:
     """What the module shows about a function's parameter types.
 
@@ -512,11 +569,11 @@ class _Evidence:
 
     """
 
-    sites: list[tuple[bool, tuple[str, ...]]]
+    sites: list[_Site]
     escaped: bool
 
 
-def _escaped_names(*, module: ast.Module) -> frozenset[str]:
+def _escaped_names(*, module: Module) -> frozenset[str]:
     """Collect names that are read anywhere other than as a direct callee.
 
     Args:
@@ -528,14 +585,14 @@ def _escaped_names(*, module: ast.Module) -> frozenset[str]:
     """
     callees: set[int] = {
         id(call.func)
-        for call in ast.walk(node=module)
-        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+        for call in walk(node=module)
+        if isinstance(call, Call) and isinstance(call.func, Name)
     }
     return frozenset(
         node.id
-        for node in ast.walk(node=module)
-        if isinstance(node, ast.Name)
-        and isinstance(node.ctx, ast.Load)
+        for node in walk(node=module)
+        if isinstance(node, Name)
+        and isinstance(node.ctx, Load)
         and (id(node) not in callees)
     )
 
@@ -594,7 +651,7 @@ class HintIndex:
         )
         return index
 
-    def hint_for(self, *, node: ast.AST) -> Hint | None:
+    def hint_for(self, *, node: AST) -> Hint | None:
         """Return the accepted hint for a node, if any.
 
         Args:
@@ -606,7 +663,7 @@ class HintIndex:
         """
         return self._hints.get(_key(node=node))
 
-    def rejection_for(self, *, node: ast.AST) -> str | None:
+    def rejection_for(self, *, node: AST) -> str | None:
         """Explain why a candidate was refused.
 
         Args:
@@ -636,11 +693,11 @@ class HintIndex:
         known: frozenset[str] = _imported_names(module=module) | _importable(
             module=module,
         )
-        for function in ast.walk(node=module):
+        for function in walk(node=module):
             if (
                 not isinstance(
                     function,
-                    (ast.FunctionDef, ast.AsyncFunctionDef),
+                    (FunctionDef, AsyncFunctionDef),
                 )
                 or function.returns is not None
             ):
@@ -680,14 +737,12 @@ class HintIndex:
         known: frozenset[str] = _imported_names(module=module) | _importable(
             module=module,
         )
-        sites: dict[tuple[int, str], list[tuple[bool, tuple[str, ...]]]] = (
-            _call_sites(module=module)
-        )
+        sites: dict[tuple[int, str], list[_Site]] = _call_sites(module=module)
         escaped: frozenset[str] = _escaped_names(module=module)
-        for function in ast.walk(node=module):
+        for function in walk(node=module):
             if not isinstance(
                 function,
-                (ast.FunctionDef, ast.AsyncFunctionDef),
+                (FunctionDef, AsyncFunctionDef),
             ):
                 continue
             for position, (parameter, default) in enumerate(
@@ -743,7 +798,7 @@ class HintIndex:
             if hint is not None:
                 types[parameter.arg] = hint.source
             elif parameter.annotation is not None:
-                types[parameter.arg] = ast.unparse(
+                types[parameter.arg] = unparse(
                     ast_obj=parameter.annotation,
                 )
         return types
@@ -797,8 +852,8 @@ class HintIndex:
     def _judge(
         self,
         *,
-        parameter: ast.arg,
-        default: ast.expr | None,
+        parameter: arg,
+        default: expr | None,
         candidate: str | None,
         evidence: _Evidence,
         known: frozenset[str],
@@ -814,9 +869,11 @@ class HintIndex:
 
         """
         key: Key = _key(node=parameter)
-        if isinstance(default, ast.Constant) and default.value is None:
+        if isinstance(default, Constant) and default.value is None:
             self._rejections[key] = "None default"
             return
+        if candidate is None:
+            candidate = _proven_site_type(evidence=evidence)
         if candidate is None:
             self._rejections[key] = "no candidate"
             return
@@ -830,7 +887,7 @@ class HintIndex:
             return
         literal: str | None = (
             type(default.value).__name__
-            if isinstance(default, ast.Constant)
+            if isinstance(default, Constant)
             and type(default.value).__name__ in Constants.scalar_types
             else None
         )
@@ -867,14 +924,12 @@ class HintIndex:
             self._rejections[key] = "uncorroborated"
             return
         if any(
-            (
-                not definite or len(types) != 1
-                for definite, types in evidence.sites
-            ),
+            (not site.definite or len(site.types) != 1)
+            for site in evidence.sites
         ):
             self._rejections[key] = "call sites unknown"
             return
-        seen: set[str] = {types[0] for _definite, types in evidence.sites}
+        seen: set[str] = {site.types[0] for site in evidence.sites}
         if seen == {candidate}:
             self._hints[key] = Hint(
                 source=candidate,
@@ -909,39 +964,72 @@ def _candidates(
     }
 
 
+def _proven_site_type(*, evidence: _Evidence) -> str | None:
+    """Find the type every call site's syntax proves, when they all agree.
+
+    Args:
+        evidence: What the module shows about the parameter's callers.
+
+    Returns:
+        The single proven type, or ``None``.
+
+    """
+    if evidence.escaped or not evidence.sites:
+        return None
+    if not all(
+        site.proven and len(site.types) == 1 for site in evidence.sites
+    ):
+        return None
+    seen: set[str] = {site.types[0] for site in evidence.sites}
+    return next(iter(seen)) if len(seen) == 1 else None
+
+
 def _argument_evidence(
     *,
     argument: BoundArgument,
     counts: dict[str, int],
-) -> tuple[bool, tuple[str, ...]]:
+) -> _Site:
     """Turn one bound argument into call-site evidence.
 
     The analyzer's type is cross-checked against what the argument
     expression's syntax proves; a disagreement makes the evidence unknown.
+    When the analyzer cannot type the argument but the syntax can, the
+    syntax-proven type is evidence on its own.
 
     Args:
         argument: Bound argument of a direct call.
         counts: Module binding counts.
 
     Returns:
-        Whether the type is trustworthy, and its rendered spellings.
+        The site's trust, rendered spellings, and whether syntax proves them.
 
     """
+    proofs: set[str | None] = {
+        expression_type(node=value, counts=counts) for value in argument.values
+    }
+    syntax: str | None = (
+        next(iter(proofs))
+        if argument.values and len(proofs) == 1 and None not in proofs
+        else None
+    )
     types: tuple[str, ...] = tuple(str(object=t) for t in argument.types)
-    if not argument.definite:
-        return (False, ())
-    if len(types) == 1:
-        for value in argument.values:
-            proved: str | None = expression_type(node=value, counts=counts)
-            if proved is not None and proved != types[0]:
-                return (False, ())
-    return (True, types)
+    if not argument.definite or any("Unknown" in spelled for spelled in types):
+        if syntax is None:
+            return _Site(definite=False, types=())
+        return _Site(definite=True, types=(syntax,), proven=True)
+    if len(types) == 1 and syntax is not None and syntax != types[0]:
+        return _Site(definite=False, types=())
+    return _Site(
+        definite=True,
+        types=types,
+        proven=syntax is not None and types == (syntax,),
+    )
 
 
 def _call_sites(
     *,
     module: CommentedModule,
-) -> dict[tuple[int, str], list[tuple[bool, tuple[str, ...]]]]:
+) -> dict[tuple[int, str], list[_Site]]:
     """Index argument types by callee definition and parameter name.
 
     Direct calls to a function that cannot be bound (for example because an
@@ -960,15 +1048,15 @@ def _call_sites(
     bindings: CallBindings = CallBindings(module=module, counts=counts)
     functions: dict[str, Function] = {
         node.name: node
-        for node in ast.walk(node=module)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for node in walk(node=module)
+        if isinstance(node, (FunctionDef, AsyncFunctionDef))
         and counts.get(node.name, 0) == 1
     }
-    index: dict[tuple[int, str], list[tuple[bool, tuple[str, ...]]]] = {}
-    for call in ast.walk(node=module):
-        if not isinstance(call, ast.Call):
+    index: dict[tuple[int, str], list[_Site]] = {}
+    for call in walk(node=module):
+        if not isinstance(call, Call):
             continue
-        bound = bindings.get(call=call)
+        bound: BoundCall | None = bindings.get(call=call)
         if bound is not None and bound.signature.declaration is not None:
             owner: int = id(bound.signature.declaration)
             for argument in bound.arguments:
@@ -985,13 +1073,13 @@ def _call_sites(
             continue
         target: Function | None = (
             functions.get(call.func.id)
-            if isinstance(call.func, ast.Name)
+            if isinstance(call.func, Name)
             else None
         )
         if target is not None:
             for parameter, _default in _parameters(function=target):
                 index.setdefault((id(target), parameter.arg), []).append(
-                    (False, ()),
+                    _Site(definite=False, types=()),
                 )
     return index
 
@@ -1073,6 +1161,12 @@ class LazyHints:
         if self._index is None:
 
             def build() -> HintIndex:
+                """Compute the index from scratch.
+
+                Returns:
+                    A freshly built hint index.
+
+                """
                 return HintIndex.create(
                     module=self._module,
                     stubs_path=self._stubs_path,

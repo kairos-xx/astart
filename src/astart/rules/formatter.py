@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Final, final
 from astart.rules.runner import fix_source
 
 if TYPE_CHECKING:
+    from asyncio.subprocess import Process
     from pathlib import Path
 
     from astart.rules.model import Catalog
@@ -117,7 +118,7 @@ async def _spawn(
         The exit status and captured output.
 
     """
-    process = await create_subprocess_exec(
+    process: Process = await create_subprocess_exec(
         *arguments,
         stdin=PIPE,
         stdout=PIPE,

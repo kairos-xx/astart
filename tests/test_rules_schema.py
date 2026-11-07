@@ -14,6 +14,8 @@ from astart.rules.vocabulary import Severity
 from tests.expectations import expect_equal, expect_in, expect_true
 
 if TYPE_CHECKING:
+    from importlib.resources.abc import Traversable
+
     from astart.rules.jsonvalue import JsonValue
 
 
@@ -91,9 +93,8 @@ def test_schema_lists_every_entity_field() -> None:
 
 def test_committed_schema_matches_generated() -> None:
     """Keep the shipped schema file in sync with the model."""
-    committed: str = (
-        files("astart.rules").joinpath("schema.json").read_text("utf-8")
-    )
+    resource: Traversable = files("astart.rules").joinpath("schema.json")
+    committed: str = resource.read_text(encoding="utf-8")
     expect_equal(actual=committed, expected=schema_text())
     expect_true(condition=isinstance(loads(s=committed), dict))
 

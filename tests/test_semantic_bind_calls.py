@@ -12,8 +12,10 @@ from astart.semantic import SemanticAnalyzer
 from tests.expectations import expect_equal, expect_true
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import pytest
-    from astart.ast import CommentedModule
+    from astart.ast import BoundCall, CommentedModule
     from astart.semantic import MutationEvent
 
 
@@ -46,7 +48,7 @@ def _calls(*, module: CommentedModule) -> list[Call]:
 
 def test_bind_calls_matches_bind_call() -> None:
     """Return exactly what one-at-a-time binding returns."""
-    module = parse(
+    module: CommentedModule = parse(
         source=dedent(
             text="""\
             def f(a, b=1):
@@ -60,7 +62,7 @@ def test_bind_calls_matches_bind_call() -> None:
             """,
         ),
     )
-    calls = _calls(module=module)
+    calls: list[Call] = _calls(module=module)
     expect_equal(
         actual=module.bind_calls(nodes=calls),
         expected=[module.bind_call(node=call) for call in calls],
@@ -72,8 +74,13 @@ def test_bind_calls_costs_a_constant_number_of_revision_checks(
     *,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Do not re-fingerprint the tree once per call."""
-    lines = [
+    """Do not re-fingerprint the tree once per call.
+
+    Args:
+        monkeypatch: Fixture replacing ``SemanticAnalyzer.refresh``.
+
+    """
+    lines: list[str] = [
         """\
 def f(a):
     return a
@@ -85,33 +92,49 @@ f({index})
 """
         for index in range(Constants.call_count)
     )
-    module = parse(
+    module: CommentedModule = parse(
         source="""\
 
 """.join(lines),
     )
-    calls = _calls(module=module)
+    calls: list[Call] = _calls(module=module)
     expect_equal(actual=len(calls), expected=Constants.call_count)
-    counter = {"refreshes": 0}
-    original = SemanticAnalyzer.refresh
+    counter: dict[str, int] = {"refreshes": 0}
+    original: Callable[[SemanticAnalyzer], tuple[MutationEvent, ...]] = (
+        SemanticAnalyzer.refresh
+    )
 
     def counting(self: SemanticAnalyzer) -> tuple[MutationEvent, ...]:
+        """Count the call and delegate to the real refresh.
+
+        Args:
+            self: Analyzer being refreshed.
+
+        Returns:
+            The mutation events.
+
+        """
         counter["refreshes"] += 1
-        return original(self=self)
+        return original(self)
 
     monkeypatch.setattr(
         target=SemanticAnalyzer,
         name="refresh",
         value=counting,
     )
-    bound = module.bind_calls(nodes=calls)
+    bound: list[BoundCall | None] = module.bind_calls(nodes=calls)
     expect_true(condition=counter["refreshes"] <= Constants.max_refreshes)
     expect_true(condition=all(item is not None for item in bound))
 
 
 def test_bind_calls_sees_edits_made_before_the_batch() -> None:
-    """Pick up a mutation through the single revision check."""
-    module = parse(
+    """Pick up a mutation through the single revision check.
+
+    Raises:
+        TypeError: If the call's callee is not a plain name.
+
+    """
+    module: CommentedModule = parse(
         source=dedent(
             text="""\
             def f(a):
@@ -126,8 +149,8 @@ def test_bind_calls_sees_edits_made_before_the_batch() -> None:
             """,
         ),
     )
-    call = _calls(module=module)[0]
-    before = module.bind_calls(nodes=[call])[0]
+    call: Call = _calls(module=module)[0]
+    before: BoundCall | None = module.bind_calls(nodes=[call])[0]
     expect_equal(
         actual=None if before is None else len(before.arguments),
         expected=1,
@@ -136,9 +159,9 @@ def test_bind_calls_sees_edits_made_before_the_batch() -> None:
         case Name() as func:
             func.id = "g"
         case _:
-            msg = "expected a name callee"
+            msg: str = "expected a name callee"
             raise TypeError(msg)
-    after = module.bind_calls(nodes=[call])[0]
+    after: BoundCall | None = module.bind_calls(nodes=[call])[0]
     expect_equal(
         actual=None if after is None else after.signature.qualified_name,
         expected="g",

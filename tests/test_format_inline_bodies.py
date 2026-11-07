@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ast import Import, alias, parse
+from ast import Import, alias, parse, stmt
 from textwrap import dedent
 
 import pytest
@@ -22,9 +22,13 @@ def _insert_import(*, source: str) -> str:
         The regenerated source with formatting preserved.
 
     """
-    tree = CommentedModule.parse(source=dedent(text=source))
-    tree.body.insert(0, Import(names=[alias(name="os")]))
-    text = tree.unparse(preserve_formatting=True, on_format_conflict="raise")
+    tree: CommentedModule = CommentedModule.parse(source=dedent(text=source))
+    body: list[stmt] = tree.body
+    body.insert(0, Import(names=[alias(name="os")]))
+    text: str = tree.unparse(
+        preserve_formatting=True,
+        on_format_conflict="raise",
+    )
     parse(source=text)
     return text
 

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from argparse import ArgumentParser
+from argparse import Action, ArgumentParser
 from io import BytesIO
 from json import dumps
 from pathlib import Path
 from sys import stdout
 from tokenize import detect_encoding
-from typing import Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast, final
 
 from astart import GraphConversion, Module, convert, parse, unparse
 from astart.cli.commands import (
@@ -19,6 +19,9 @@ from astart.cli.commands import (
     run_fix,
 )
 from astart.rules.vocabulary import FixSafety, Severity
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 class _Arguments(Protocol):
@@ -32,6 +35,14 @@ class _Arguments(Protocol):
         report: Optional JSON report destination.
         dry_run: Whether to omit source-file changes.
         strict_formatting: Whether unsafe lexical edits should fail.
+        paths: Files or directories to inspect.
+        output_format: Output format for check findings.
+        fail_on: Minimum severity that fails the run.
+        stubs_dir: Optional stub directory for check and fix.
+        safe_only: Whether only provably safe fixes may run.
+        diff: Whether to print a diff without writing.
+        check: Whether to report pending fixes without writing.
+        no_format: Whether to skip the final formatting pass.
 
     """
 
@@ -50,6 +61,36 @@ class _Arguments(Protocol):
     diff: bool
     check: bool
     no_format: bool
+
+
+@final
+class _Group(Protocol):
+    """Subset of a mutually-exclusive argument group used here."""
+
+    def add_argument(self, name: str, /, *, action: str) -> Action:
+        """Register a flag on the group.
+
+        Args:
+            name: Flag name.
+            action: argparse action name.
+
+        Returns:
+            The created action.
+
+        """
+        ...
+
+
+@final
+class _SubParsers(Protocol):
+    """Subset of the sub-parser registry used here.
+
+    Attributes:
+        add_parser: Factory for subcommand parsers.
+
+    """
+
+    add_parser: Callable[..., ArgumentParser]
 
 
 def _stubs(*, args: _Arguments) -> Path | None:
@@ -115,7 +156,7 @@ def _configure_fix(*, command: ArgumentParser) -> None:
         action="store_true",
         help="Apply only provably safe fixes",
     )
-    group = command.add_mutually_exclusive_group()
+    group: _Group = command.add_mutually_exclusive_group()
     group.add_argument("--diff", action="store_true")
     group.add_argument("--check", action="store_true")
     command.add_argument("--no-format", action="store_true")
@@ -138,7 +179,10 @@ def main(*, argv: list[str] | None = None) -> int:
 
     """
     parser: ArgumentParser = ArgumentParser(prog="astart")
-    commands = parser.add_subparsers(dest="command")
+    commands: _SubParsers = cast(
+        typ="_SubParsers",
+        val=parser.add_subparsers(dest="command"),
+    )
     _configure_check(
         command=commands.add_parser(
             name="check",

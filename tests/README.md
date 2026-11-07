@@ -37,14 +37,19 @@ Tests for source-preserving comment AST nodes and safe AST rewrites.
 - [`test_graph_unified.py`](test_graph_unified.py) — Regression tests for the integrated annotation conversion pipeline.
 - [`test_incremental_ast.py`](test_incremental_ast.py) — Regression tests for incremental coordinates and PEP 701 f-string edits.
 - [`test_lexical_ast.py`](test_lexical_ast.py) — Regression tests for semantic shebangs and immutable synchronized tokens.
+- [`test_review3_fixes.py`](test_review3_fixes.py) — Regression tests for the final review of the check/fix work.
 - [`test_rules_catalog.py`](test_rules_catalog.py) — Verify catalog loading and the data invariants.
+- [`test_rules_constructors.py`](test_rules_constructors.py) — Verify that imported constructors type their calls.
 - [`test_rules_end_to_end.py`](test_rules_end_to_end.py) — Exercise the seeded rule catalog end to end.
 - [`test_rules_engine.py`](test_rules_engine.py) — Verify the reference engine and the syntactic and scope facts.
+- [`test_rules_exists_guard.py`](test_rules_exists_guard.py) — Verify that unsupported predicates fail at validation, not at check time.
 - [`test_rules_facts_semantic.py`](test_rules_facts_semantic.py) — Verify the call and docstring facts of the reference engine.
 - [`test_rules_fixes.py`](test_rules_fixes.py) — Verify the fixes and the behavioural catalog invariants.
 - [`test_rules_formatter.py`](test_rules_formatter.py) — Verify the one-shot ruff formatting phase.
 - [`test_rules_hints.py`](test_rules_hints.py) — Verify the corroborated type-hint engine.
+- [`test_rules_imports.py`](test_rules_imports.py) — Verify automatic import insertion.
 - [`test_rules_model.py`](test_rules_model.py) — Verify the entity model of the rule ontology.
+- [`test_rules_never_returns.py`](test_rules_never_returns.py) — Verify NoReturn for functions that always raise.
 - [`test_rules_predicate.py`](test_rules_predicate.py) — Verify the predicate algebra of the rule ontology.
 - [`test_rules_protocol_fix.py`](test_rules_protocol_fix.py) — Verify Protocol synthesis through the fix runner.
 - [`test_rules_protocols.py`](test_rules_protocols.py) — Verify structural-usage analysis and Protocol rendering.
@@ -54,6 +59,8 @@ Tests for source-preserving comment AST nodes and safe AST rewrites.
 - [`test_rules_runner.py`](test_rules_runner.py) — Verify the single-pass fix runner.
 - [`test_rules_runner_corpus.py`](test_rules_runner_corpus.py) — Precision and acceptance tests for the gated type-hint fixer.
 - [`test_rules_schema.py`](test_rules_schema.py) — Verify the generated JSON Schema of the rule catalog.
+- [`test_rules_synthesis_corpus.py`](test_rules_synthesis_corpus.py) — Run every synthesizing fix over real modules.
+- [`test_rules_typevar_fix.py`](test_rules_typevar_fix.py) — Verify TypeVar synthesis through the fix runner.
 - [`test_rules_typing_fixes.py`](test_rules_typing_fixes.py) — Verify the TYP003 rule and its two gated fixes.
 - [`test_rules_vocabulary.py`](test_rules_vocabulary.py) — Verify the closed vocabulary of the rule ontology.
 - [`test_semantic_advanced.py`](test_semantic_advanced.py) — Advanced semantic regression tests for statements, scopes and fallbacks.

@@ -133,6 +133,7 @@ files and directories; see the project README for the flags and exit codes.
 - [`facts.py`](facts.py) — Subjects, fact providers and registries for the reference engine.
 - [`formatter.py`](formatter.py) — Formatter phase: run ruff once on the final text.
 - [`hints.py`](hints.py) — Corroborated type hints: candidates are accepted only with evidence.
+- [`imports.py`](imports.py) — Add the imports a synthesized annotation needs.
 - [`jsonvalue.py`](jsonvalue.py) — JSON value type and canonical serialization for the rule catalog.
 - [`model.py`](model.py) — Entities of the rule ontology and their JSON conversion.
 - [`predicate.py`](predicate.py) — Predicate algebra: rule triggers expressed as data.
@@ -143,6 +144,7 @@ files and directories; see the project README for the flags and exit codes.
 - [`runner.py`](runner.py) — Fix runner: parse once, apply many fixes, write once.
 - [`schema.json`](schema.json) — Provide schema json content.
 - [`schema.py`](schema.py) — Generate the JSON Schema of the rule catalog from the entity model.
+- [`typevars.py`](typevars.py) — Detect parameters that only flow through to the return value.
 - [`vocabulary.py`](vocabulary.py) — Closed vocabulary of the rule ontology.
 
 ### Subdirectories

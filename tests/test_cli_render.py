@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from json import loads
+from typing import TYPE_CHECKING, Final, cast, final
 
 from astart.cli.render import FileReport, render_json, render_text
 from astart.rules import (
@@ -15,7 +16,22 @@ from astart.rules import (
 
 from tests.expectations import expect_equal, expect_in, expect_true
 
-SOURCE = """\
+if TYPE_CHECKING:
+    from astart.rules.jsonvalue import JsonValue
+    from astart.rules.model import Finding
+    from astart.rules.registry import Registries
+
+
+@final
+class Constants:
+    """Group module-level constants.
+
+    Attributes:
+        source: Grouped module constant.
+
+    """
+
+    source: Final[str] = """\
 from typing import Any
 
 
@@ -25,20 +41,29 @@ def f(x: Any):
 
 
 def _check() -> tuple[Catalog, CheckResult]:
-    registries = default_registries()
+    """Run the checker on the sample source.
+
+    Returns:
+        The default catalog and the check result.
+
+    """
+    registries: Registries = default_registries()
     catalog: Catalog = load_default_catalog(registries=registries)
-    return catalog, check(
-        source=SOURCE,
-        filename="a.py",
-        catalog=catalog,
-        registries=registries,
+    return (
+        catalog,
+        check(
+            source=Constants.source,
+            filename="a.py",
+            catalog=catalog,
+            registries=registries,
+        ),
     )
 
 
 def test_text_line_has_location_code_and_message() -> None:
     """Check that text line has location code and message."""
     catalog, result = _check()
-    finding = next(
+    finding: Finding = next(
         item for item in result.findings if item.rule_key == "typing.no-any"
     )
     line: str = render_text(finding=finding, catalog=catalog)
@@ -55,14 +80,21 @@ def test_json_round_trips_and_lists_fix_keys() -> None:
         findings=result.findings,
         error=None,
     )
-    entry = (loads(s=render_json(results=[report], catalog=catalog)))[0]
+    entry: dict[str, JsonValue] = cast(
+        typ="dict[str, JsonValue]",
+        val=loads(s=render_json(results=[report], catalog=catalog))[0],
+    )
     expect_equal(actual=entry["path"], expected="a.py")
     expect_equal(actual=entry["error"], expected=None)
+    findings: list[dict[str, JsonValue]] = cast(
+        typ="list[dict[str, JsonValue]]",
+        val=entry["findings"],
+    )
     expect_in(
         item="TYP001",
-        container=({item["code"] for item in entry["findings"]}),
+        container={cast(typ="str", val=item["code"]) for item in findings},
     )
-    first = entry["findings"][0]
+    first: dict[str, JsonValue] = findings[0]
     for key in ("rule", "severity", "line", "column", "message", "fixes"):
         expect_in(item=key, container=first)
 
@@ -71,6 +103,9 @@ def test_json_reports_parse_error_per_file() -> None:
     """Check that json reports parse error per file."""
     catalog, _ = _check()
     report: FileReport = FileReport(path="b.py", findings=(), error="bad")
-    data = loads(s=render_json(results=[report], catalog=catalog))
+    data: list[dict[str, JsonValue]] = cast(
+        typ="list[dict[str, JsonValue]]",
+        val=loads(s=render_json(results=[report], catalog=catalog)),
+    )
     expect_equal(actual=data[0]["error"], expected="bad")
     expect_equal(actual=data[0]["findings"], expected=[])

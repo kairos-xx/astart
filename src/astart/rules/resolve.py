@@ -2,8 +2,32 @@
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    AST,
+    AnnAssign,
+    Assign,
+    AsyncFunctionDef,
+    Attribute,
+    Call,
+    ClassDef,
+    Del,
+    ExceptHandler,
+    FunctionDef,
+    ImportFrom,
+    MatchAs,
+    MatchMapping,
+    MatchStar,
+    Module,
+    Name,
+    Store,
+    alias,
+    arg,
+    expr,
+    walk,
+)
 from typing import TYPE_CHECKING, final
+
+from astart.rules.imports import Constants as ImportConstants
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -11,7 +35,7 @@ if TYPE_CHECKING:
     from astart import BoundCall, CommentedModule
 
 
-def _class_level_ids(*, module: ast.Module) -> frozenset[int]:
+def _class_level_ids(*, module: Module) -> frozenset[int]:
     """Collect nodes that bind names directly in a class body.
 
     Args:
@@ -22,22 +46,22 @@ def _class_level_ids(*, module: ast.Module) -> frozenset[int]:
 
     """
     ids: set[int] = set()
-    for node in ast.walk(node=module):
-        if not isinstance(node, ast.ClassDef):
+    for node in walk(node=module):
+        if not isinstance(node, ClassDef):
             continue
         for statement in node.body:
             ids.add(id(statement))
             match statement:
-                case ast.Assign(targets=targets):
+                case Assign(targets=targets):
                     ids.update(id(target) for target in targets)
-                case ast.AnnAssign(target=target):
+                case AnnAssign(target=target):
                     ids.add(id(target))
                 case _:
                     continue
     return frozenset(ids)
 
 
-def _bound_name(*, node: ast.AST) -> str | None:
+def _bound_name(*, node: AST) -> str | None:
     """Name the identifier a node binds, if it binds one.
 
     Args:
@@ -48,26 +72,26 @@ def _bound_name(*, node: ast.AST) -> str | None:
 
     """
     match node:
-        case ast.Name(id=name, ctx=ast.Store() | ast.Del()):
+        case Name(id=name, ctx=Store() | Del()):
             return name
         case (
-            ast.FunctionDef(name=name)
-            | ast.AsyncFunctionDef(name=name)
-            | ast.ClassDef(name=name)
-            | ast.ExceptHandler(name=name)
-            | ast.MatchAs(name=name)
-            | ast.MatchStar(name=name)
+            FunctionDef(name=name)
+            | AsyncFunctionDef(name=name)
+            | ClassDef(name=name)
+            | ExceptHandler(name=name)
+            | MatchAs(name=name)
+            | MatchStar(name=name)
         ):
             return name
-        case ast.arg(arg=name) | ast.MatchMapping(rest=name):
+        case arg(arg=name) | MatchMapping(rest=name):
             return name
-        case ast.alias(name=name, asname=asname):
+        case alias(name=name, asname=asname):
             return asname or name.split(sep=".")[0]
         case _:
             return None
 
 
-def binding_counts(*, module: ast.Module) -> dict[str, int]:
+def binding_counts(*, module: Module) -> dict[str, int]:
     """Count how often each name is bound anywhere in the module.
 
     Names bound directly in class bodies are ignored, because they do not
@@ -82,16 +106,43 @@ def binding_counts(*, module: ast.Module) -> dict[str, int]:
     """
     skipped: frozenset[int] = _class_level_ids(module=module)
     counts: dict[str, int] = {}
-    for node in ast.walk(node=module):
+    for node in walk(node=module):
         name: str | None = (
             None if id(node) in skipped else _bound_name(node=node)
         )
         if name:
             counts[name] = counts.get(name, 0) + 1
+    for node in walk(node=module):
+        if isinstance(node, ImportFrom) and node.level == 0:
+            for alias in node.names:
+                if (
+                    alias.asname is None
+                    and alias.name in ImportConstants.constructors
+                    and ImportConstants.known_imports[alias.name]
+                    == node.module
+                    and counts.get(alias.name) == 1
+                ):
+                    counts[constructor_key(name=alias.name)] = 1
     return counts
 
 
-def root_name(*, node: ast.expr) -> str | None:
+def constructor_key(*, name: str) -> str:
+    """Name the binding-count entry that marks an imported constructor.
+
+    The key contains a character no identifier can, so it never collides with
+    a bound name.
+
+    Args:
+        name: Imported class name.
+
+    Returns:
+        The key under which ``binding_counts`` records the constructor.
+
+    """
+    return f"@constructor:{name}"
+
+
+def root_name(*, node: expr) -> str | None:
     """Find the leftmost name of a callee expression.
 
     Args:
@@ -101,12 +152,12 @@ def root_name(*, node: ast.expr) -> str | None:
         The name, or ``None`` when the callee is not a name path.
 
     """
-    while isinstance(node, ast.Attribute):
+    while isinstance(node, Attribute):
         node = node.value
-    return node.id if isinstance(node, ast.Name) else None
+    return node.id if isinstance(node, Name) else None
 
 
-def definition_is_plain(*, declaration: ast.AST) -> bool:
+def definition_is_plain(*, declaration: AST) -> bool:
     """Report whether a definition keeps the signature it declares.
 
     Args:
@@ -117,13 +168,13 @@ def definition_is_plain(*, declaration: ast.AST) -> bool:
 
     """
     match declaration:
-        case ast.FunctionDef() | ast.AsyncFunctionDef():
+        case FunctionDef() | AsyncFunctionDef():
             return all(
-                isinstance(decorator, ast.Name)
+                isinstance(decorator, Name)
                 and decorator.id in {"staticmethod", "classmethod"}
                 for decorator in declaration.decorator_list
             )
-        case ast.ClassDef():
+        case ClassDef():
             return not declaration.decorator_list
         case _:
             return False
@@ -132,7 +183,7 @@ def definition_is_plain(*, declaration: ast.AST) -> bool:
 def trusted_binding(
     *,
     bound: BoundCall | None,
-    call: ast.Call,
+    call: Call,
     counts: Mapping[str, int],
 ) -> BoundCall | None:
     """Keep a binding only when the callee can be trusted.
@@ -154,7 +205,7 @@ def trusted_binding(
     root: str | None = root_name(node=call.func)
     if root is None or counts.get(root, 0) != 1:
         return None
-    declaration: ast.AST | None = bound.signature.declaration
+    declaration: AST | None = bound.signature.declaration
     if declaration is not None and definition_is_plain(
         declaration=declaration,
     ):
@@ -188,7 +239,7 @@ class CallBindings:
         self._counts: Mapping[str, int] = counts
         self._cache: dict[int, BoundCall | None] | None = None
 
-    def get(self, *, call: ast.Call) -> BoundCall | None:
+    def get(self, *, call: Call) -> BoundCall | None:
         """Return the trusted binding of a call.
 
         Args:
@@ -199,10 +250,10 @@ class CallBindings:
 
         """
         if self._cache is None:
-            calls: list[ast.Call] = [
+            calls: list[Call] = [
                 node
-                for node in ast.walk(node=self._module)
-                if isinstance(node, ast.Call)
+                for node in walk(node=self._module)
+                if isinstance(node, Call)
             ]
             self._cache = {
                 id(item): trusted_binding(
@@ -223,7 +274,7 @@ def resolved_call(
     *,
     module: CommentedModule,
     counts: Mapping[str, int],
-    call: ast.Call,
+    call: Call,
 ) -> BoundCall | None:
     """Bind one call to a definition in this module, conservatively.
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, final
 
 import pytest
 from astart.__main__ import main
@@ -11,7 +11,18 @@ from tests.expectations import expect_equal, expect_in
 
 if TYPE_CHECKING:
     from pathlib import Path
-SAMPLE = """\
+
+
+@final
+class Constants:
+    """Group module-level constants.
+
+    Attributes:
+        sample: Grouped module constant.
+
+    """
+
+    sample: Final[str] = """\
 LIMIT = 3
 
 
@@ -24,13 +35,27 @@ scale(2, 3)
 
 
 def _sample(*, tmp_path: Path) -> Path:
+    """Write the sample module into a temporary directory.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    Returns:
+        The written file's path.
+
+    """
     path: Path = tmp_path / "m.py"
-    path.write_text(data=SAMPLE, encoding="utf-8")
+    path.write_text(data=Constants.sample, encoding="utf-8")
     return path
 
 
 def test_check_subcommand_exit_codes(*, tmp_path: Path) -> None:
-    """Check that check subcommand exit codes."""
+    """Check that check subcommand exit codes.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     expect_equal(actual=main(argv=["check", str(object=path)]), expected=1)
     expect_equal(
@@ -43,7 +68,12 @@ def test_fix_defaults_to_automatic_keywords_and_hints(
     *,
     tmp_path: Path,
 ) -> None:
-    """Check that fix defaults to automatic keywords and hints."""
+    """Check that fix defaults to automatic keywords and hints.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     _ = main(argv=["fix", "--no-format", str(object=path)])
     text: str = path.read_text(encoding="utf-8")
@@ -53,7 +83,12 @@ def test_fix_defaults_to_automatic_keywords_and_hints(
 
 
 def test_safe_only_limits_fixes_to_proven(*, tmp_path: Path) -> None:
-    """Check that safe only limits fixes to proven."""
+    """Check that safe only limits fixes to proven.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     _ = main(argv=["fix", "--safe-only", "--no-format", str(object=path)])
     text: str = path.read_text(encoding="utf-8")
@@ -62,7 +97,12 @@ def test_safe_only_limits_fixes_to_proven(*, tmp_path: Path) -> None:
 
 
 def test_diff_and_check_are_mutually_exclusive(*, tmp_path: Path) -> None:
-    """Check that diff and check are mutually exclusive."""
+    """Check that diff and check are mutually exclusive.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
     path: Path = _sample(tmp_path=tmp_path)
     with pytest.raises(expected_exception=SystemExit) as raised:
         _ = main(argv=["fix", "--diff", "--check", str(object=path)])

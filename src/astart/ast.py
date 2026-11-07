@@ -2600,8 +2600,8 @@ class CommentedModule(TokenAwareMixin, Module):
         for comment, token in zip(self.comments, source_comments, strict=True):
             if comment.text != token.string:
                 msg = (
-                    "The emitted comment order or contents changed "
-                    "unexpectedly."
+                    "The emitted comment order or "
+                    "contents changed unexpectedly."
                 )
                 raise ValueError(msg)
             indexer.mapped[id(comment)] = indexer.tokenizer.snapshot(

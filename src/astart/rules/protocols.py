@@ -8,7 +8,31 @@ other use. :func:`protocol_source` renders the matching ``Protocol`` class.
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    AST,
+    AsyncFunctionDef,
+    Attribute,
+    Await,
+    Call,
+    ClassDef,
+    Del,
+    ExceptHandler,
+    FunctionDef,
+    Global,
+    Load,
+    MatchAs,
+    MatchMapping,
+    MatchStar,
+    Name,
+    Nonlocal,
+    Starred,
+    Store,
+    alias,
+    arg,
+    arguments,
+    iter_child_nodes,
+    walk,
+)
 from dataclasses import dataclass
 from re import Pattern
 from re import compile as compile_pattern
@@ -19,7 +43,7 @@ from astart.rules.provable import expression_type
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping
 
-    type Function = ast.FunctionDef | ast.AsyncFunctionDef
+    type Function = FunctionDef | AsyncFunctionDef
 
 
 @final
@@ -90,7 +114,7 @@ class _Draft:
     ]
 
 
-def parameter_has_default(*, function: Function, parameter: ast.arg) -> bool:
+def parameter_has_default(*, function: Function, parameter: arg) -> bool:
     """Tell whether a parameter has a default value.
 
     Args:
@@ -101,8 +125,8 @@ def parameter_has_default(*, function: Function, parameter: ast.arg) -> bool:
         ``True`` when the parameter has a default.
 
     """
-    arguments: ast.arguments = function.args
-    positional: list[ast.arg] = [*arguments.posonlyargs, *arguments.args]
+    arguments: arguments = function.args
+    positional: list[arg] = [*arguments.posonlyargs, *arguments.args]
     if parameter in positional:
         offset: int = len(positional) - len(arguments.defaults)
         return positional.index(parameter) >= offset
@@ -112,7 +136,7 @@ def parameter_has_default(*, function: Function, parameter: ast.arg) -> bool:
     return False
 
 
-def _walk(*, function: Function) -> Iterator[ast.AST]:
+def _walk(*, function: Function) -> Iterator[AST]:
     """Yield every node of a function body.
 
     Args:
@@ -123,10 +147,10 @@ def _walk(*, function: Function) -> Iterator[ast.AST]:
 
     """
     for statement in function.body:
-        yield from ast.walk(node=statement)
+        yield from walk(node=statement)
 
 
-def names_bound_by(*, node: ast.AST) -> tuple[str, ...]:
+def names_bound_by(*, node: AST) -> tuple[str, ...]:
     """List the names a node binds, rebinds or deletes.
 
     Args:
@@ -138,23 +162,20 @@ def names_bound_by(*, node: ast.AST) -> tuple[str, ...]:
     """
     names: tuple[str, ...] = ()
     match node:
-        case (
-            ast.Name(id=found, ctx=ast.Store() | ast.Del())
-            | ast.arg(arg=found)
-        ):
+        case Name(id=found, ctx=Store() | Del()) | arg(arg=found):
             names = (found,)
-        case ast.Global(names=listed) | ast.Nonlocal(names=listed):
+        case Global(names=listed) | Nonlocal(names=listed):
             names = tuple(listed)
-        case ast.alias(name=found, asname=asname):
+        case alias(name=found, asname=asname):
             names = (asname or found.split(sep=".")[0],)
         case (
-            ast.ExceptHandler(name=found)
-            | ast.FunctionDef(name=found)
-            | ast.AsyncFunctionDef(name=found)
-            | ast.ClassDef(name=found)
-            | ast.MatchAs(name=found)
-            | ast.MatchStar(name=found)
-            | ast.MatchMapping(rest=found)
+            ExceptHandler(name=found)
+            | FunctionDef(name=found)
+            | AsyncFunctionDef(name=found)
+            | ClassDef(name=found)
+            | MatchAs(name=found)
+            | MatchStar(name=found)
+            | MatchMapping(rest=found)
         ) if found is not None:
             names = (found,)
         case _:
@@ -164,7 +185,7 @@ def names_bound_by(*, node: ast.AST) -> tuple[str, ...]:
 
 def _call_shape(
     *,
-    call: ast.Call,
+    call: Call,
     counts: Mapping[str, int],
 ) -> tuple[tuple[str | None, ...], tuple[tuple[str, str | None], ...]] | None:
     """Describe the arguments of a call to a member.
@@ -177,7 +198,7 @@ def _call_shape(
         Positional and keyword types, or ``None`` for star arguments.
 
     """
-    if any(isinstance(item, ast.Starred) for item in call.args):
+    if any(isinstance(item, Starred) for item in call.args):
         return None
     if any(item.arg is None for item in call.keywords):
         return None
@@ -227,7 +248,10 @@ def _merge(*, name: str, draft: _Draft) -> Member | None:
     if not draft.calls:
         return Member(name=name, is_method=False, positional=(), keywords=())
     first_positional, first_keywords = draft.calls[0]
-    shape = (len(first_positional), [key for key, _ in first_keywords])
+    shape: tuple[int, list[str]] = (
+        len(first_positional),
+        [key for key, _ in first_keywords],
+    )
     for positional, keywords in draft.calls:
         if (len(positional), [key for key, _ in keywords]) != shape:
             return None
@@ -258,8 +282,8 @@ def _merge(*, name: str, draft: _Draft) -> Member | None:
 
 def _collect(
     *,
-    nodes: list[ast.AST],
-    parents: Mapping[ast.AST, ast.AST],
+    nodes: list[AST],
+    parents: Mapping[AST, AST],
     parameter: str,
     counts: Mapping[str, int],
 ) -> dict[str, _Draft] | None:
@@ -277,23 +301,29 @@ def _collect(
     """
     drafts: dict[str, _Draft] = {}
     for node in nodes:
-        if not (isinstance(node, ast.Name) and node.id == parameter):
+        if not (isinstance(node, Name) and node.id == parameter):
             continue
-        attribute: ast.AST | None = parents.get(node)
+        attribute: AST | None = parents.get(node)
         if not (
-            isinstance(attribute, ast.Attribute)
+            isinstance(attribute, Attribute)
             and attribute.value is node
-            and isinstance(attribute.ctx, ast.Load)
+            and isinstance(attribute.ctx, Load)
             and (not attribute.attr.startswith(Constants.private_prefix))
         ):
             return None
         draft: _Draft = drafts.setdefault(attribute.attr, _Draft(calls=[]))
-        parent: ast.AST | None = parents.get(attribute)
-        if isinstance(parent, ast.Await):
+        parent: AST | None = parents.get(attribute)
+        if isinstance(parent, Await):
             return None
-        if isinstance(parent, ast.Call) and parent.func is attribute:
-            shape = _call_shape(call=parent, counts=counts)
-            if shape is None or isinstance(parents.get(parent), ast.Await):
+        if isinstance(parent, Call) and parent.func is attribute:
+            shape: (
+                tuple[
+                    tuple[str | None, ...],
+                    tuple[tuple[str, str | None], ...],
+                ]
+                | None
+            ) = _call_shape(call=parent, counts=counts)
+            if shape is None or isinstance(parents.get(parent), Await):
                 return None
             draft.calls.append(shape)
     return drafts
@@ -317,13 +347,13 @@ def structural_usage(
         as a plain value, written to, awaited through, or unused.
 
     """
-    nodes: list[ast.AST] = list(_walk(function=function))
+    nodes: list[AST] = list(_walk(function=function))
     if any(parameter in names_bound_by(node=node) for node in nodes):
         return None
-    parents: dict[ast.AST, ast.AST] = {
+    parents: dict[AST, AST] = {
         child: parent
         for parent in nodes
-        for child in ast.iter_child_nodes(node=parent)
+        for child in iter_child_nodes(node=parent)
     }
     drafts: dict[str, _Draft] | None = _collect(
         nodes=nodes,

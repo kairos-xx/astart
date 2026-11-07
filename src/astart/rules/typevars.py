@@ -7,7 +7,23 @@ that and spells the return annotation in terms of a type variable.
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    AST,
+    AsyncFunctionDef,
+    Dict,
+    FunctionDef,
+    IfExp,
+    List,
+    Name,
+    Return,
+    Set,
+    Tuple,
+    Yield,
+    YieldFrom,
+    iter_child_nodes,
+    parse,
+    walk,
+)
 from typing import TYPE_CHECKING
 
 from astart.rules.protocols import names_bound_by
@@ -16,10 +32,10 @@ from astart.rules.provable import provable_return
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    type Function = ast.FunctionDef | ast.AsyncFunctionDef
+    type Function = FunctionDef | AsyncFunctionDef
 
 
-def _is_pure(*, node: ast.AST, parents: Mapping[ast.AST, ast.AST]) -> bool:
+def _is_pure(*, node: AST, parents: Mapping[AST, AST]) -> bool:
     """Tell whether a use only carries the value into a return.
 
     Args:
@@ -31,15 +47,15 @@ def _is_pure(*, node: ast.AST, parents: Mapping[ast.AST, ast.AST]) -> bool:
         conditional branches.
 
     """
-    child: ast.AST = node
-    parent: ast.AST | None = parents.get(child)
-    while parent is not None and not isinstance(parent, ast.Return):
+    child: AST = node
+    parent: AST | None = parents.get(child)
+    while parent is not None and not isinstance(parent, Return):
         match parent:
-            case ast.List() | ast.Tuple() | ast.Set():
+            case List() | Tuple() | Set():
                 pass
-            case ast.Dict(values=values) if any(child is v for v in values):
+            case Dict(values=values) if any(child is v for v in values):
                 pass
-            case ast.IfExp(body=body, orelse=orelse) if (
+            case IfExp(body=body, orelse=orelse) if (
                 child is body or child is orelse
             ):
                 pass
@@ -72,22 +88,22 @@ def passthrough_return(
     """
     if function.returns is not None:
         return None
-    nodes: list[ast.AST] = [
-        node for statement in function.body for node in ast.walk(node=statement)
+    nodes: list[AST] = [
+        node for statement in function.body for node in walk(node=statement)
     ]
     if any(parameter in names_bound_by(node=node) for node in nodes):
         return None
-    if any(isinstance(node, (ast.Yield, ast.YieldFrom)) for node in nodes):
+    if any(isinstance(node, (Yield, YieldFrom)) for node in nodes):
         return None
-    parents: dict[ast.AST, ast.AST] = {
+    parents: dict[AST, AST] = {
         child: parent
         for parent in nodes
-        for child in ast.iter_child_nodes(node=parent)
+        for child in iter_child_nodes(node=parent)
     }
-    uses: list[ast.AST] = [
+    uses: list[AST] = [
         node
         for node in nodes
-        if isinstance(node, ast.Name) and node.id == parameter
+        if isinstance(node, Name) and node.id == parameter
     ]
     if not uses or not all(
         _is_pure(node=use, parents=parents) for use in uses
@@ -101,7 +117,7 @@ def passthrough_return(
     if result is None:
         return None
     mentioned: bool = any(
-        isinstance(node, ast.Name) and node.id == variable
-        for node in ast.walk(node=ast.parse(source=result, mode="eval"))
+        isinstance(node, Name) and node.id == variable
+        for node in walk(node=parse(source=result, mode="eval"))
     )
     return result if mentioned else None

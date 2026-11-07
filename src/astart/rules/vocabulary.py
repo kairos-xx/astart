@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Final, final
 
 
 class Domain(StrEnum):
@@ -138,7 +139,7 @@ class Cost(StrEnum):
             Zero for syntactic up to three for project.
 
         """
-        return _COST_ORDER.index(self)
+        return Constants.cost_order.index(self)
 
 
 class Expressible(StrEnum):
@@ -154,9 +155,18 @@ class Expressible(StrEnum):
     procedural = "procedural"
 
 
-_COST_ORDER: tuple[Cost, ...] = (
-    Cost.syntactic,
-    Cost.scope,
-    Cost.semantic,
-    Cost.project,
-)
+@final
+class Constants:
+    """Group module-level constants.
+
+    Attributes:
+        cost_order: Grouped module constant.
+
+    """
+
+    cost_order: Final[tuple[Cost, ...]] = (
+        Cost.syntactic,
+        Cost.scope,
+        Cost.semantic,
+        Cost.project,
+    )

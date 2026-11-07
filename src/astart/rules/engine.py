@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import ast
+from ast import parse as ast_parse
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
@@ -20,12 +20,14 @@ from astart.rules.predicate import FactValue, evaluate, predicate_facts
 from astart.rules.vocabulary import FixSafety
 
 if TYPE_CHECKING:
+    from ast import AST
     from collections.abc import Mapping
     from pathlib import Path
 
     from astart import CommentedModule as Module
     from astart.rules.facts import (
         Applier,
+        EvidenceProvider,
         FactProvider,
         ModuleFacts,
         Subject,
@@ -120,7 +122,7 @@ def check(
                 _ = registries.fact(name=name)
     chosen: CheckOptions = options or CheckOptions()
     try:
-        module = parse(source=source, filename=filename)
+        module: Module = parse(source=source, filename=filename)
         context: _Context = _Context(
             filename=filename,
             catalog=catalog,
@@ -136,7 +138,7 @@ def check(
                 cache=chosen.hint_cache,
             ),
         )
-        findings = _evaluate(
+        findings: tuple[Finding, ...] = _evaluate(
             module=module,
             catalog=catalog,
             context=context,
@@ -206,7 +208,8 @@ def _compute(
     """
     for name in sorted(names):
         if name not in values:
-            values[name] = context.table[name](subject, context.facts)
+            provider: FactProvider = context.table[name]
+            values[name] = provider(subject, context.facts)
 
 
 def _holds(
@@ -250,7 +253,7 @@ def _span(*, subject: Subject, filename: str) -> Span:
         The span of the subject's node.
 
     """
-    node = subject.node
+    node: AST = subject.node
     line: int = getattr(node, "lineno", 1)
     return Span(
         file=filename,
@@ -280,10 +283,10 @@ def _finding(
         The finding.
 
     """
-    evidence: dict[str, JsonValue] = {
-        slot.name: Registry.evidence[slot.name](subject, context.facts)
-        for slot in rule.evidence
-    }
+    evidence: dict[str, JsonValue] = {}
+    for slot in rule.evidence:
+        provider: EvidenceProvider = Registry.evidence[slot.name]
+        evidence[slot.name] = provider(subject, context.facts)
     offers: tuple[FixOffer, ...] = tuple(
         FixOffer(fix_key=fix.key, safety=fix.safety, confidence=1.0)
         for fix in (context.catalog.fix(key=key) for key in rule.fixes)
@@ -400,10 +403,10 @@ def preconditions_hold(
     """
     if fix.preconditions is None:
         return True
-    values: dict[str, FactValue] = {
-        name: Registry.providers[name](subject, facts)
-        for name in predicate_facts(predicate=fix.preconditions)
-    }
+    values: dict[str, FactValue] = {}
+    for name in predicate_facts(predicate=fix.preconditions):
+        provider: FactProvider = Registry.providers[name]
+        values[name] = provider(subject, facts)
     return evaluate(predicate=fix.preconditions, facts=values)
 
 
@@ -440,7 +443,7 @@ def apply_fix(
         if key not in registries.appliers or key not in table:
             msg: str = f"applier {key!r} is not registered"
             raise KeyError(msg)
-    module = parse(source=source, filename=finding.span.file)
+    module: Module = parse(source=source, filename=finding.span.file)
     facts: ModuleFacts = module_facts(module=module)
     subject: Subject | None = locate_subject(module=module, finding=finding)
     if subject is None or not preconditions_hold(
@@ -450,10 +453,11 @@ def apply_fix(
     ):
         return source
     for key in fix.edits:
-        table[key](subject, facts)
+        applier: Applier = table[key]
+        applier(subject, facts)
     try:
         result: str = unparse(tree=module, preserve_formatting=True)
-        _ = ast.parse(source=result)
+        _ = ast_parse(source=result)
     except (FormatPreservationError, SyntaxError):
         return source
     return result
@@ -495,8 +499,8 @@ def validate_behavior(
             if not example.triggers:
                 if own:
                     problems.append(
-                        f"rule {rule.key!r}: example {index} should not "
-                        "trigger",
+                        f"rule {rule.key!r}: "
+                        f"example {index} should not trigger",
                     )
                 continue
             if len(own) != 1 or len(result.findings) != 1:

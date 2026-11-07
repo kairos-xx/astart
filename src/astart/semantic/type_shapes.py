@@ -36,10 +36,9 @@ class TypeShape:
             )
         return (
             (
-                f"{self.name}"
-                f"["
-                f"{', '.join((str(object=item) for item in self.arguments))}"
-                f"]"
+                f"{self.name}[{
+                    ', '.join((str(object=item) for item in self.arguments))
+                }]"
             )
             if self.arguments
             else self.name

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import ast
+from ast import parse
 from textwrap import dedent
+from typing import TYPE_CHECKING
 
 from astart.rules import (
     FixResult,
@@ -16,9 +17,22 @@ from astart.rules.vocabulary import FixSafety
 
 from tests.expectations import expect_equal, expect_in, expect_not_in
 
+if TYPE_CHECKING:
+    from astart.rules.registry import Registries
+
 
 def _fix(*, source: str, ceiling: FixSafety = FixSafety.guarded) -> FixResult:
-    registries = default_registries()
+    """Run the fixer on a dedented snippet.
+
+    Args:
+        source: Python source.
+        ceiling: Highest fix safety to apply.
+
+    Returns:
+        The fix result.
+
+    """
+    registries: Registries = default_registries()
     return fix_source(
         source=dedent(text=source),
         filename="m.py",
@@ -30,13 +44,13 @@ def _fix(*, source: str, ceiling: FixSafety = FixSafety.guarded) -> FixResult:
 
 def test_identity_function_becomes_generic() -> None:
     """Check that identity function becomes generic."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""\
 def identity(x):
     return x
 """,
     )
-    ast.parse(source=result.source)
+    parse(source=result.source)
     expect_in(item="from typing import TypeVar", container=result.source)
     expect_in(item="T = TypeVar(", container=result.source)
     expect_in(item="def identity(x: T) -> T:", container=result.source)
@@ -44,14 +58,16 @@ def identity(x):
 
 def test_declaration_precedes_the_function() -> None:
     """Check that declaration precedes the function."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""\
 def identity(x):
     return x
 """,
     )
     expect_in(item="T = TypeVar", container=result.source)
-    assert_order = result.source.index("T = TypeVar") < result.source.index(
+    assert_order: bool = result.source.index(
+        "T = TypeVar",
+    ) < result.source.index(
         "def identity",
     )
     expect_equal(actual=assert_order, expected=True)
@@ -59,14 +75,14 @@ def identity(x):
 
 def test_container_of_the_parameter_keeps_the_variable() -> None:
     """Check that container of the parameter keeps the variable."""
-    wrapped = _fix(
+    wrapped: FixResult = _fix(
         source="""\
 def wrap(x):
     return [x]
 """,
     )
     expect_in(item="def wrap(x: T) -> list[T]:", container=wrapped.source)
-    paired = _fix(
+    paired: FixResult = _fix(
         source="""\
 def pair(x):
     return (x, x)
@@ -77,7 +93,7 @@ def pair(x):
 
 def test_call_sites_do_not_override_the_variable() -> None:
     """Check that call sites do not override the variable."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""\
 def identity(x):
     return x
@@ -91,7 +107,7 @@ identity(1)
 
 def test_existing_declaration_is_reused() -> None:
     """Check that existing declaration is reused."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""
         from typing import TypeVar
 
@@ -112,7 +128,7 @@ def test_existing_declaration_is_reused() -> None:
 
 def test_name_collision_picks_a_fresh_variable() -> None:
     """Check that name collision picks a fresh variable."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""\
 T = 3
 
@@ -166,14 +182,14 @@ def f(x):
 
 def test_method_declaration_precedes_the_class() -> None:
     """Check that method declaration precedes the class."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""
         class Box:
             def get(self, x):
                 return x
         """,
     )
-    ast.parse(source=result.source)
+    parse(source=result.source)
     expect_equal(
         actual=result.source.index("T = TypeVar")
         < result.source.index("class Box"),
@@ -184,7 +200,7 @@ def test_method_declaration_precedes_the_class() -> None:
 
 def test_second_run_changes_nothing() -> None:
     """Check that second run changes nothing."""
-    first = _fix(
+    first: FixResult = _fix(
         source="""\
 def identity(x):
     return x
@@ -198,7 +214,7 @@ def identity(x):
 
 def test_proven_ceiling_does_not_synthesize() -> None:
     """Check that proven ceiling does not synthesize."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""\
 def identity(x):
     return x

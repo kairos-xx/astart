@@ -529,7 +529,7 @@ def _graph_context_for_plan(
     outgoing_count: int = len(usage_graph.outgoing_edges(node_id=plan.node_id))
     if incoming_count or outgoing_count:
         context.append(
-            "graph edges: "
-            f"incoming={incoming_count}, outgoing={outgoing_count}",
+            f"graph edges: incoming={incoming_count}, "
+            f"outgoing={outgoing_count}",
         )
     return tuple(context)

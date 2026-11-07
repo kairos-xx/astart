@@ -2,13 +2,48 @@
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    AST,
+    AnnAssign,
+    Assign,
+    AsyncFunctionDef,
+    Attribute,
+    Call,
+    ClassDef,
+    Constant,
+    FunctionDef,
+    Import,
+    ImportFrom,
+    Load,
+    Module,
+    Name,
+    Store,
+    Subscript,
+    arg,
+    dump,
+    expr,
+    keyword,
+    parse,
+    stmt,
+    unparse,
+    walk,
+)
+from ast import (
+    ParamSpec as AstParamSpec,
+)
+from ast import (
+    TypeVar as AstTypeVar,
+)
+from ast import (
+    TypeVarTuple as AstTypeVarTuple,
+)
 from typing import TYPE_CHECKING, Final, final
 
 from astart.rules.facts import Constants, bound_call, keyword_candidates
 from astart.rules.hints import Hint, HintBasis, returns_nothing
 from astart.rules.imports import ensure_names, insert_import
 from astart.rules.protocols import protocol_source, structural_usage
+from astart.rules.provable import never_returns
 from astart.rules.typevars import passthrough_return
 from astart.semantic import ArgumentOrigin, ParameterKind
 
@@ -17,10 +52,11 @@ if TYPE_CHECKING:
 
     from astart import BoundCall
     from astart.rules.facts import Applier, ModuleFacts, Subject
-type NodeAttributes = dict[str, ast.AST | list[ast.AST] | int | str | None]
+    from astart.rules.protocols import StructuralUsage
+type NodeAttributes = dict[str, AST | list[AST] | int | str | None]
 
 
-def _final_reference(*, facts: ModuleFacts) -> tuple[ast.expr, bool]:
+def _final_reference(*, facts: ModuleFacts) -> tuple[expr, bool]:
     """Choose how to spell ``Final`` in this module.
 
     Args:
@@ -31,18 +67,18 @@ def _final_reference(*, facts: ModuleFacts) -> tuple[ast.expr, bool]:
 
     """
     if facts.final_names:
-        return ast.Name(id=sorted(facts.final_names)[0], ctx=ast.Load()), False
+        return Name(id=sorted(facts.final_names)[0], ctx=Load()), False
     if facts.typing_names:
         owner: str = sorted(facts.typing_names)[0]
         return (
-            ast.Attribute(
-                value=ast.Name(id=owner, ctx=ast.Load()),
+            Attribute(
+                value=Name(id=owner, ctx=Load()),
                 attr="Final",
-                ctx=ast.Load(),
+                ctx=Load(),
             ),
             False,
         )
-    return ast.Name(id="Final", ctx=ast.Load()), True
+    return Name(id="Final", ctx=Load()), True
 
 
 def add_final(subject: Subject, facts: ModuleFacts) -> None:
@@ -55,37 +91,37 @@ def add_final(subject: Subject, facts: ModuleFacts) -> None:
         facts: Resolved imports and the parsed module.
 
     """
-    statement: ast.AST | None = subject.statement
+    statement: AST | None = subject.statement
     match statement:
-        case ast.Assign(
-            targets=[ast.Name() as target],
-            value=ast.Constant(value=value),
+        case Assign(
+            targets=[Name() as target],
+            value=Constant(value=value),
         ) if isinstance(value, Constants.immutable_literals):
             pass
         case _:
             return
     reference, needs_import = _final_reference(facts=facts)
     if needs_import:
-        reference = ast.Name(
+        reference: expr = Name(
             id=insert_import(
                 module=facts.module,
                 source="typing",
                 name="Final",
                 before=_ancestor_index(module=facts.module, node=statement),
             ),
-            ctx=ast.Load(),
+            ctx=Load(),
         )
     attributes: NodeAttributes = vars(statement)
     attributes["target"] = target
-    attributes["annotation"] = ast.Subscript(
+    attributes["annotation"] = Subscript(
         value=reference,
-        slice=ast.Name(id=type(value).__name__, ctx=ast.Load()),
-        ctx=ast.Load(),
+        slice=Name(id=type(value).__name__, ctx=Load()),
+        ctx=Load(),
     )
     attributes["simple"] = 1
     del attributes["targets"]
     _ = attributes.pop("type_comment", None)
-    object.__setattr__(statement, "__class__", ast.AnnAssign)
+    object.__setattr__(statement, "__class__", AnnAssign)
 
 
 def add_keywords(subject: Subject, facts: ModuleFacts) -> None:
@@ -96,10 +132,10 @@ def add_keywords(subject: Subject, facts: ModuleFacts) -> None:
         facts: Resolved imports and the parsed module.
 
     """
-    call: ast.AST = subject.node
+    call: AST = subject.node
     bound: BoundCall | None = bound_call(subject=subject, facts=facts)
     names: list[str] = keyword_candidates(subject=subject, facts=facts)
-    if not isinstance(call, ast.Call) or bound is None or not names:
+    if not isinstance(call, Call) or bound is None or not names:
         return
     positional_only: int = sum(
         1
@@ -107,11 +143,11 @@ def add_keywords(subject: Subject, facts: ModuleFacts) -> None:
         if argument.origin is ArgumentOrigin.POSITIONAL
         and argument.parameter.kind is ParameterKind.POSITIONAL_ONLY
     )
-    movable: list[ast.expr] = call.args[positional_only:]
+    movable: list[expr] = call.args[positional_only:]
     if len(movable) != len(names):
         return
-    keywords: list[ast.keyword] = [
-        ast.keyword(arg=name, value=value)
+    keywords: list[keyword] = [
+        keyword(arg=name, value=value)
         for name, value in zip(names, movable, strict=True)
     ]
     call.args = call.args[:positional_only]
@@ -123,17 +159,41 @@ def add_none_return(subject: Subject, _facts: ModuleFacts) -> None:
 
     Args:
         subject: Function subject.
+        _facts: Unused resolved imports.
+
+    """
+    match subject.node:
+        case (
+            FunctionDef(returns=None)
+            | AsyncFunctionDef(
+                returns=None,
+            ) as function
+        ) if returns_nothing(function=function):
+            function.returns = Constant(value=None)
+        case _:
+            return
+
+
+def add_noreturn(subject: Subject, facts: ModuleFacts) -> None:
+    """Annotate a function whose every path raises with ``NoReturn``.
+
+    Args:
+        subject: Function subject.
         facts: Resolved imports and the parsed module.
 
     """
     match subject.node:
         case (
-            ast.FunctionDef(returns=None)
-            | ast.AsyncFunctionDef(
-                returns=None,
-            ) as function
-        ) if returns_nothing(function=function):
-            function.returns = ast.Constant(value=None)
+            FunctionDef(returns=None)
+            | AsyncFunctionDef(returns=None) as function
+        ) if never_returns(function=function):
+            name: str = insert_import(
+                module=facts.module,
+                source="typing",
+                name="NoReturn",
+                before=_ancestor_index(module=facts.module, node=function),
+            )
+            function.returns = Name(id=name, ctx=Load())
         case _:
             return
 
@@ -151,8 +211,8 @@ def add_inferred_annotation(subject: Subject, facts: ModuleFacts) -> None:
     hint: Hint | None = facts.hints.index().hint_for(node=subject.node)
     if hint is None or hint.basis is HintBasis.proven_none:
         return
-    expression: ast.expr = ast.parse(source=hint.source, mode="eval").body
-    owner: ast.AST = (
+    expression: expr = parse(source=hint.source, mode="eval").body
+    owner: AST = (
         subject.statement if subject.kind == "Parameter" else subject.node
     ) or subject.node
     ensure_names(
@@ -161,11 +221,11 @@ def add_inferred_annotation(subject: Subject, facts: ModuleFacts) -> None:
         before=_ancestor_index(module=facts.module, node=owner),
     )
     match subject.node:
-        case ast.arg(annotation=None) as parameter:
+        case arg(annotation=None) as parameter:
             parameter.annotation = expression
         case (
-            ast.FunctionDef(returns=None)
-            | ast.AsyncFunctionDef(
+            FunctionDef(returns=None)
+            | AsyncFunctionDef(
                 returns=None,
             ) as function
         ):
@@ -187,7 +247,7 @@ def _pascal(*, text: str) -> str:
     return "".join(part[:1].upper() + part[1:] for part in text.split(sep="_"))
 
 
-def _module_names(*, module: ast.Module) -> set[str]:
+def _module_names(*, module: Module) -> set[str]:
     """Collect the names bound at module level.
 
     Args:
@@ -200,32 +260,31 @@ def _module_names(*, module: ast.Module) -> set[str]:
     names: set[str] = set()
     for statement in module.body:
         match statement:
-            case ast.ClassDef(name=name) | ast.FunctionDef(name=name):
+            case ClassDef(name=name) | FunctionDef(name=name):
                 names.add(name)
-            case ast.AsyncFunctionDef(name=name):
+            case AsyncFunctionDef(name=name):
                 names.add(name)
-            case ast.Import(names=aliases) | ast.ImportFrom(names=aliases):
+            case Import(names=aliases) | ImportFrom(names=aliases):
                 names.update(
                     (a.asname or a.name).split(sep=".")[0] for a in aliases
                 )
             case _:
                 names.update(
                     node.id
-                    for node in ast.walk(node=statement)
-                    if isinstance(node, ast.Name)
-                    and isinstance(node.ctx, ast.Store)
+                    for node in walk(node=statement)
+                    if isinstance(node, Name) and isinstance(node.ctx, Store)
                 )
     return names
 
 
-def _strip_locations(*, node: ast.AST) -> None:
+def _strip_locations(*, node: AST) -> None:
     """Remove source positions so the writer treats the node as new.
 
     Args:
         node: Root of the subtree to clear.
 
     """
-    for child in ast.walk(node=node):
+    for child in walk(node=node):
         for attribute in (
             "lineno",
             "col_offset",
@@ -237,8 +296,8 @@ def _strip_locations(*, node: ast.AST) -> None:
 
 def _existing_protocol(
     *,
-    module: ast.Module,
-    candidate: ast.ClassDef,
+    module: Module,
+    candidate: ClassDef,
 ) -> str | None:
     """Find a protocol class with the same members.
 
@@ -250,14 +309,14 @@ def _existing_protocol(
         The existing class name, or ``None``.
 
     """
-    wanted: str = "".join(ast.dump(node=item) for item in candidate.body[1:])
+    wanted: str = "".join(dump(node=item) for item in candidate.body[1:])
     for statement in module.body:
-        if isinstance(statement, ast.ClassDef) and any(
-            ast.unparse(ast_obj=base).split(sep=".")[-1] == "Protocol"
+        if isinstance(statement, ClassDef) and any(
+            unparse(ast_obj=base).split(sep=".")[-1] == "Protocol"
             for base in statement.bases
         ):
             found: str = "".join(
-                ast.dump(node=item) for item in statement.body[1:]
+                dump(node=item) for item in statement.body[1:]
             )
             if found == wanted:
                 return statement.name
@@ -277,20 +336,20 @@ def synthesize_protocol(subject: Subject, facts: ModuleFacts) -> None:
     """
     match (subject.node, subject.statement):
         case [
-            ast.arg(annotation=None) as parameter,
-            ast.FunctionDef() | ast.AsyncFunctionDef() as function,
+            arg(annotation=None) as parameter,
+            FunctionDef() | AsyncFunctionDef() as function,
         ]:
             pass
         case _:
             return
-    usage = structural_usage(
+    usage: StructuralUsage | None = structural_usage(
         function=function,
         parameter=parameter.arg,
         counts=facts.binding_counts,
     )
     if usage is None:
         return
-    module: ast.Module = facts.module
+    module: Module = facts.module
     taken: set[str] = _module_names(module=module)
     base: str = (
         f"{_pascal(text=function.name)}{_pascal(text=parameter.arg)}Protocol"
@@ -300,7 +359,7 @@ def synthesize_protocol(subject: Subject, facts: ModuleFacts) -> None:
     while name in taken:
         name = f"{base}{suffix}"
         suffix += 1
-    match ast.parse(
+    match parse(
         source=protocol_source(
             name=name,
             function=function.name,
@@ -308,7 +367,7 @@ def synthesize_protocol(subject: Subject, facts: ModuleFacts) -> None:
             usage=usage,
         ),
     ).body:
-        case [ast.ClassDef() as candidate]:
+        case [ClassDef() as candidate]:
             pass
         case _:
             return
@@ -320,16 +379,16 @@ def synthesize_protocol(subject: Subject, facts: ModuleFacts) -> None:
             name="Protocol",
             before=_ancestor_index(module=module, node=function),
         )
-        candidate.bases = [ast.Name(id=local, ctx=ast.Load())]
+        candidate.bases = [Name(id=local, ctx=Load())]
         _strip_locations(node=candidate)
         module.body.insert(
             _ancestor_index(module=module, node=function),
             candidate,
         )
-    parameter.annotation = ast.Name(id=reused or name, ctx=ast.Load())
+    parameter.annotation = Name(id=reused or name, ctx=Load())
 
 
-def _is_plain_typevar(*, statement: ast.stmt, name: str) -> bool:
+def _is_plain_typevar(*, statement: stmt, name: str) -> bool:
     """Tell whether a statement is ``NAME = TypeVar("NAME")``.
 
     Args:
@@ -341,11 +400,11 @@ def _is_plain_typevar(*, statement: ast.stmt, name: str) -> bool:
 
     """
     match statement:
-        case ast.Assign(
-            targets=[ast.Name(id=target)],
-            value=ast.Call(
-                func=ast.Name(id="TypeVar") | ast.Attribute(attr="TypeVar"),
-                args=[ast.Constant(value=label)],
+        case Assign(
+            targets=[Name(id=target)],
+            value=Call(
+                func=Name(id="TypeVar") | Attribute(attr="TypeVar"),
+                args=[Constant(value=label)],
                 keywords=[],
             ),
         ):
@@ -354,7 +413,7 @@ def _is_plain_typevar(*, statement: ast.stmt, name: str) -> bool:
             return False
 
 
-def _ancestor_index(*, module: ast.Module, node: ast.AST) -> int:
+def _ancestor_index(*, module: Module, node: AST) -> int:
     """Find the top-level statement that contains a node.
 
     Args:
@@ -368,11 +427,11 @@ def _ancestor_index(*, module: ast.Module, node: ast.AST) -> int:
     return next(
         position
         for position, statement in enumerate(iterable=module.body)
-        if any(child is node for child in ast.walk(node=statement))
+        if any(child is node for child in walk(node=statement))
     )
 
 
-def _class_variables(*, module: ast.Module, function: ast.AST) -> set[str]:
+def _class_variables(*, module: Module, function: AST) -> set[str]:
     """Collect names the enclosing classes already use as type parameters.
 
     Args:
@@ -385,23 +444,30 @@ def _class_variables(*, module: ast.Module, function: ast.AST) -> set[str]:
     """
     names: set[str] = set()
     for statement in module.body:
-        for node in ast.walk(node=statement):
-            if isinstance(node, ast.ClassDef) and any(
-                child is function for child in ast.walk(node=node)
+        for node in walk(node=statement):
+            if isinstance(node, ClassDef) and any(
+                child is function for child in walk(node=node)
             ):
                 for part in (*node.bases, *(k.value for k in node.keywords)):
                     names.update(
                         item.id
-                        for item in ast.walk(node=part)
-                        if isinstance(item, ast.Name)
+                        for item in walk(node=part)
+                        if isinstance(item, Name)
                     )
-                names.update(item.name for item in node.type_params)
+                names.update(
+                    item.name
+                    for item in node.type_params
+                    if isinstance(
+                        item,
+                        (AstTypeVar, AstParamSpec, AstTypeVarTuple),
+                    )
+                )
     return names
 
 
 def _typevar_name(
     *,
-    module: ast.Module,
+    module: Module,
     before: int,
     forbidden: set[str],
 ) -> tuple[str, bool]:
@@ -446,13 +512,13 @@ def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
     """
     match (subject.node, subject.statement):
         case [
-            ast.arg(annotation=None) as parameter,
-            ast.FunctionDef() | ast.AsyncFunctionDef() as function,
+            arg(annotation=None) as parameter,
+            FunctionDef() | AsyncFunctionDef() as function,
         ]:
             pass
         case _:
             return
-    module: ast.Module = facts.module
+    module: Module = facts.module
     index: int = _ancestor_index(module=module, node=function)
     name, declare = _typevar_name(
         module=module,
@@ -474,8 +540,8 @@ def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
             name="TypeVar",
             before=index,
         )
-        match ast.parse(source=f'{name} = {factory}("{name}")').body:
-            case [ast.Assign() as declaration]:
+        match parse(source=f'{name} = {factory}("{name}")').body:
+            case [Assign() as declaration]:
                 _strip_locations(node=declaration)
                 module.body.insert(
                     _ancestor_index(module=module, node=function),
@@ -483,8 +549,8 @@ def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
                 )
             case _:
                 return
-    parameter.annotation = ast.Name(id=name, ctx=ast.Load())
-    function.returns = ast.parse(source=returns, mode="eval").body
+    parameter.annotation = Name(id=name, ctx=Load())
+    function.returns = parse(source=returns, mode="eval").body
 
 
 @final
@@ -500,6 +566,7 @@ class Appliers:
         "typing.add-final": add_final,
         "calls.add-keywords": add_keywords,
         "typing.add-none-return": add_none_return,
+        "typing.add-noreturn": add_noreturn,
         "typing.add-inferred-annotation": add_inferred_annotation,
         "typing.synthesize-protocol": synthesize_protocol,
         "typing.synthesize-typevar": synthesize_typevar,

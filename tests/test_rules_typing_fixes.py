@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from textwrap import dedent
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, final
 
 from astart import parse
 from astart.rules import (
@@ -19,10 +19,28 @@ from astart.rules.facts import collect_subjects, module_facts
 from tests.expectations import expect_equal, expect_in, expect_true
 
 if TYPE_CHECKING:
+    from astart import CommentedModule
     from astart.rules import Finding
-RULE = "typing.missing-annotation"
-NONE_FIX = "typing.add-none-return"
-INFERRED_FIX = "typing.add-inferred-annotation"
+    from astart.rules.engine import CheckResult
+    from astart.rules.facts import Applier, ModuleFacts
+    from astart.rules.model import Catalog
+    from astart.rules.registry import Registries
+
+
+@final
+class Constants:
+    """Group module-level constants.
+
+    Attributes:
+        rule: Grouped module constant.
+        none_fix: Grouped module constant.
+        inferred_fix: Grouped module constant.
+
+    """
+
+    rule: Final[str] = "typing.missing-annotation"
+    none_fix: Final[str] = "typing.add-none-return"
+    inferred_fix: Final[str] = "typing.add-inferred-annotation"
 
 
 def _findings(*, source: str) -> list[Finding]:
@@ -35,14 +53,14 @@ def _findings(*, source: str) -> list[Finding]:
         The findings of the missing-annotation rule.
 
     """
-    registries = default_registries()
-    result = check(
+    registries: Registries = default_registries()
+    result: CheckResult = check(
         source=dedent(text=source),
         filename="s.py",
         catalog=load_default_catalog(registries=registries),
         registries=registries,
     )
-    return [f for f in result.findings if f.rule_key == RULE]
+    return [f for f in result.findings if f.rule_key == Constants.rule]
 
 
 def _offers(*, source: str, path: str) -> list[str]:
@@ -76,9 +94,9 @@ def _apply(*, source: str, path: str, fix_key: str) -> str:
         The resulting source.
 
     """
-    registries = default_registries()
-    catalog = load_default_catalog(registries=registries)
-    finding = next(
+    registries: Registries = default_registries()
+    catalog: Catalog = load_default_catalog(registries=registries)
+    finding: Finding = next(
         f for f in _findings(source=source) if f.subject_path == path
     )
     return apply_fix(
@@ -91,7 +109,7 @@ def _apply(*, source: str, path: str, fix_key: str) -> str:
 
 def test_missing_annotation_reports_parameters_and_returns() -> None:
     """Report each unannotated parameter and each missing return."""
-    paths = [
+    paths: list[str] = [
         f.subject_path
         for f in _findings(
             source="""\
@@ -113,7 +131,7 @@ def f(a: int) -> int:
 
 def test_receivers_are_exempt_but_variadics_are_reported() -> None:
     """Skip self and cls; report *args and **kwargs."""
-    paths = [
+    paths: list[str] = [
         f.subject_path
         for f in _findings(
             source="""\
@@ -131,7 +149,7 @@ def test_receivers_are_exempt_but_variadics_are_reported() -> None:
 def test_none_return_fix_is_offered_only_when_provable() -> None:
     """Offer ``-> None`` for procedures, not for value-returning functions."""
     expect_in(
-        item=NONE_FIX,
+        item=Constants.none_fix,
         container=_offers(
             source="""\
 def f():
@@ -148,7 +166,7 @@ def g():
 """,
             path="g",
         ),
-        expected=[INFERRED_FIX],
+        expected=[Constants.inferred_fix],
     )
     expect_equal(
         actual=_offers(
@@ -164,7 +182,7 @@ def h():
 
 def test_inferred_fix_is_offered_only_for_accepted_hints() -> None:
     """Offer parameter hints that call sites corroborate."""
-    source = """\
+    source: str = """\
     def scale(x):
         return x * 2
 
@@ -177,24 +195,21 @@ def test_inferred_fix_is_offered_only_for_accepted_hints() -> None:
     """
     expect_equal(
         actual=_offers(source=source, path="scale.x"),
-        expected=[INFERRED_FIX],
+        expected=[Constants.inferred_fix],
     )
-    expect_equal(
-        actual=_offers(source=source, path="greet.name"),
-        expected=[],
-    )
+    expect_equal(actual=_offers(source=source, path="greet.name"), expected=[])
 
 
 def test_apply_adds_none_return_in_place() -> None:
     """Keep comments and layout while adding ``-> None``."""
-    fixed = _apply(
+    fixed: str = _apply(
         source="""\
 # lead
 def f(a: int):  # trailing
     print(a)
 """,
         path="f",
-        fix_key=NONE_FIX,
+        fix_key=Constants.none_fix,
     )
     expect_equal(
         actual=fixed,
@@ -208,7 +223,7 @@ def f(a: int) -> None:  # trailing
 
 def test_apply_adds_parameter_annotation_in_place() -> None:
     """Write a corroborated hint without disturbing the file."""
-    fixed = _apply(
+    fixed: str = _apply(
         source="""\
 def scale(x, k=2):  # c
     return x * k
@@ -217,24 +232,25 @@ def scale(x, k=2):  # c
 scale(3)
 """,
         path="scale.x",
-        fix_key=INFERRED_FIX,
+        fix_key=Constants.inferred_fix,
     )
     expect_in(item="def scale(x: int, k=2):  # c", container=fixed)
 
 
 def test_appliers_never_replace_existing_annotations() -> None:
     """Leave an annotated parameter alone."""
-    module = parse(
+    module: CommentedModule = parse(
         source="""\
 def f(a: str) -> int:
     return 1
 """,
     )
-    facts = module_facts(module=module)
-    kinds = frozenset({"Parameter", "FunctionDef"})
+    facts: ModuleFacts = module_facts(module=module)
+    kinds: frozenset[str] = frozenset({"Parameter", "FunctionDef"})
     for subject in collect_subjects(module=module, kinds=kinds):
-        for key in (NONE_FIX, INFERRED_FIX):
-            Appliers.table[key](subject, facts)
+        for key in (Constants.none_fix, Constants.inferred_fix):
+            applier: Applier = Appliers.table[key]
+            applier(subject, facts)
     expect_equal(
         actual=module.unparse(),
         expected="""\
@@ -246,9 +262,9 @@ def f(a: str) -> int:
 
 def test_catalog_still_verifies() -> None:
     """Prove examples and idempotence for the whole default catalog."""
-    registries = default_registries()
-    catalog = load_default_catalog(registries=registries)
+    registries: Registries = default_registries()
+    catalog: Catalog = load_default_catalog(registries=registries)
     verify_catalog(catalog=catalog, registries=registries)
     expect_true(
-        condition=RULE in {rule.key for rule in catalog.rules},
+        condition=Constants.rule in {rule.key for rule in catalog.rules},
     )

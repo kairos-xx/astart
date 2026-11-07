@@ -147,7 +147,10 @@ def test_position_validation_and_translation() -> None:
 def test_span_construction_and_relations() -> None:
     """Build, compare and shift spans."""
     start: SourcePosition = SourcePosition(line=1, column=2)
-    with pytest.raises(expected_exception=ValueError, match="inverted|before"):
+    with pytest.raises(
+        expected_exception=ValueError,
+        match=r"inverted|before",
+    ):
         SourceSpan(start=SourcePosition(line=2, column=0), end=start)
     one: SourceSpan = SourceSpan.one_column_at(position=start)
     single: SourceSpan = SourceSpan.from_text(start=start, text="abc")

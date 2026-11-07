@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from astart.rules.jsonvalue import JsonValue
-    from astart.rules.model import Catalog, Finding, Rule
+    from astart.rules.model import Catalog, Finding, Rule, Span
 
 
 @final
@@ -74,7 +74,7 @@ def render_text(*, finding: Finding, catalog: Catalog) -> str:
 
     """
     rule: Rule = catalog.rule(key=finding.rule_key)
-    span = finding.span
+    span: Span = finding.span
     return (
         f"{span.file}:{span.start_line}:{span.start_column}: {rule.code} "
         f"{finding.severity.value} "

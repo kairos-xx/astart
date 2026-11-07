@@ -2,7 +2,32 @@
 
 from __future__ import annotations
 
-import ast
+from ast import (
+    AST,
+    AsyncFunctionDef,
+    Attribute,
+    ClassDef,
+    Constant,
+    Del,
+    DictComp,
+    Expr,
+    FunctionDef,
+    If,
+    Import,
+    ImportFrom,
+    Lambda,
+    ListComp,
+    Module,
+    Name,
+    SetComp,
+    Store,
+    alias,
+    arg,
+    expr,
+    iter_child_nodes,
+    stmt,
+    walk,
+)
 from typing import TYPE_CHECKING, Final, final
 
 if TYPE_CHECKING:
@@ -39,6 +64,7 @@ class Constants:
         "datetime": "datetime",
         "timedelta": "datetime",
         "Final": "typing",
+        "NoReturn": "typing",
         "Protocol": "typing",
         "TypeVar": "typing",
     }
@@ -56,7 +82,7 @@ class Constants:
     )
 
 
-def bound_names(*, module: ast.Module) -> frozenset[str]:
+def bound_names(*, module: Module) -> frozenset[str]:
     """Collect every name the module binds anywhere.
 
     Args:
@@ -67,26 +93,26 @@ def bound_names(*, module: ast.Module) -> frozenset[str]:
 
     """
     names: set[str] = set()
-    for node in ast.walk(node=module):
+    for node in walk(node=module):
         match node:
-            case ast.alias(name=name, asname=asname):
+            case alias(name=name, asname=asname):
                 names.add(asname or name.split(sep=".")[0])
             case (
-                ast.ClassDef(name=name)
-                | ast.FunctionDef(name=name)
-                | ast.AsyncFunctionDef(name=name)
+                ClassDef(name=name)
+                | FunctionDef(name=name)
+                | AsyncFunctionDef(name=name)
             ):
                 names.add(name)
-            case ast.Name(id=name, ctx=ast.Store() | ast.Del()):
+            case Name(id=name, ctx=Store() | Del()):
                 names.add(name)
-            case ast.arg(arg=name):
+            case arg(arg=name):
                 names.add(name)
             case _:
                 continue
     return frozenset(names)
 
 
-def _is_type_checking(*, test: ast.expr) -> bool:
+def _is_type_checking(*, test: expr) -> bool:
     """Tell whether an ``if`` test is ``TYPE_CHECKING``.
 
     Args:
@@ -96,14 +122,14 @@ def _is_type_checking(*, test: ast.expr) -> bool:
         ``True`` for ``TYPE_CHECKING`` and ``module.TYPE_CHECKING``.
 
     """
-    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    return (isinstance(test, Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, Attribute) and test.attr == "TYPE_CHECKING"
     )
 
 
 def _record_import(
     *,
-    node: ast.Import | ast.ImportFrom,
+    node: Import | ImportFrom,
     out: dict[str, tuple[str, str] | None],
 ) -> None:
     """Record the names an import statement binds.
@@ -113,17 +139,17 @@ def _record_import(
         out: Bound names; a plain ``from`` import records its origin.
 
     """
-    for alias in node.names:
-        if isinstance(node, ast.ImportFrom):
-            plain: bool = node.level == 0 and alias.asname is None
-            out[alias.asname or alias.name] = (
-                (node.module or "", alias.name) if plain else None
+    for imported in node.names:
+        if isinstance(node, ImportFrom):
+            plain: bool = node.level == 0 and imported.asname is None
+            out[imported.asname or imported.name] = (
+                (node.module or "", imported.name) if plain else None
             )
         else:
-            out[alias.asname or alias.name.split(sep=".")[0]] = None
+            out[imported.asname or imported.name.split(sep=".")[0]] = None
 
 
-def _visit(*, node: ast.AST, out: dict[str, tuple[str, str] | None]) -> None:
+def _visit(*, node: AST, out: dict[str, tuple[str, str] | None]) -> None:
     """Record the names a statement binds when the module runs.
 
     Definitions are recorded without entering their bodies; the body of an
@@ -136,29 +162,29 @@ def _visit(*, node: ast.AST, out: dict[str, tuple[str, str] | None]) -> None:
 
     """
     match node:
-        case ast.If(test=test, orelse=orelse) if _is_type_checking(test=test):
+        case If(test=test, orelse=orelse) if _is_type_checking(test=test):
             for statement in orelse:
                 _visit(node=statement, out=out)
-        case ast.ImportFrom() | ast.Import():
+        case ImportFrom() | Import():
             _record_import(node=node, out=out)
         case (
-            ast.FunctionDef(name=name)
-            | ast.AsyncFunctionDef(name=name)
-            | ast.ClassDef(name=name)
+            FunctionDef(name=name)
+            | AsyncFunctionDef(name=name)
+            | ClassDef(name=name)
         ):
             out[name] = None
-        case ast.Lambda() | ast.ListComp() | ast.SetComp() | ast.DictComp():
+        case Lambda() | ListComp() | SetComp() | DictComp():
             pass
-        case ast.Name(id=name, ctx=ast.Store() | ast.Del()):
+        case Name(id=name, ctx=Store() | Del()):
             out[name] = None
         case _:
-            for child in ast.iter_child_nodes(node=node):
+            for child in iter_child_nodes(node=node):
                 _visit(node=child, out=out)
 
 
 def runtime_bindings(
     *,
-    module: ast.Module,
+    module: Module,
     before: int,
 ) -> dict[str, tuple[str, str] | None]:
     """List the names bound at runtime by the first ``before`` statements.
@@ -177,7 +203,7 @@ def runtime_bindings(
     return out
 
 
-def _header_end(*, module: ast.Module) -> int:
+def _header_end(*, module: Module) -> int:
     """Find where a new top-level import belongs.
 
     Args:
@@ -187,18 +213,18 @@ def _header_end(*, module: ast.Module) -> int:
         The index after the docstring and the leading import block.
 
     """
-    body: list[ast.stmt] = module.body
+    body: list[stmt] = module.body
     index: int = 0
     if (
         body
-        and isinstance(body[0], ast.Expr)
-        and isinstance(body[0].value, ast.Constant)
+        and isinstance(body[0], Expr)
+        and isinstance(body[0].value, Constant)
         and isinstance(body[0].value.value, str)
     ):
         index = 1
     while index < len(body) and isinstance(
         body[index],
-        (ast.Import, ast.ImportFrom),
+        (Import, ImportFrom),
     ):
         index += 1
     return index
@@ -206,7 +232,7 @@ def _header_end(*, module: ast.Module) -> int:
 
 def insert_import(
     *,
-    module: ast.Module,
+    module: Module,
     source: str,
     name: str,
     before: int,
@@ -228,42 +254,45 @@ def insert_import(
         The local name to write in the annotation or base list.
 
     """
-    bound = runtime_bindings(module=module, before=before)
+    bound: dict[str, tuple[str, str] | None] = runtime_bindings(
+        module=module,
+        before=before,
+    )
     if name in bound:
         if bound[name] == (source, name):
             return name
-        alias: str = f"_{name}"
-        while alias in bound:
-            alias = f"_{alias}"
+        alias_name: str = f"_{name}"
+        while alias_name in bound:
+            alias_name = f"_{alias_name}"
         module.body.insert(
             _header_end(module=module),
-            ast.ImportFrom(
+            ImportFrom(
                 module=source,
-                names=[ast.alias(name=name, asname=alias)],
+                names=[alias(name=name, asname=alias_name)],
                 level=0,
             ),
         )
-        return alias
+        return alias_name
     for statement in module.body[:before]:
         if (
-            isinstance(statement, ast.ImportFrom)
+            isinstance(statement, ImportFrom)
             and statement.module == source
             and (statement.level == 0)
             and all(item.name != "*" for item in statement.names)
         ):
-            statement.names.append(ast.alias(name=name))
+            statement.names.append(alias(name=name))
             return name
     module.body.insert(
         _header_end(module=module),
-        ast.ImportFrom(module=source, names=[ast.alias(name=name)], level=0),
+        ImportFrom(module=source, names=[alias(name=name)], level=0),
     )
     return name
 
 
 def ensure_names(
     *,
-    module: ast.Module,
-    expression: ast.expr,
+    module: Module,
+    expression: expr,
     before: int,
 ) -> None:
     """Import every known name an annotation uses but the module lacks.
@@ -276,8 +305,8 @@ def ensure_names(
         before: Index of the statement that will use the annotation.
 
     """
-    for node in ast.walk(node=expression):
-        if isinstance(node, ast.Name):
+    for node in walk(node=expression):
+        if isinstance(node, Name):
             source: str | None = Constants.known_imports.get(node.id)
             if source is not None:
                 node.id = insert_import(

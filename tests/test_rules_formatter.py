@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from asyncio import run
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, final
 
 from astart.rules import default_registries, load_default_catalog
 from astart.rules.formatter import (
@@ -24,11 +24,26 @@ from tests.expectations import (
 
 if TYPE_CHECKING:
     from pathlib import Path
-MESSY = """\
+
+    from astart.rules.model import Catalog
+    from astart.rules.registry import Registries
+
+
+@final
+class Constants:
+    """Group module-level constants.
+
+    Attributes:
+        messy: Grouped module constant.
+        sample: Grouped module constant.
+
+    """
+
+    messy: Final[str] = """\
 x=1
 def f( a ):return a
 """
-SAMPLE = """\
+    sample: Final[str] = """\
 # header
 LIMIT = 3  # limit
 
@@ -49,7 +64,7 @@ def test_format_source_runs_ruff_once(*, tmp_path: Path) -> None:
 
     """
     outcome: FormatOutcome = format_source(
-        source=MESSY,
+        source=Constants.messy,
         target=FormatTarget(filename="m.py", cwd=tmp_path),
     )
     expect_true(condition=outcome.formatted)
@@ -72,13 +87,13 @@ def test_missing_ruff_is_reported_not_fatal(*, tmp_path: Path) -> None:
         tmp_path: Working directory.
 
     """
-    outcome = format_source(
-        source=MESSY,
+    outcome: FormatOutcome = format_source(
+        source=Constants.messy,
         target=FormatTarget(filename="m.py", cwd=tmp_path),
         command=("definitely-not-a-formatter",),
     )
     expect_false(condition=outcome.formatted)
-    expect_equal(actual=outcome.source, expected=MESSY)
+    expect_equal(actual=outcome.source, expected=Constants.messy)
     expect_in(item="not found", container=outcome.note)
 
 
@@ -89,7 +104,7 @@ def test_ruff_error_keeps_original_source(*, tmp_path: Path) -> None:
         tmp_path: Working directory.
 
     """
-    outcome = format_source(
+    outcome: FormatOutcome = format_source(
         source="""\
 def (:
 """,
@@ -112,12 +127,12 @@ def test_fix_and_format_output_is_stable(*, tmp_path: Path) -> None:
         tmp_path: Working directory.
 
     """
-    registries = default_registries()
-    catalog = load_default_catalog(registries=registries)
-    settings = FixSettings(ceiling=FixSafety.guarded)
-    target = FormatTarget(filename="s.py", cwd=tmp_path)
+    registries: Registries = default_registries()
+    catalog: Catalog = load_default_catalog(registries=registries)
+    settings: FixSettings = FixSettings(ceiling=FixSafety.guarded)
+    target: FormatTarget = FormatTarget(filename="s.py", cwd=tmp_path)
     fixed, formatted = fix_and_format(
-        source=SAMPLE,
+        source=Constants.sample,
         target=target,
         catalog=catalog,
         registries=registries,
@@ -125,11 +140,10 @@ def test_fix_and_format_output_is_stable(*, tmp_path: Path) -> None:
     )
     expect_true(condition=len(fixed.applied) > 0)
     expect_true(condition=formatted.formatted)
-    again = format_source(
-        source=formatted.source,
-        target=target,
+    expect_equal(
+        actual=(format_source(source=formatted.source, target=target)).source,
+        expected=formatted.source,
     )
-    expect_equal(actual=again.source, expected=formatted.source)
     second_fixed, second_formatted = fix_and_format(
         source=formatted.source,
         target=target,
@@ -153,9 +167,15 @@ def test_format_source_works_inside_a_running_event_loop(
     """
 
     async def caller() -> FormatOutcome:
+        """Format through the running event loop.
+
+        Returns:
+            The format outcome.
+
+        """
         return format_source(
-            source=MESSY,
+            source=Constants.messy,
             target=FormatTarget(filename="m.py", cwd=tmp_path),
         )
 
-    expect_true(condition=(run(main=caller())).formatted)
+    expect_true(condition=run(main=caller()).formatted)

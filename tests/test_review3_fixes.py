@@ -24,9 +24,21 @@ from tests.expectations import expect_equal, expect_in, expect_not_in
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from astart.rules.engine import CheckResult
+    from astart.rules.registry import Registries
+
 
 def _fix(*, source: str) -> FixResult:
-    registries = default_registries()
+    """Run the guarded fixer on a dedented snippet.
+
+    Args:
+        source: Python source.
+
+    Returns:
+        The fix result.
+
+    """
+    registries: Registries = default_registries()
     return fix_source(
         source=dedent(text=source),
         filename="m.py",
@@ -37,29 +49,34 @@ def _fix(*, source: str) -> FixResult:
 
 
 def _runs(*, source: str) -> None:
-    """Import the fixed module, so unbound names raise."""
+    """Import the fixed module, so unbound names raise.
+
+    Args:
+        source: Fixed Python source.
+
+    """
     _ = FunctionType(
-        (compile(source, "fixed.py", "exec")),
-        {"__name__": "fixed", "__builtins__": builtins},
+        code=compile(source=source, filename="fixed.py", mode="exec"),
+        globals={"__name__": "fixed", "__builtins__": builtins},
     )()
 
 
 def test_c1_keyword_colliding_with_generated_names_gets_no_protocol() -> None:
     """Check that keyword colliding with generated names gets no protocol."""
     for call in ("x.a(1, arg0=2)", "x.a(self=2)"):
-        result = _fix(
+        result: FixResult = _fix(
             source=f"""\
 def f(x):
     return {call}
 """,
         )
-        compile(result.source, "m.py", "exec")
+        compile(source=result.source, filename="m.py", mode="exec")
         expect_not_in(item="Protocol", container=result.source, message=call)
 
 
 def test_c2_imports_stay_runtime_correct() -> None:
     """Check that imports stay runtime correct."""
-    sources = {
+    sources: dict[str, str] = {
         "guarded import": """
             from typing import TYPE_CHECKING
             if TYPE_CHECKING:
@@ -90,14 +107,14 @@ def test_c2_imports_stay_runtime_correct() -> None:
             """,
     }
     for label, source in sources.items():
-        result = _fix(source=source)
+        result: FixResult = _fix(source=source)
         _runs(source=result.source)
         expect_equal(actual=result.parse_error, expected=None, message=label)
 
 
 def test_i1_generic_class_variable_is_not_reused_for_a_method() -> None:
     """Check that generic class variable is not reused for a method."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""
         from typing import Generic, TypeVar
         T = TypeVar("T")
@@ -112,7 +129,7 @@ def test_i1_generic_class_variable_is_not_reused_for_a_method() -> None:
 
 def test_i2_first_parameter_of_a_method_is_never_synthesized() -> None:
     """Check that first parameter of a method is never synthesized."""
-    protocol = _fix(
+    protocol: FixResult = _fix(
         source="""\
 class C:
     def f(x):
@@ -120,7 +137,7 @@ class C:
 """,
     )
     expect_not_in(item="Protocol", container=protocol.source)
-    typevar = _fix(
+    typevar: FixResult = _fix(
         source="""\
 class C:
     def n(x):
@@ -132,7 +149,7 @@ class C:
 
 def test_i3_overrides_and_dunders_are_not_narrowed() -> None:
     """Check that overrides and dunders are not narrowed."""
-    dunder = _fix(
+    dunder: FixResult = _fix(
         source=(
             dedent(
                 text="""\
@@ -144,7 +161,7 @@ def test_i3_overrides_and_dunders_are_not_narrowed() -> None:
         ),
     )
     expect_not_in(item="Protocol", container=dunder.source)
-    override = _fix(
+    override: FixResult = _fix(
         source="""
         class B:
             pass
@@ -158,7 +175,7 @@ def test_i3_overrides_and_dunders_are_not_narrowed() -> None:
 
 def test_i4_overload_groups_are_left_alone() -> None:
     """Check that overload groups are left alone."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""
         from typing import overload
         @overload
@@ -171,8 +188,13 @@ def test_i4_overload_groups_are_left_alone() -> None:
 
 
 def test_i5_atomic_write_keeps_mode_and_symlinks(*, tmp_path: Path) -> None:
-    """Check that atomic write keeps mode and symlinks."""
-    real = tmp_path / "real.py"
+    """Check that atomic write keeps mode and symlinks.
+
+    Args:
+        tmp_path: Directory holding the symlinked file.
+
+    """
+    real: Path = tmp_path / "real.py"
     real.write_text(
         data="""\
 def f(x):
@@ -180,10 +202,10 @@ def f(x):
 """,
         encoding="utf-8",
     )
-    real.chmod(0o755)
-    link = tmp_path / "link.py"
-    link.symlink_to(real)
-    out = StringIO()
+    real.chmod(mode=0o755)
+    link: Path = tmp_path / "link.py"
+    link.symlink_to(target=real)
+    out: StringIO = StringIO()
     _ = run_fix(
         settings=FixCommandSettings(
             paths=(link,),
@@ -208,20 +230,20 @@ def f(x):
 
 def test_i6_synthesized_protocol_members_are_not_flagged() -> None:
     """Check that synthesized protocol members are not flagged."""
-    result = _fix(
+    result: FixResult = _fix(
         source="""\
 def load(src):
     return src.read(1)
 """,
     )
-    registries = default_registries()
-    again = check(
+    registries: Registries = default_registries()
+    again: CheckResult = check(
         source=result.source,
         filename="m.py",
         catalog=load_default_catalog(registries=registries),
         registries=registries,
     )
-    flagged = [
+    flagged: list[str] = [
         f.subject_path for f in again.findings if "Protocol" in f.subject_path
     ]
     expect_equal(actual=flagged, expected=[])

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import re
 from importlib.resources import files
 from json import loads
 from pathlib import Path
-from typing import Final, final
+from re import MULTILINE, Pattern
+from re import compile as compile_pattern
+from typing import TYPE_CHECKING, Final, final
 
-import astart.rules
+from astart import rules
 from astart.rules import (
     Catalog,
     CheckResult,
@@ -22,6 +23,11 @@ from astart.rules import (
 from astart.rules.jsonvalue import canonical_dumps
 
 from tests.expectations import expect_equal, expect_in, expect_true
+
+if TYPE_CHECKING:
+    from importlib.resources.abc import Traversable
+
+    from astart.rules.registry import Registries
 
 
 @final
@@ -58,12 +64,12 @@ def run(a, b, c: Any):
 
 run(1, 2, 3)
 """
-    forbidden: Final[re.Pattern[str]] = re.compile(
-        (
+    forbidden: Final[Pattern[str]] = compile_pattern(
+        pattern=(
             "^\\s*(from|import)\\s+astart(\\.(ast|semantic|_graph))?\\b(?!"
             "\\.rules)"
         ),
-        re.MULTILINE,
+        flags=MULTILINE,
     )
 
 
@@ -97,7 +103,7 @@ def _check(*, source: str) -> CheckResult:
 
 def test_default_catalog_loads_and_validates() -> None:
     """Load the seed rules and prove their examples and fixes."""
-    catalog = _catalog()
+    catalog: Catalog = _catalog()
     expect_equal(
         actual=sorted(rule.code for rule in catalog.rules),
         expected=["CAL001", "DOC002", "TYP001", "TYP003", "TYP004"],
@@ -108,15 +114,20 @@ def test_default_catalog_loads_and_validates() -> None:
 def test_default_catalog_files_are_canonical() -> None:
     """Keep the shipped JSON in canonical form."""
     for name in Constants.catalog_files:
-        text = (
-            files("astart.rules").joinpath("catalog", name).read_text("utf-8")
+        resource: Traversable = files("astart.rules").joinpath(
+            "catalog",
+            name,
         )
-        expect_equal(actual=canonical_dumps(value=loads(text)), expected=text)
+        text: str = resource.read_text(encoding="utf-8")
+        expect_equal(
+            actual=canonical_dumps(value=loads(s=text)),
+            expected=text,
+        )
 
 
 def test_check_reports_all_five_rules_on_one_module() -> None:
     """Report each seeded rule on the sample."""
-    result = _check(source=Constants.sample)
+    result: CheckResult = _check(source=Constants.sample)
     expect_equal(
         actual=sorted({f.rule_key for f in result.findings}),
         expected=[
@@ -127,7 +138,7 @@ def test_check_reports_all_five_rules_on_one_module() -> None:
             "typing.uppercase-global-not-final",
         ],
     )
-    by_rule = {f.rule_key: f for f in result.findings}
+    by_rule: dict[str, Finding] = {f.rule_key: f for f in result.findings}
     expect_equal(
         actual=by_rule["calls.missing-keyword"].evidence["parameters"],
         expected=["a", "b", "c"],
@@ -152,9 +163,9 @@ def test_check_reports_all_five_rules_on_one_module() -> None:
 
 def test_fix_then_check_clears_fixable_findings() -> None:
     """Apply both fixes; only the unfixable findings remain."""
-    catalog = _catalog()
-    registries = default_registries()
-    source = Constants.sample
+    catalog: Catalog = _catalog()
+    registries: Registries = default_registries()
+    source: str = Constants.sample
     for rule_key, fix_key in (
         ("typing.uppercase-global-not-final", "typing.add-final"),
         ("calls.missing-keyword", "calls.add-keywords"),
@@ -198,16 +209,16 @@ def test_aliases_map_back_to_exactus_ids() -> None:
 
 def test_package_data_ships_catalog_files() -> None:
     """Resolve every data file through importlib.resources."""
-    root = files("astart.rules")
+    root: Traversable = files("astart.rules")
     for name in Constants.catalog_files:
         expect_true(condition=root.joinpath("catalog", name).is_file())
     expect_true(condition=root.joinpath("schema.json").is_file())
-    expect_true(condition="check" in dir(astart.rules))
+    expect_true(condition="check" in dir(rules))
 
 
 def test_model_layer_does_not_import_astart_internals() -> None:
     """Keep the ontology independent of the AST packages."""
-    package = Path(str(files("astart.rules")))
+    package: Path = Path(str(object=files("astart.rules")))
     for name in (
         "vocabulary",
         "jsonvalue",
@@ -217,9 +228,9 @@ def test_model_layer_does_not_import_astart_internals() -> None:
         "catalog",
         "schema",
     ):
-        text = (package / f"{name}.py").read_text("utf-8")
+        text: str = (package / f"{name}.py").read_text(encoding="utf-8")
         expect_equal(
-            actual=Constants.forbidden.findall(text),
+            actual=Constants.forbidden.findall(string=text),
             expected=[],
             message=(f"{name}.py imports astart internals"),
         )

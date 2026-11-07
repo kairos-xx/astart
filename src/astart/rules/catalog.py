@@ -14,12 +14,22 @@ from astart.rules.model import (
     catalog_from_json,
     to_json,
 )
-from astart.rules.predicate import Predicate, predicate_facts
+from astart.rules.predicate import (
+    AllOf,
+    AnyOf,
+    Exists,
+    Not,
+    Predicate,
+    predicate_facts,
+)
 from astart.rules.registry import Registries, rule_cost
 from astart.rules.vocabulary import Cost, Expressible, FixSafety
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from importlib.resources.abc import Traversable
+
+    from astart.rules.registry import FactSpec
 
 
 class CatalogError(ValueError):
@@ -85,7 +95,7 @@ def load_default_catalog(*, registries: Registries) -> Catalog:
 
     """
     parts: list[Catalog] = []
-    folder = files("astart.rules").joinpath("catalog")
+    folder: Traversable = files("astart.rules").joinpath("catalog")
     for entry in sorted(folder.iterdir(), key=lambda item: item.name):
         if entry.name.endswith(".json"):
             value: JsonValue = loads(s=entry.read_text(encoding="utf-8"))
@@ -196,11 +206,37 @@ def _predicate_problems(
     """
     if predicate is None:
         return []
-    return [
+    problems: list[str] = [
         f"{owner}: unknown fact {name!r}"
         for name in sorted(predicate_facts(predicate=predicate))
         if name not in registries.facts
     ]
+    if _contains_exists(predicate=predicate):
+        problems.append(
+            f"{owner}: 'exists' is not evaluated by the reference engine yet",
+        )
+    return problems
+
+
+def _contains_exists(*, predicate: Predicate) -> bool:
+    """Tell whether a predicate uses the ``exists`` quantifier.
+
+    Args:
+        predicate: Predicate to inspect.
+
+    Returns:
+        ``True`` when any node of the predicate tree is an ``Exists``.
+
+    """
+    match predicate:
+        case Exists():
+            return True
+        case AllOf(items=items) | AnyOf(items=items):
+            return any(_contains_exists(predicate=item) for item in items)
+        case Not(item=item):
+            return _contains_exists(predicate=item)
+        case _:
+            return False
 
 
 def _references(*, catalog: Catalog, registries: Registries) -> list[str]:
@@ -395,7 +431,7 @@ def _purity(*, catalog: Catalog, registries: Registries) -> list[str]:
         if fix.safety is not FixSafety.proven or fix.preconditions is None:
             continue
         for name in sorted(predicate_facts(predicate=fix.preconditions)):
-            spec = registries.facts.get(name)
+            spec: FactSpec | None = registries.facts.get(name)
             if spec is not None and spec.cost.rank() > Cost.scope.rank():
                 problems.append(
                     f"proven fix {fix.key!r} depends on {spec.cost.value} "

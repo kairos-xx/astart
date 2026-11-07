@@ -2240,7 +2240,10 @@ class InferenceEngine:
         if (
             attr_assignment_type is not None
             and attr_assignment_type.key()
-            not in {_NONE_TYPE.key(), _OBJECT_TYPE.key()}
+            not in {
+                _NONE_TYPE.key(),
+                _OBJECT_TYPE.key(),
+            }
         ):
             inferred_param = merge_types(
                 left=inferred_param,
@@ -2293,7 +2296,10 @@ class InferenceEngine:
             if (
                 refined_param_type is not None
                 and refined_param_type.key()
-                not in {_NONE_TYPE.key(), _OBJECT_TYPE.key()}
+                not in {
+                    _NONE_TYPE.key(),
+                    _OBJECT_TYPE.key(),
+                }
             ):
                 current_param_type = refined_param_type
                 info.param_types[parameter.arg] = refined_param_type

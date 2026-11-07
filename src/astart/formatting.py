@@ -81,6 +81,10 @@ from astart.node_attributes import list_items, read_attribute
 
 if TYPE_CHECKING:
     from re import Match
+type PatchValue = AST | list[AST] | tuple[AST, ...] | str | float | bool | None
+type FieldValue = (
+    AST | str | bytes | int | float | complex | bool | None | list[FieldValue]
+)
 
 
 @final
@@ -337,8 +341,8 @@ class FormatPreserver:
             if state is None:
                 return True
             for name, item in iter_fields(node=node):
-                field: object = item
-                children: list[object] = list_items(value=field)
+                field: FieldValue = item
+                children: list[FieldValue] = list_items(value=field)
                 if (
                     isinstance(field, list)
                     and all(isinstance(child, AST) for child in children)
@@ -572,8 +576,8 @@ class FormatPreserver:
             )
         ):
             msg: str = (
-                "Cannot reindent moved multiline strings without "
-                "changing their value."
+                "Cannot reindent moved multiline strings "
+                "without changing their value."
             )
             raise FormatPreservationError(msg)
         rewritten: list[str] = []
@@ -708,8 +712,8 @@ class FormatPreserver:
         fields: dict[str, _Field] = {}
         descendants: list[AST] = []
         for name, item in iter_fields(node=node):
-            value: object = item
-            children: list[object] = list_items(value=value)
+            value: FieldValue = item
+            children: list[FieldValue] = list_items(value=value)
             if isinstance(value, AST):
                 fields[name] = _Field(kind="child", ids=(id(value),), value="")
                 descendants.append(value)
@@ -913,8 +917,8 @@ class FormatPreserver:
         raw: bool = "r" in prefix[: prefix.find(quote)].lower()
         if raw and (quote in value or value.endswith("\\")):
             msg = (
-                "A raw f-string literal cannot represent this replacement "
-                "safely."
+                "A raw f-string literal cannot represent "
+                "this replacement safely."
             )
             raise FormatPreservationError(msg)
         rendered: str = value.replace("{", "{{").replace("}", "}}")
@@ -1045,8 +1049,8 @@ class FormatPreserver:
         )
         if delimiter is None:
             msg: str = (
-                "The debug f-string field has no conversion or closing "
-                "delimiter."
+                "The debug f-string field has no conversion "
+                "or closing delimiter."
             )
             raise FormatPreservationError(msg)
         suffix: str = self.source[delimiter : field.formatted_span[1]]
@@ -1184,8 +1188,8 @@ class FormatPreserver:
         old_conversion: int = int(formatted.fields["conversion"].value)
         if node.conversion != old_conversion:
             msg: str = (
-                "Simultaneous debug-expression and conversion edits need "
-                "regeneration."
+                "Simultaneous debug-expression and conversion "
+                "edits need regeneration."
             )
             raise FormatPreservationError(msg)
         old_spec: _Field = formatted.fields["format_spec"]
@@ -1195,8 +1199,8 @@ class FormatPreserver:
             and self._changed(node=node.format_spec, replacements=replacements)
         ):
             msg = (
-                "Simultaneous debug-expression and format-spec edits are "
-                "ambiguous."
+                "Simultaneous debug-expression and format-spec "
+                "edits are ambiguous."
             )
             raise FormatPreservationError(msg)
 
@@ -1969,7 +1973,7 @@ class FormatPreserver:
                 documented contract.
 
         """
-        children: list[object] = list_items(value=value)
+        children: list[PatchValue] = list_items(value=value)
         if not isinstance(value, list) or not all(
             isinstance(child, AST) for child in children
         ):
@@ -2017,10 +2021,8 @@ class FormatPreserver:
                     replacements=replacements,
                 ),
             ]
-        msg = (
-            f"Changing {type(node).__name__}.{name} "
-            "requires syntax regeneration."
-        )
+        msg = f"Changing {type(node).__name__}.{name} "
+        "requires syntax regeneration."
         raise FormatPreservationError(msg)
 
     def _has_inner_comments(self, *, start: int, end: int) -> bool:

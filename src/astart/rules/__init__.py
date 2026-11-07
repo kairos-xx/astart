@@ -33,7 +33,7 @@ from astart.rules.formatter import (
 from astart.rules.model import Catalog, Finding, Fix, Rule
 from astart.rules.runner import FixResult, FixSettings, fix_source
 
-__all__ = [
+__all__: list[str] = [
     "Catalog",
     "CatalogError",
     "CheckOptions",

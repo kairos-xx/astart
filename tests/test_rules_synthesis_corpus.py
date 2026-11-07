@@ -21,7 +21,7 @@ from astart.rules.vocabulary import FixSafety
 from tests.expectations import expect_equal, expect_true
 
 if TYPE_CHECKING:
-    from astart.rules import Catalog
+    from astart.rules.model import Catalog
 
 
 @final
@@ -47,7 +47,7 @@ def _catalog() -> Catalog:
         The catalog with TYP003 only.
 
     """
-    catalog = load_default_catalog(registries=default_registries())
+    catalog: Catalog = load_default_catalog(registries=default_registries())
     return replace(
         catalog,
         rules=tuple(r for r in catalog.rules if r.code == "TYP003"),
@@ -66,7 +66,9 @@ def _comments(*, text: str) -> list[str]:
     """
     return [
         token.string
-        for token in generate_tokens(readline=StringIO(initial_value=text).readline)
+        for token in generate_tokens(
+            readline=StringIO(initial_value=text).readline,
+        )
         if token.type == COMMENT
     ]
 
@@ -106,8 +108,8 @@ def test_synthesis_compiles_keeps_comments_and_is_stable(
         path: Vendored module under test.
 
     """
-    source = path.read_text(encoding="utf-8")
-    result = _fix(source=source, name=path.name)
+    source: str = path.read_text(encoding="utf-8")
+    result: FixResult = _fix(source=source, name=path.name)
     expect_equal(actual=result.parse_error, expected=None)
     _ = compile(source=result.source, filename=path.name, mode="exec")
     expect_equal(
@@ -120,5 +122,5 @@ def test_synthesis_compiles_keeps_comments_and_is_stable(
 """)
         <= Constants.stable_check_lines
     ):
-        again = _fix(source=result.source, name=path.name)
+        again: FixResult = _fix(source=result.source, name=path.name)
         expect_true(condition=again.source == result.source)

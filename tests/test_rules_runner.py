@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import ast
+from ast import Name, parse
 from dataclasses import replace
 from textwrap import dedent
 from typing import TYPE_CHECKING, Final, final
@@ -30,10 +30,13 @@ from astart.rules.vocabulary import (
 from tests.expectations import expect_equal, expect_in, expect_true
 
 if TYPE_CHECKING:
+    from ast import AST
+    from collections.abc import Callable
     from pathlib import Path
 
     from astart import GraphConversion
-    from astart.rules.facts import ModuleFacts, Subject
+    from astart.rules.facts import Applier, ModuleFacts, Subject
+    from astart.rules.registry import Registries
 
 
 @final
@@ -42,13 +45,12 @@ class Constants:
 
     Attributes:
         max_inferences: Grouped module constant.
+        sample: Grouped module constant.
 
     """
 
     max_inferences: Final[int] = 2
-
-
-SAMPLE = """\
+    sample: Final[str] = """\
 # header
 LIMIT = 3  # limit
 
@@ -80,9 +82,9 @@ def _run(
         The fix result.
 
     """
-    registries = default_registries()
-    chosen = catalog or load_default_catalog(registries=registries)
-    base = settings or FixSettings(ceiling=ceiling)
+    registries: Registries = default_registries()
+    chosen: Catalog = catalog or load_default_catalog(registries=registries)
+    base: FixSettings = settings or FixSettings(ceiling=ceiling)
     return fix_source(
         source=dedent(text=source),
         filename="s.py",
@@ -107,13 +109,16 @@ def _applied_keys(*, result: FixResult) -> set[str]:
 
 def test_ceiling_selects_fixes() -> None:
     """Apply only what the ceiling allows."""
-    safe = _run(source=SAMPLE, ceiling=FixSafety.proven)
+    safe: FixResult = _run(source=Constants.sample, ceiling=FixSafety.proven)
     expect_equal(
         actual=_applied_keys(result=safe),
         expected={"typing.add-final", "typing.add-none-return"},
     )
     expect_in(item="scale(2, 3)", container=safe.source)
-    guarded = _run(source=SAMPLE, ceiling=FixSafety.guarded)
+    guarded: FixResult = _run(
+        source=Constants.sample,
+        ceiling=FixSafety.guarded,
+    )
     expect_equal(
         actual=_applied_keys(result=guarded),
         expected={
@@ -124,12 +129,15 @@ def test_ceiling_selects_fixes() -> None:
         },
     )
     with pytest.raises(expected_exception=ValueError, match="ceiling"):
-        _run(source=SAMPLE, ceiling=FixSafety.suggest)
+        _run(source=Constants.sample, ceiling=FixSafety.suggest)
 
 
 def test_all_fixes_apply_in_one_pass() -> None:
     """Edit one tree, write once, keep every comment."""
-    result = _run(source=SAMPLE, ceiling=FixSafety.guarded)
+    result: FixResult = _run(
+        source=Constants.sample,
+        ceiling=FixSafety.guarded,
+    )
     for expected in (
         "# header",
         "LIMIT: Final[int] = 3  # limit",
@@ -138,7 +146,7 @@ def test_all_fixes_apply_in_one_pass() -> None:
         "from typing import Final",
     ):
         expect_in(item=expected, container=result.source)
-    ast.parse(source=result.source)
+    parse(source=result.source)
     expect_equal(actual=result.skipped, expected=())
     expect_equal(actual=result.parse_error, expected=None)
 
@@ -153,12 +161,12 @@ def _two_fix_catalog(*, first_before: tuple[str, ...] = ()) -> Catalog:
         The catalog.
 
     """
-    fact = Compare(
+    fact: Compare = Compare(
         fact="binding.is_module_global",
         op=CompareOp.eq,
         value=True,
     )
-    rule = Rule(
+    rule: Rule = Rule(
         key="glob",
         code="GLOB",
         title="glob",
@@ -203,6 +211,16 @@ X = 1
     )
 
     def fix(*, key: str, before: tuple[str, ...] = ()) -> Fix:
+        """Build one of the conflicting fixes.
+
+        Args:
+            key: Fix key.
+            before: Fixes this fix must run before.
+
+        Returns:
+            The fix.
+
+        """
         return Fix(
             key=key,
             rules=("glob",),
@@ -228,7 +246,7 @@ X = 1
 
 def test_conflicting_offers_on_one_node_are_skipped() -> None:
     """Apply the first offer; skip the second as a conflict."""
-    result = _run(
+    result: FixResult = _run(
         source="""\
 X = 1
 """,
@@ -247,7 +265,7 @@ X = 1
 
 def test_fix_order_follows_before_after_relations() -> None:
     """Let ``before`` decide which of two conflicting fixes wins."""
-    result = _run(
+    result: FixResult = _run(
         source="""\
 X = 1
 """,
@@ -258,7 +276,7 @@ X = 1
         actual=[a.fix_key for a in result.applied],
         expected=["fix.a"],
     )
-    flipped = _two_fix_catalog()
+    flipped: Catalog = _two_fix_catalog()
     flipped = replace(
         flipped,
         fixes=(flipped.fixes[0], replace(flipped.fixes[1], before=("fix.a",))),
@@ -280,10 +298,20 @@ def test_failing_applier_is_skipped_with_reason() -> None:
     """Report an applier that raises and leave the source alone."""
 
     def boom(_subject: Subject, _facts: ModuleFacts) -> None:
-        msg = "boom"
+        """Fail unconditionally.
+
+        Args:
+            _subject: Unused subject.
+            _facts: Unused resolved imports.
+
+        Raises:
+            ValueError: Always.
+
+        """
+        msg: str = "boom"
         raise ValueError(msg)
 
-    result = _run(
+    result: FixResult = _run(
         source="""\
 LIMIT = 3
 """,
@@ -305,7 +333,7 @@ LIMIT = 3
 
 def test_unparsable_source_returns_parse_error_without_raising() -> None:
     """Report syntax errors as data."""
-    result = _run(
+    result: FixResult = _run(
         source="""\
 def (:
 """,
@@ -322,11 +350,11 @@ def (:
 
 def test_nothing_to_fix_returns_source_unchanged() -> None:
     """Leave clean code byte for byte alone."""
-    source = """\
+    source: str = """\
 def f(a: int) -> int:
     return a
 """
-    result = _run(source=source, ceiling=FixSafety.guarded)
+    result: FixResult = _run(source=source, ceiling=FixSafety.guarded)
     expect_equal(actual=result.source, expected=source)
     expect_equal(actual=result.applied, expected=())
     expect_equal(actual=result.remaining, expected=())
@@ -334,14 +362,14 @@ def f(a: int) -> int:
 
 def test_apply_fix_still_works_for_single_findings() -> None:
     """Keep the one-finding API available next to the runner."""
-    catalog = load_default_catalog(registries=(default_registries()))
+    catalog: Catalog = load_default_catalog(registries=default_registries())
     expect_true(condition=callable(apply_fix))
     expect_true(condition=len(catalog.fixes) >= 1)
 
 
 def test_unwritable_edit_does_not_block_other_fixes() -> None:
     """Apply what can be written back and report what cannot."""
-    source = """\
+    source: str = """\
     LIMIT = 3
 
 
@@ -353,7 +381,7 @@ def test_unwritable_edit_does_not_block_other_fixes() -> None:
         2,  # two
     )
     """
-    result = _run(source=source, ceiling=FixSafety.guarded)
+    result: FixResult = _run(source=source, ceiling=FixSafety.guarded)
     expect_in(item="LIMIT: Final[int] = 3", container=result.source)
     expect_in(item="1,  # one", container=result.source)
     expect_equal(
@@ -369,13 +397,13 @@ def test_unwritable_edit_does_not_block_other_fixes() -> None:
             ),
         ],
     )
-    ast.parse(source=result.source)
+    parse(source=result.source)
 
 
 def test_second_run_changes_nothing() -> None:
     """Reach a fixed point."""
-    first = _run(source=SAMPLE, ceiling=FixSafety.guarded)
-    second = _run(source=first.source, ceiling=FixSafety.guarded)
+    first: FixResult = _run(source=Constants.sample, ceiling=FixSafety.guarded)
+    second: FixResult = _run(source=first.source, ceiling=FixSafety.guarded)
     expect_equal(actual=second.source, expected=first.source)
     expect_equal(actual=second.applied, expected=())
 
@@ -385,10 +413,18 @@ def test_stable_file_takes_one_round() -> None:
     calls: list[str] = []
 
     def counting(subject: Subject, facts: ModuleFacts) -> None:
-        calls.append(subject.path)
-        Appliers.table["typing.add-final"](subject, facts)
+        """Record the call and delegate to the real applier.
 
-    result = _run(
+        Args:
+            subject: Assignment subject.
+            facts: Resolved imports and the parsed module.
+
+        """
+        calls.append(subject.path)
+        applier: Applier = Appliers.table["typing.add-final"]
+        applier(subject, facts)
+
+    result: FixResult = _run(
         source="""\
 LIMIT = 3
 """,
@@ -410,15 +446,15 @@ def _growing(subject: Subject, _facts: ModuleFacts) -> None:
         _facts: Unused resolved imports.
 
     """
-    node = subject.node
-    if isinstance(node, ast.Name):
+    node: AST = subject.node
+    if isinstance(node, Name):
         node.id = f"{node.id}A"
 
 
 def test_max_rounds_bounds_the_loop() -> None:
     """Never run more passes than allowed."""
     for rounds in (1, 2, 3):
-        result = _run(
+        result: FixResult = _run(
             source="""\
 A = 1
 """,
@@ -441,11 +477,11 @@ A = 1
 
 def test_remaining_lists_unfixed_findings() -> None:
     """Report findings that have no applicable fix."""
-    source = """\
+    source: str = """\
 def f(a: int) -> None:
     \"""Doc.\"""
 """
-    result = _run(source=source, ceiling=FixSafety.guarded)
+    result: FixResult = _run(source=source, ceiling=FixSafety.guarded)
     expect_equal(
         actual=[f.rule_key for f in result.remaining],
         expected=["docs.missing-parameter"],
@@ -457,9 +493,14 @@ def test_a_run_infers_once_per_distinct_text(
     *,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Reuse inference between the check, the attempts and the re-match."""
-    calls = {"convert": 0}
-    original = CommentedModule.convert
+    """Reuse inference between the check, the attempts and the re-match.
+
+    Args:
+        monkeypatch: Fixture replacing ``CommentedModule.convert``.
+
+    """
+    calls: dict[str, int] = {"convert": 0}
+    original: Callable[..., GraphConversion] = CommentedModule.convert
 
     def counting(
         self: CommentedModule,
@@ -468,6 +509,18 @@ def test_a_run_infers_once_per_distinct_text(
         filename: str = "<memory>",
         apply: bool = False,
     ) -> GraphConversion:
+        """Count the call and delegate to the real conversion.
+
+        Args:
+            self: Module being converted.
+            stubs_path: Stub directory.
+            filename: Reported filename.
+            apply: Whether to apply the conversion.
+
+        Returns:
+            The conversion result.
+
+        """
         calls["convert"] += 1
         return original(
             self=self,
@@ -477,7 +530,7 @@ def test_a_run_infers_once_per_distinct_text(
         )
 
     monkeypatch.setattr(target=CommentedModule, name="convert", value=counting)
-    source = """\
+    source: str = """\
     LIMIT = 3
 
 
@@ -490,7 +543,7 @@ def test_a_run_infers_once_per_distinct_text(
     )
     """
     expect_true(
-        condition=len((_run(source=source, ceiling=FixSafety.guarded)).applied)
+        condition=len(_run(source=source, ceiling=FixSafety.guarded).applied)
         > 0,
     )
     expect_true(condition=calls["convert"] <= Constants.max_inferences)
