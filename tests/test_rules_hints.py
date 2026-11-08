@@ -130,7 +130,7 @@ def test_uncorroborated_candidate_is_refused() -> None:
 
 
 def test_disagreeing_call_sites_give_no_hint() -> None:
-    """Refuse when call sites pass different types."""
+    """Refuse when call sites pass types the candidate does not unite."""
     index, functions = _index(
         source="""\
         def f(x):
@@ -138,7 +138,7 @@ def test_disagreeing_call_sites_give_no_hint() -> None:
 
 
         f(1)
-        f("a")
+        f(1.5)
         """,
     )
     node: arg = _first_parameter(function=functions[0])
@@ -572,6 +572,13 @@ def f(a: int):
         (
             """\
 def f(a: int):
+    return list('ab')
+""",
+            "list[str]",
+        ),
+        (
+            """\
+def f(a: int):
     y = a
     y = 'x'
     return y
@@ -592,7 +599,6 @@ def test_unprovable_expressions_are_refused() -> None:
     for statement in (
         "return []",
         "return {}",
-        "return list('ab')",
         "return a.b",
         "return a[0]",
     ):

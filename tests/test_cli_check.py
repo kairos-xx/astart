@@ -48,6 +48,7 @@ def _run(
     paths: list[Path],
     output_format: str = "text",
     fail_on: Severity = Severity.error,
+    exclude: tuple[str, ...] = (),
 ) -> tuple[int, str]:
     """Run the check command while capturing its output.
 
@@ -55,6 +56,7 @@ def _run(
         paths: Files or directories to check.
         output_format: Output format for the findings.
         fail_on: Minimum severity that fails the run.
+        exclude: Discovery globs to skip.
 
     Returns:
         The exit code and the captured output.
@@ -67,6 +69,7 @@ def _run(
             output_format=output_format,
             fail_on=fail_on,
             stubs_path=None,
+            exclude=exclude,
         ),
         out=out,
     )
@@ -99,6 +102,21 @@ def test_finding_exits_one_and_prints_location(*, tmp_path: Path) -> None:
     code, text = _run(paths=[path])
     expect_equal(actual=code, expected=1)
     expect_in(item=f"{path}:4:9: TYP001", container=text)
+
+
+def test_exclude_skips_matching_files(*, tmp_path: Path) -> None:
+    """Check that ``exclude`` keeps a bad file out of the report.
+
+    Args:
+        tmp_path: Directory holding the sample files.
+
+    """
+    skipped: Path = tmp_path / "skip" / "bad.py"
+    skipped.parent.mkdir(parents=True)
+    skipped.write_text(data=Constants.bad, encoding="utf-8")
+    code, text = _run(paths=[tmp_path], exclude=("skip/*",))
+    expect_equal(actual=code, expected=0)
+    expect_equal(actual=text, expected="")
 
 
 def test_severity_threshold_orders_levels() -> None:

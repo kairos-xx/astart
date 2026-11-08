@@ -36,6 +36,51 @@ Call-site types now count only when the argument expression's syntax proves
 them; precision is 100% on this corpus and locked by
 `tests/test_rules_recovery.py`.
 
+### External corpus (2026-11-08)
+
+`tests/corpus_ext` (165 modules, ~101k lines, 25 pinned permissively licensed
+libraries that are already fully annotated; see its README). The harness
+strips every annotation, fixes, and scores against the original. Each
+mismatch is classified by `recovery.relation`:
+
+* **correct** — the same annotation;
+* **narrower** / **looser** — a subtype / supertype of the original
+  (`str` for `str | None`, `bool | None` for `None`, `int` for `float`,
+  `NoReturn` for `None`); not a contradiction, reported separately;
+* **unresolved** — the original names an alias imported from another module
+  that cannot be judged from the file alone;
+* **wrong** — contradicts the original; this is what the precision gate
+  counts.
+
+Run with `python -m benchmarks recovery --corpus tests/corpus_ext
+--checker-delta --checker-gate --jobs 14 --json report.json`.
+
+### Accepted baselines (2026-11-08)
+
+| Corpus | Modules | Correct | Wrong | Compatible | Precision | Recall | New checker errors | Crashes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| stdlib (`benchmarks/baseline.json`) | 128 | 42 / 324 | 0 | 0 | 100 % | 13.0 % | 0 | 0 |
+| external (`benchmarks/baseline_ext.json`) | 165 | 2 511 / 12 789 | 6 | 136 | 99.77 % | 19.6 % | 0 | 0 |
+
+The external row went 90.5 % → 99.64 % precision (264 → 10 mismatches) by
+fixing the `args=*args` keywordizer bug, in-module `NoReturn` propagation,
+abstract `NotImplementedError` hooks, and by scoring compatible differences
+separately (`recovery.relation`); it then gained 101 correct annotations
+(+0.8 points of recall) from the calibrated `bool` return rule, which was
+chosen by measuring every refused engine candidate against the originals
+(see TODO X-05).
+
+**Literal-default policy (2026-11-08, X-01).** A literal default is only as
+good as its measured exactness against 165 typed libraries: `bool` 95 %,
+`float` 100 %, `int` 73 %, `str` 69 %, `bytes` 14 %. Annotations taken from
+a default alone now carry that confidence (`confidence.Constants.by_literal`)
+and `astart fix` skips anything below 0.8 by default, so `int`/`str`
+defaults are written only with independent evidence (in-module call sites
+that all agree) or with `--min-confidence 0`. Effect on the external corpus:
+narrower parameter annotations 74 → 21, precision 99.65 → 99.69 %, recall
+20.8 → 19.3 % (the 201 held-back annotations, about 30 % of which would have
+rejected valid callers). The baselines above were refreshed for this change.
+
 ### Accepted gated baseline (2026-11-07)
 
 Stored in `benchmarks/baseline.json`; produced with
@@ -58,6 +103,23 @@ what cross-module call sites (M3-03) and typeshed loading (M3-04) address.
 Gate the working tree with
 `python -m benchmarks gate --report <new.json>`; it fails on any wrong
 annotation, new checker error, crash, or recall drop beyond 0.5 points.
+
+### How to refresh the baseline
+
+Run the gated recovery, compare the report with the stored baseline, then
+accept it:
+
+```console
+PYTHONPATH=src:. python -m benchmarks recovery --checker-delta --checker-gate --delta-limit 25 --json report.json
+python -m benchmarks gate --report report.json
+python -m benchmarks baseline --report report.json
+```
+
+Only accept a baseline with `0 crashes, 0 wrong, 0 new errors` — the same
+fields the table above reports: `Modules` (with its crash count),
+`Precision (correct / judged)` (with its wrong count) and `New pyright
+errors`. `gate` enforces the rule mechanically; `baseline` then stores
+`report.json` as `benchmarks/baseline.json`.
 
 ### 113-module baseline (2026-11-07, audit)
 
@@ -139,10 +201,107 @@ workload (line counts are approximate — whole modules are appended):
 | ~1.2k | 0.75 s | 1.01 s | 1.76 s |
 | ~2.2k | 2.10 s | 2.45 s | 4.55 s |
 | ~12k | 29.7 s | 72.3 s | 102.0 s |
-| ~50k | — | — | pending (run interrupted) |
+| ~12k (2026-11-08, after token-index and scope-env fixes) | 21.4 s | 36.9 s | 58.3 s |
+| ~50k | > 30 min | — | infeasible in practice |
 
 **Superlinear growth is flagged**: `check` scales worse than linearly
 (1.2k→0.75 s, 2.2k→2.1 s, 12k→30 s — roughly quadratic in this range),
-consistent with the remaining per-query tree traversals noted above.
-The 50k bucket completes the table once the in-flight `_graph`/engine
-work lands.
+and the ~50k bucket is far worse still: `check` alone exceeded 30 minutes
+on the 50,763-line workload (> 85× the 12k `check` for 4.2× the lines),
+so `fix` — up to `max_rounds=3` passes each containing a `check` plus
+`module_facts`/hint-index work, with `_degrade` halving re-running
+`_attempt`/`_rematch` per split — pushes the full `profile_perf` run into
+multi-hour territory. Two earlier attempts were interrupted after ~9 h of
+CPU each; a 2026-11-08 run was still in `fix` after ~2 h. `cProfile` on
+`check` shows the dominant cost is `hints.index → _candidates →
+CommentedModule.convert → semantic/analyzer.convert →
+_graph/conversion → backend/checkpoint._infer` (~135 s+ cumulative inside
+a single 200 s window, ~975 M calls), i.e. the whole-module graph
+conversion invoked once per hint-index build.
+
+## Negotiation shadow run (2026-11-08)
+
+`python -m benchmarks.shadow tests/corpus_ext --jobs 8 --json out.json`
+strips the annotations from every external-corpus module and runs both the
+hint index and the contract negotiator (`astart.rules.negotiation`) on the
+same text, scoring each written annotation against the original. Nothing is
+written back; this is the F-19 measurement that gates replacing the
+propagation loop (F-20). The JSON also lists, per hint basis, what the hint
+index writes and the negotiator does not.
+
+| Group (12 789 original annotations, 0 crashes) | Correct | Compatible | Wrong |
+| --- | ---: | ---: | ---: |
+| Written by both, identical text | 2 400 | 185 | 2 |
+| Negotiation only | 41 | 7 | 0 |
+| Hint index only | 76 | 11 | 4 |
+| Written by both, different text (hint index / negotiation) | 0 / 1 | 1 / 0 | 0 / 0 |
+
+How it got there (hint index only, exact): 338 with the first builders (single
+assignments, calls, returns); 76 after containers (F-10), attributes (F-11),
+narrowing (F-12), protocol-dunder results (F-35, 193 closed) and calibrated
+`bool` returns (F-36, 101 closed). What is left in the hint-index column is
+default-literal parameters (70, of which 60 exact and 3 wrong), call-site
+hints (10) and syntax-proven returns (8): the hint index accepts a literal
+default even when some callers are unknown, the negotiator does not (F-37).
+
+Never contradicted: where both approaches write, the negotiator agrees with
+the hint index except one case, which it gets right. Soundness bugs the run
+exposed and that are now pinned in `tests/test_negotiation_module.py`: stub
+and abstract bodies and `__exit__` written as `None`; constructor calls typed
+as `__init__`'s return; un-awaited coroutines; a rebound parameter still
+feeding later reads; a source node with no evidence letting the one `None`
+among several writes settle an attribute.
+
+Eight conflicts are reported over the corpus (a declaration or constraint
+that the evidence cannot satisfy); they are candidates for the future
+`typing.type-conflict` rule (F-23) and have not been triaged.
+
+## Conversion pairs (2026-11-08)
+
+`python -m benchmarks.pair UNTYPED TYPED [--no-negotiate]` fixes the untyped
+module (variables on, negotiation on) and scores the result against its typed
+twin. Pairs: `tests/pairs/resolver_extended_*` (the author's fixture) and
+`dev/untyped.py` -> `dev/typed.py`.
+
+| Pair | Parameters + returns exact | Variables exact | Contradictions |
+| --- | ---: | ---: | ---: |
+| Resolver, start of day | 71 / 557 | 3 / 329 | 2 |
+| Resolver, now | 113 / 557 | 57 / 329 | 2 |
+| Dev, start of day | 11 / 482 | 0 / 335 | 2 |
+| Dev, now | 52 / 482 | 53 / 335 | 2 |
+
+The two contradictions left are synthesized Protocols judged by the type
+checker. A further 13 (dev) and 17 (resolver) are *narrower* than the
+author's annotation (`list[int]` where the author wrote `Sequence[int]`);
+the scorer now knows the `collections.abc` hierarchy and its variance, and a
+name it cannot see through an import or a foreign base is *unresolved*, not
+wrong. Three rules produced most of the jump: a *read* of `globals()` no
+longer makes every bare-name call untrusted (0 of 152 calls to module
+functions bound before, all bound now); negotiated hints supplement the hint
+index; and expressions over operands (arithmetic, tuples, comparisons,
+f-strings, builtin calls) are typed once their operands settle.
+
+Why the rest is missing (dev pair, the reason each node is opaque):
+unprovable calls 46, unknown names 46, functions that escape as values 28,
+parameters nobody calls and that have no default 24, stub or abstract bodies
+20, calls the binder refuses 16, tuples 14, generators 7; for variables,
+unprovable calls 87 and container literals that are mutated or built by a
+comprehension 44. These are the tasks F-40, F-41, F-15 and M4-06.
+
+## Negotiation as the default (2026-11-08)
+
+`FixSettings.negotiate` is on (`--no-negotiate` turns it off). Gates with it
+on: gold fix-level 561 cases, negotiation changes 0 written annotations and
+adds 24 reviewed ones; 15 of 15 semantic-equivalence projects import and run
+identically after `fix` (five of them were checked from throwaway installs
+of the pinned versions because they are not installed here); stdlib baseline
+37 -> 42 correct, 0 wrong; external baseline 2 462 -> 2 511 correct and 8 -> 6
+wrong (both baselines were refreshed with negotiation on; an earlier run that
+reached 2 531 correct was rejected: it carried 6 new contradictions, generic
+classes named bare, and failed the 99.5 % precision gate). The
+semantic run caught two bugs before they shipped, both now regression tests:
+`-> URIBuilder` inside `class URIBuilder` (a signature annotation is
+evaluated when its `def` runs, so it may only name module classes defined
+before it and not the class it sits in), and a junk `from uuid import UUID
+as _UUID` inside `uuid.py` (a negotiated annotation naming the module's own
+class must not be imported over).

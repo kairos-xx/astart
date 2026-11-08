@@ -75,8 +75,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Final, cast, final
 
-if TYPE_CHECKING:
-    from astart._graph.backend.engine import Parenthesized
 from astart._graph.dispatch import LowercaseTransformer, LowercaseVisitor
 from astart._graph.graph.semantics import (
     build_annotation,
@@ -88,6 +86,8 @@ from astart._graph.graph.semantics import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from types import EllipsisType
+
+    from astart._graph.backend.engine import Parenthesized
 
 
 @final
@@ -425,6 +425,9 @@ def element_type(source: str) -> str:
 
     """
     text: str = source.strip()
+    arms: list[str] = split_top_level(source=text)
+    if len(arms) > 1:
+        return merge_type_sources(*(element_type(source=arm) for arm in arms))
     normalized: str = norm(source=text)
     result: str | None = _element_type_from_prefix(
         text=text,

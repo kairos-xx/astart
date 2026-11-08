@@ -22,6 +22,13 @@ class Constants:
         proven: Confidence of a fix that preserves meaning by construction.
         by_basis: Confidence of an inferred annotation, by its evidence.
         by_fix: Confidence of other guarded fixes, by fix key.
+        by_literal: Confidence of an annotation taken from a literal default
+            alone, by type: the share of such parameters in 165 typed
+            libraries whose original annotation was exactly that type
+            (``int`` 73 %, ``str`` 69 %; the rest are wider, such as
+            ``float`` or ``str | None``).
+        default_minimum: Confidence below which ``astart fix`` writes
+            nothing unless asked (``--min-confidence``).
         fallback: Confidence of a guarded fix not listed above.
         hinted_fixes: Fixes whose confidence comes from the hint's basis.
 
@@ -37,15 +44,30 @@ class Constants:
         HintBasis.optional_default: 0.95,
         HintBasis.protocol_result: 0.97,
         HintBasis.attribute_assignments: 0.9,
+        HintBasis.calibrated_candidate: 0.9,
+        HintBasis.union_sites: 0.9,
+        HintBasis.negotiated: 0.95,
+        HintBasis.engine: 0.55,
     }
     by_fix: Final[Mapping[str, float]] = {
         "calls.add-keywords": 0.95,
         "typing.synthesize-protocol": 0.9,
         "typing.synthesize-typevar": 0.9,
+        "typing.add-variable-annotation": 0.95,
     }
+    by_literal: Final[Mapping[str, float]] = {
+        "bool": 0.99,
+        "float": 0.99,
+        "int": 0.72,
+        "str": 0.69,
+    }
+    default_minimum: Final[float] = 0.8
     fallback: Final[float] = 0.9
     hinted_fixes: Final[frozenset[str]] = frozenset(
-        {"typing.add-inferred-annotation", "typing.add-attribute-annotation"},
+        {
+            "typing.add-inferred-annotation",
+            "typing.add-attribute-annotation",
+        },
     )
 
 
@@ -72,5 +94,10 @@ def offer_confidence(
     if fix.key in Constants.hinted_fixes and facts.hints is not None:
         hint: Hint | None = facts.hints.index().hint_for(node=subject.node)
         if hint is not None:
+            if hint.basis is HintBasis.default_literal:
+                return Constants.by_literal.get(
+                    hint.source,
+                    Constants.by_basis[hint.basis],
+                )
             return Constants.by_basis[hint.basis]
     return Constants.by_fix.get(fix.key, Constants.fallback)

@@ -26,7 +26,7 @@ from ast import (
     expr,
     iter_child_nodes,
 )
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final, final
 
 from astart.rules.procedural import Candidate, span_of
 from astart.semantic.type_expressions import TypeExpressionCodec
@@ -41,7 +41,27 @@ if TYPE_CHECKING:
     from astart.semantic.type_expressions import TypeExpression
     from astart.semantic.typing_relations import Compatibility
 
-_SCOPE_NODES = (FunctionDef, AsyncFunctionDef, Lambda)
+
+@final
+class Constants:
+    """Group module-level constants.
+
+    Attributes:
+        scope_nodes: Definition nodes that open a scope for name binding.
+
+    """
+
+    scope_nodes: Final[
+        tuple[
+            type[FunctionDef],
+            type[AsyncFunctionDef],
+            type[Lambda],
+        ]
+    ] = (
+        FunctionDef,
+        AsyncFunctionDef,
+        Lambda,
+    )
 
 
 def _declared_shape(*, annotation: expr | None) -> TypeShape | None:
@@ -132,7 +152,7 @@ def _own_returns(*, node: FunctionDef | AsyncFunctionDef) -> list[Return]:
         if isinstance(current, Return):
             found.append(current)
             continue
-        if isinstance(current, _SCOPE_NODES):
+        if isinstance(current, Constants.scope_nodes):
             continue
         stack.extend(iter_child_nodes(node=current))
     found.reverse()

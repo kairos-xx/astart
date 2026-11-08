@@ -33,8 +33,10 @@ data (`Rule`, `Fix`, `Profile`, `Relation`) validated by
 2. **Procedural** — set `procedure` to a key registered in
    `Registries.procedures`, implemented in a standalone module (see
    `rules/procedural.py`, `imports_bare.py`, `docs_missing.py` for the
-   `Candidate` shape). The engine calls it and turns each `Candidate`
-   into a `Finding`.
+   `Candidate` shape). **Not yet wired:** `Registries.procedures` is
+   empty in the default catalog and `engine.check` never invokes
+   `rule.procedure` — see TODO M8-12/M8-22. Until then detectors are
+   exercised only by their unit tests.
 
 ## Example-as-test
 

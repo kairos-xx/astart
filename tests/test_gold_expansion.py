@@ -113,6 +113,11 @@ def _hints(source: str) -> dict[str, str | None]:
             *node.args.posonlyargs,
             *node.args.args,
             *node.args.kwonlyargs,
+            *(
+                item
+                for item in (node.args.vararg, node.args.kwarg)
+                if item is not None
+            ),
         )
         for parameter in parameters:
             if parameter.arg in {"self", "cls"}:
@@ -581,7 +586,7 @@ def _call_site_cases() -> None:
             body="return p is None",
             calls="f(1)\n",
         ),
-        expected={"f": None, "f.p": None},
+        expected={"f": "bool", "f.p": None},
     )
     _case(
         name=f"{family}/augassign",
@@ -668,11 +673,23 @@ _DISAGREE_PAIRS: Final[tuple[tuple[str, str], ...]] = (
 )
 
 
+_UNION_SPELLINGS: Final[dict[tuple[str, str], str]] = {
+    ("1", "'a'"): "int | str",
+    ("True", "1"): "int",
+    ("'a'", "[1]"): "str | list[int]",
+    ("[1]", "{'a': 1}"): "dict[str, int] | list[int]",
+    ("1.5", "b'x'"): "float | bytes",
+    ("{1}", "[1]"): "list[int] | set[int]",
+}
+"""Pairs whose engine candidate is exactly the union of both sites."""
+
+
 def _disagree_cases() -> None:
-    """Register disagreeing-evidence refusal cases.."""
+    """Register disagreeing-evidence cases: refusal unless a union is shown."""
     family: str = "call_sites_disagree"
     for left, right in _DISAGREE_PAIRS:
         tag: str = f"{left}-{right}"
+        union: str | None = _UNION_SPELLINGS.get((left, right))
         _case(
             name=f"{family}/identity/{tag}",
             family=family,
@@ -682,7 +699,10 @@ def _disagree_cases() -> None:
                 body="return p",
                 calls=f"f({left})\nf({right})\n",
             ),
-            expected={"f": None, "f.p": None},
+            expected={
+                "f": None if tag == "True-1" else union,
+                "f.p": union,
+            },
         )
         _case(
             name=f"{family}/len/{tag}",
@@ -693,7 +713,7 @@ def _disagree_cases() -> None:
                 body="return len(p)",
                 calls=f"f({left})\nf({right})\n",
             ),
-            expected={"f": "int", "f.p": None},
+            expected={"f": "int", "f.p": union},
         )
     _case(
         name=f"{family}/three-sites",
@@ -704,7 +724,7 @@ def _disagree_cases() -> None:
             body="return p",
             calls="f(1)\nf(2)\nf('a')\n",
         ),
-        expected={"f": None, "f.p": None},
+        expected={"f": "int | str", "f.p": "int | str"},
     )
     family = "call_sites_unknown"
     _case(
@@ -769,7 +789,7 @@ def _disagree_cases() -> None:
             body="return p",
             calls="f(abs(1))\n",
         ),
-        expected={"f": None, "f.p": None},
+        expected={"f": None, "f.p": "int"},
     )
     _case(
         name=f"{family}/list-call-site",
@@ -780,7 +800,7 @@ def _disagree_cases() -> None:
             body="return p",
             calls="f(list([1]))\n",
         ),
-        expected={"f": None, "f.p": None},
+        expected={"f": "list[int]", "f.p": "list[int]"},
     )
     _case(
         name=f"{family}/sorted-site",
@@ -791,7 +811,7 @@ def _disagree_cases() -> None:
             body="return p",
             calls="f(sorted([1]))\n",
         ),
-        expected={"f": None, "f.p": None},
+        expected={"f": "list[int]", "f.p": "list[int]"},
     )
     _case(
         name=f"{family}/method-site",
@@ -802,7 +822,7 @@ def _disagree_cases() -> None:
             body="return p",
             calls="f('a'.upper())\n",
         ),
-        expected={"f": None, "f.p": None},
+        expected={"f": "str", "f.p": "str"},
     )
     _case(
         name=f"{family}/subscript-site",
@@ -893,7 +913,7 @@ def _evidence_gap_cases() -> None:
     family = "uncorroborated"
     bodies: tuple[tuple[str, str, str | None], ...] = (
         ("return-len", "return len(p)", "int"),
-        ("return-compare", "return p > 0", None),
+        ("return-compare", "return p > 0", "bool"),
         ("return-not", "return not p", "bool"),
         ("return-self", "return p", None),
         ("return-str", "return str(p)", "str"),
@@ -1747,6 +1767,309 @@ def _sweep_cases() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Feature families: variadic, attribute reads, comprehensions, rebinds.
+# ---------------------------------------------------------------------------
+
+
+def _variadic_cases() -> None:
+    """Register ``*args``/``**kwargs`` evidence cases."""
+    family: str = "variadic"
+    _case(
+        name=f"{family}/star-ints",
+        family=family,
+        source=_def(
+            name="f",
+            params="*a",
+            body="return len(a)",
+            calls="f(1, 2)\nf(3)\n",
+        ),
+        expected={"f": "int", "f.a": "int"},
+    )
+    _case(
+        name=f"{family}/double-star-strs",
+        family=family,
+        source=_def(
+            name="f",
+            params="**k",
+            body="return len(k)",
+            calls='f(x="s", y="t")\n',
+        ),
+        expected={"f": "int", "f.k": "str"},
+    )
+    _case(
+        name=f"{family}/star-after-positional",
+        family=family,
+        source=_def(
+            name="f",
+            params="x, *a",
+            body="return x",
+            calls='f("s", 1, 2)\n',
+        ),
+        expected={"f": "str", "f.x": "str", "f.a": "int"},
+    )
+    _case(
+        name=f"{family}/kwargs-same-type",
+        family=family,
+        source=_def(
+            name="f",
+            params="**k",
+            body="return k",
+            calls="f(a=1, b=2)\n",
+        ),
+        expected={"f": None, "f.k": "int"},
+    )
+    _case(
+        name=f"{family}/star-mixed",
+        family=family,
+        source=_def(
+            name="f",
+            params="*a",
+            body="return len(a)",
+            calls='f(1, "a")\n',
+        ),
+        expected={"f": "int", "f.a": None},
+    )
+    _case(
+        name=f"{family}/star-unpacked-call",
+        family=family,
+        source=_src(
+            "def f(*a):\n    return len(a)\n\n\n",
+            "def run(xs):\n    return f(*xs)\n\n\n",
+            "f(1, 2)\n",
+        ),
+        expected={"f": "int", "f.a": None, "run": None, "run.xs": None},
+    )
+    _case(
+        name=f"{family}/star-no-extras",
+        family=family,
+        source=_def(
+            name="f",
+            params="first, *rest",
+            body="return first",
+            calls="f(1)\n",
+        ),
+        expected={"f": "int", "f.first": "int", "f.rest": None},
+    )
+    _case(
+        name=f"{family}/star-escaped",
+        family=family,
+        source=_src(
+            "def f(*a):\n    return len(a)\n\n\n",
+            "g = f\ng(1, 2)\n",
+        ),
+        expected={"f": "int", "f.a": None},
+    )
+
+
+def _attribute_read_cases() -> None:
+    """Register ``return self.x`` attribute-table cases."""
+    family: str = "attribute_read"
+    _case(
+        name=f"{family}/agreed-int",
+        family=family,
+        source=_src(
+            "class Box:\n",
+            "    def __init__(self):\n        self.size = 3\n\n",
+            "    def get(self):\n        return self.size\n",
+        ),
+        expected={"__init__": "None", "get": "int"},
+    )
+    _case(
+        name=f"{family}/arithmetic",
+        family=family,
+        source=_src(
+            "class Box:\n",
+            "    def __init__(self):\n        self.a = 1\n\n",
+            "    def nxt(self):\n        return self.a + 1\n",
+        ),
+        expected={"__init__": "None", "nxt": "int"},
+    )
+    _case(
+        name=f"{family}/optional-writes",
+        family=family,
+        source=_src(
+            "class Box:\n",
+            "    def __init__(self):\n        self.size = None\n\n",
+            "    def grow(self) -> None:\n        self.size = 2\n\n",
+            "    def get(self):\n        return self.size\n",
+        ),
+        expected={"__init__": "None", "get": "int | None"},
+    )
+    _case(
+        name=f"{family}/conflicting-writes",
+        family=family,
+        source=_src(
+            "class Box:\n",
+            "    def __init__(self):\n        self.size = 3\n\n",
+            "    def rename(self) -> None:\n        self.size = 'big'\n\n",
+            "    def get(self):\n        return self.size\n",
+        ),
+        expected={"__init__": "None", "get": None},
+    )
+    _case(
+        name=f"{family}/rebound-self",
+        family=family,
+        source=_src(
+            "class Box:\n",
+            "    def __init__(self):\n        self.size = 3\n\n",
+            "    def get(self, other):\n        self = other\n        ",
+            "return self.size\n",
+        ),
+        expected={"__init__": "None", "get": None, "get.other": None},
+    )
+    _case(
+        name=f"{family}/two-classes",
+        family=family,
+        source=_src(
+            "class A:\n",
+            "    def __init__(self):\n        self.v = 1\n\n",
+            "    def get(self):\n        return self.v\n\n\n",
+            "class B:\n",
+            "    def __init__(self):\n        self.w = 'x'\n\n",
+            "    def fetch(self):\n        return self.w\n",
+        ),
+        expected={
+            "__init__": "None",
+            "get": "int",
+            "fetch": "str",
+        },
+    )
+
+
+def _comprehension_cases() -> None:
+    """Register comprehension display cases."""
+    family: str = "comprehension"
+    _case(
+        name=f"{family}/list-range",
+        family=family,
+        source=_def(
+            name="f",
+            params="n",
+            body="return [i * 2 for i in range(n)]",
+        ),
+        expected={"f": "list[int]", "f.n": None},
+    )
+    _case(
+        name=f"{family}/dict-comp",
+        family=family,
+        source=_def(
+            name="g",
+            params="",
+            body='return {c: 0 for c in "ab"}',
+        ),
+        expected={"g": "dict[str, int]"},
+    )
+    _case(
+        name=f"{family}/set-comp",
+        family=family,
+        source=_def(
+            name="h",
+            params="",
+            body="return {str(i) for i in range(3)}",
+        ),
+        expected={"h": "set[str]"},
+    )
+    _case(
+        name=f"{family}/target-shadows",
+        family=family,
+        source=_src(
+            'i = "s"\n\n\n',
+            "def f():\n    return [i for i in range(3)]\n",
+        ),
+        expected={"f": "list[int]"},
+    )
+    _case(
+        name=f"{family}/async-comp",
+        family=family,
+        source=_src(
+            "async def f(src):\n    return [i async for i in src]\n",
+        ),
+        expected={"f": None, "f.src": None},
+    )
+    _case(
+        name=f"{family}/unknown-iterable",
+        family=family,
+        source=_def(
+            name="f",
+            params="xs",
+            body="return [x for x in xs]",
+        ),
+        expected={"f": None, "f.xs": None},
+    )
+
+
+def _multi_binding_cases() -> None:
+    """Register multi-binding local cases."""
+    family: str = "multi_binding"
+    _case(
+        name=f"{family}/branch-agree",
+        family=family,
+        source=_src(
+            "def f(flag):\n",
+            "    n = 0\n",
+            "    if flag:\n        n = 1\n",
+            "    return n\n",
+        ),
+        expected={"f": "int", "f.flag": None},
+    )
+    _case(
+        name=f"{family}/augmented-counter",
+        family=family,
+        source=_src(
+            "def count(items):\n",
+            "    total = 0\n",
+            "    for _ in items:\n        total += 1\n",
+            "    return total\n",
+        ),
+        expected={"count": "int", "count.items": None},
+    )
+    _case(
+        name=f"{family}/self-referential",
+        family=family,
+        source=_src(
+            "def grow(steps):\n",
+            "    x = 1\n",
+            "    for _ in steps:\n        x = x * 2\n",
+            "    return x\n",
+        ),
+        expected={"grow": "int", "grow.steps": None},
+    )
+    _case(
+        name=f"{family}/disagreeing",
+        family=family,
+        source=_src(
+            "def f(flag):\n",
+            "    v = 1\n",
+            "    if flag:\n        v = 'a'\n",
+            "    return v\n",
+        ),
+        expected={"f": None, "f.flag": None},
+    )
+    _case(
+        name=f"{family}/widening-augassign",
+        family=family,
+        source=_src(
+            "def f(items):\n",
+            "    v = 0\n",
+            "    for _ in items:\n        v += 0.5\n",
+            "    return v\n",
+        ),
+        expected={"f": None, "f.items": None},
+    )
+    _case(
+        name=f"{family}/loop-target-collision",
+        family=family,
+        source=_src(
+            "def f(xs):\n",
+            "    x = 0\n",
+            "    for x in xs:\n        pass\n",
+            "    return x\n",
+        ),
+        expected={"f": None, "f.xs": None},
+    )
+
+
 _default_literal_cases()
 _call_site_cases()
 _disagree_cases()
@@ -1755,6 +2078,10 @@ _proven_return_cases()
 _refusal_cases()
 _flow_cases()
 _sweep_cases()
+_variadic_cases()
+_attribute_read_cases()
+_comprehension_cases()
+_multi_binding_cases()
 
 
 @pytest.mark.parametrize(
@@ -1779,9 +2106,11 @@ def test_gold_covers_every_rejection_family() -> None:
     """The gold set spans the ladder's named refusal classes."""
     families: set[str] = {case.family for case in _CASES}
     expected: set[str] = {
+        "attribute_read",
         "call_sites",
         "call_sites_disagree",
         "call_sites_unknown",
+        "comprehension",
         "control_flow",
         "declaration",
         "default_disagrees",
@@ -1791,6 +2120,7 @@ def test_gold_covers_every_rejection_family() -> None:
         "generator",
         "imported_site",
         "method_binding",
+        "multi_binding",
         "nested_scope",
         "none_default",
         "proven_none",
@@ -1799,6 +2129,7 @@ def test_gold_covers_every_rejection_family() -> None:
         "typed_flow",
         "uncorroborated",
         "unresolved",
+        "variadic",
     }
     expect_equal(actual=families & expected, expected=expected)
 
@@ -1851,6 +2182,7 @@ _FIX_CATALOG: Final[Catalog] = replace(
 # hint-level ``expected`` map unchanged.
 _FIX_EXPECTED: Final[dict[str, dict[str, str | None]]] = {
     "call_sites/repr-site": {"f": "str", "f.p": "str"},
+    "call_sites_unknown/abs-site": {"f": "int", "f.p": "int"},
 }
 
 
@@ -1896,6 +2228,11 @@ def _written(source: str) -> dict[str, str | None]:
             *node.args.posonlyargs,
             *node.args.args,
             *node.args.kwonlyargs,
+            *(
+                item
+                for item in (node.args.vararg, node.args.kwarg)
+                if item is not None
+            ),
         )
         for parameter in parameters:
             if parameter.arg in {"self", "cls"}:
@@ -1944,6 +2281,7 @@ def test_gold_fix_level(case: Case, *, with_checker: bool) -> None:
         settings=FixSettings(
             ceiling=FixSafety.guarded,
             checker=checker,
+            negotiate=False,
         ),
     )
     expect_true(
@@ -1956,3 +2294,94 @@ def test_gold_fix_level(case: Case, *, with_checker: bool) -> None:
         actual={key: written.get(key) for key in expected},
         expected=expected,
     )
+
+
+# Annotations the contract negotiator writes where the hint index writes none.
+# Each was reviewed; anything not listed here fails the superset test below.
+_NEGOTIATED_ADDS: Final[dict[tuple[str, str], str]] = {
+    ("attribute_read/conflicting-writes", "get"): "int | str",
+    ("call_sites/arith-bool", "f"): "int",
+    ("call_sites_disagree/identity/1-None", "f.p"): "int | None",
+    ("call_sites_disagree/identity/None-'a'", "f.p"): "str | None",
+    ("call_sites_disagree/len/1-None", "f.p"): "int | None",
+    ("call_sites_disagree/len/None-'a'", "f.p"): "str | None",
+    ("control_flow/if-else-diff", "f"): "int | str",
+    ("control_flow/try-diff", "f"): "int | str",
+    ("default_literal/add-self/bool", "f"): "int",
+    ("method_binding/self-call", "n"): "int",
+    ("method_binding/self-chain", "n"): "int",
+    ("typed_flow/annotated-chain", "g"): "int",
+    ("typed_flow/callee-return", "g"): "int",
+    ("typed_flow/deep-chain", "g"): "int",
+    ("typed_flow/deep-chain", "h"): "int",
+    ("typed_flow/hinted-chain", "g"): "int",
+    ("typed_flow/none-ann", "f"): "int | None",
+    ("unresolved/mutual", "f"): "int",
+    ("unresolved/mutual", "f.n"): "int",
+    ("unresolved/mutual", "g"): "int",
+    ("unresolved/mutual", "g.n"): "int",
+    ("unresolved/recursive", "f"): "int",
+    ("unresolved/recursive", "f.n"): "int",
+    ("variadic/star-unpacked-call", "run"): "int",
+}
+
+
+def _fixed_annotations(
+    case: Case,
+    *,
+    negotiate: bool,
+) -> dict[str, str | None]:
+    """Run the fixer on a gold case and list the annotations of interest.
+
+    Args:
+        case: Gold case.
+        negotiate: Whether negotiated hints supplement the hint index.
+
+    Returns:
+        The written annotation for each key the case expects.
+
+    """
+    result: FixResult = fix_source(
+        source=case.source,
+        filename="gold.py",
+        catalog=_FIX_CATALOG,
+        registries=_FIX_REGISTRIES,
+        settings=FixSettings(
+            ceiling=FixSafety.guarded,
+            negotiate=negotiate,
+        ),
+    )
+    written: dict[str, str | None] = _written(source=result.source)
+    return {key: written.get(key) for key in _fix_expected(case=case)}
+
+
+@pytest.mark.parametrize(
+    "case",
+    _CASES,
+    ids=lambda c: f"{c.family}:{c.name}",
+)
+def test_gold_negotiation_is_a_reviewed_superset(case: Case) -> None:
+    """Negotiation never changes a written annotation and adds only reviewed.
+
+    Args:
+        case: Gold case to run with and without negotiation.
+
+    """
+    plain: dict[str, str | None] = _fixed_annotations(
+        case=case,
+        negotiate=False,
+    )
+    negotiated: dict[str, str | None] = _fixed_annotations(
+        case=case,
+        negotiate=True,
+    )
+    for key, before in plain.items():
+        after: str | None = negotiated[key]
+        if before is not None:
+            expect_equal(actual=after, expected=before)
+        elif after is not None:
+            expect_equal(
+                actual=after,
+                expected=_NEGOTIATED_ADDS.get((case.name, key)),
+                message=f"{case.name}: unreviewed addition for {key}",
+            )

@@ -49,7 +49,7 @@ skip_covered = false
 
 [tool.ruff]
 extend-exclude = [
-    ".dev",
+    "dev",
     ".history",
     "mutants",
     "build",
@@ -64,6 +64,10 @@ extend-exclude = [
 line-length = 79
 src = ["."]
 target-version = "py313"
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint]
 ignore = ["D203", "D213"]
@@ -82,6 +86,7 @@ exclude = [
     "**/mutants",
     "dist",
     "build",
+    "dev",
     ".build-cache",
     "vsix",
     "EXACTUS_RESULTS/COVERAGE_TESTS/ARTIFACTS/COVERAGE/tmp",
@@ -119,6 +124,7 @@ root = true
 
 [tool.exactus.lints]
 simple = false # true runs only the all_lints package audit and reports
+no-fix = true
 
 [tool.exactus.coverage_tests]
 fail-under = 90       # overall Python+JS coverage floor

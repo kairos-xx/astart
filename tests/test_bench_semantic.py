@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Final
+from typing import Final, final
 
 from benchmarks.semantic import (
     Project,
@@ -14,9 +14,21 @@ from benchmarks.semantic import (
 )
 from tests.expectations import expect_equal, expect_in, expect_true
 
-PINNED: Final[int] = 10
 
-MODULE: Final[str] = """\
+@final
+class Constants:
+    """Constants used in the test_bench_semantic module.
+
+    Attributes:
+        pinned: Pinned benchmark entries the output must match.
+        module: Source of the tiny benchmark module.
+        smoke: Import-and-call snippet run against the package.
+
+    """
+
+    pinned: Final[int] = 15
+
+    module: Final[str] = """\
 LIMIT = 3
 
 
@@ -39,6 +51,12 @@ class Box:
 print_nothing = None
 """
 
+    smoke: Final[str] = (
+        "from tinypkg import core\n"
+        "result = [core.scale(4), core.describe([1, 2]), core.Box(7).get(),"
+        " core.LIMIT]"
+    )
+
 
 def _package(*, tmp_path: Path, extra: str = "") -> Path:
     """Create a tiny importable package under ``tmp_path``.
@@ -54,19 +72,15 @@ def _package(*, tmp_path: Path, extra: str = "") -> Path:
     root: Path = tmp_path / "tinypkg"
     root.mkdir()
     _ = (root / "__init__.py").write_text(data="", encoding="utf-8")
-    _ = (root / "core.py").write_text(data=MODULE + extra, encoding="utf-8")
+    _ = (root / "core.py").write_text(
+        data=Constants.module + extra,
+        encoding="utf-8",
+    )
     _ = (root / "broken_import.py").write_text(
         data="import definitely_missing_module\n",
         encoding="utf-8",
     )
     return root
-
-
-SMOKE: Final[str] = (
-    "from tinypkg import core\n"
-    "result = [core.scale(4), core.describe([1, 2]), core.Box(7).get(),"
-    " core.LIMIT]"
-)
 
 
 def test_a_fixed_package_behaves_like_the_original(*, tmp_path: Path) -> None:
@@ -81,7 +95,7 @@ def test_a_fixed_package_behaves_like_the_original(*, tmp_path: Path) -> None:
             name="tinypkg",
             version="0",
             package="tinypkg",
-            smoke=SMOKE,
+            smoke=Constants.smoke,
         ),
         source=_package(tmp_path=tmp_path),
     )
@@ -132,7 +146,7 @@ def test_missing_or_mismatched_projects_are_skipped_with_a_note() -> None:
 def test_the_pinned_list_is_well_formed_and_serialises() -> None:
     """Check that the pinned list is well formed and serialises."""
     projects: tuple[Project, ...] = load_projects(path=_projects_path())
-    expect_equal(actual=len(projects), expected=PINNED)
+    expect_equal(actual=len(projects), expected=Constants.pinned)
     for item in projects:
         expect_true(condition="result" in item.smoke, message=item.name)
     text: str = to_json(results=[ProjectResult.skipped(name="a", note="n")])

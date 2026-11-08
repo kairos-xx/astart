@@ -1,0 +1,126 @@
+{
+  "fixes": [
+    {
+      "after": [],
+      "before": [],
+      "edits": [],
+      "idempotent": true,
+      "key": "whitespace.collapse-blank-lines",
+      "min_confidence": 0.9,
+      "preconditions": null,
+      "rules": [
+        "whitespace.excessive-blank-lines"
+      ],
+      "safety": "guarded"
+    },
+    {
+      "after": [],
+      "before": [],
+      "edits": [],
+      "idempotent": true,
+      "key": "whitespace.strip-trailing-space",
+      "min_confidence": 0.9,
+      "preconditions": null,
+      "rules": [
+        "whitespace.trailing-space"
+      ],
+      "safety": "guarded"
+    }
+  ],
+  "rules": [
+    {
+      "aliases": {},
+      "code": "WSP001",
+      "domain": "whitespace",
+      "evidence": [],
+      "examples": [
+        {
+          "note": "",
+          "source": "x = 1\n\n\n\ny = 2\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "x = 1\n\ny = 2\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [
+        "whitespace.collapse-blank-lines"
+      ],
+      "key": "whitespace.excessive-blank-lines",
+      "maturity": "stable",
+      "message": "The module contains runs of more than two blank lines.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "PEP 8 allows at most two blank lines at module level and one inside a block; longer runs are almost always accidental.",
+      "requires": [
+        "whitespace.blank_run_count"
+      ],
+      "severity": "info",
+      "subject": [
+        "Module"
+      ],
+      "title": "Excessive blank lines",
+      "when": {
+        "of": [
+          {
+            "cmp": "gt",
+            "fact": "whitespace.blank_run_count",
+            "op": "compare",
+            "value": 0
+          }
+        ],
+        "op": "all"
+      }
+    },
+    {
+      "aliases": {},
+      "code": "WSP002",
+      "domain": "whitespace",
+      "evidence": [],
+      "examples": [
+        {
+          "note": "",
+          "source": "x = 1  \ny = 2\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "x = 1\ny = 2\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [
+        "whitespace.strip-trailing-space"
+      ],
+      "key": "whitespace.trailing-space",
+      "maturity": "stable",
+      "message": "The module contains lines ending in spaces or tabs.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "Trailing whitespace is invisible in diffs and editors, and most tools strip it automatically.",
+      "requires": [
+        "whitespace.trailing_space_count"
+      ],
+      "severity": "info",
+      "subject": [
+        "Module"
+      ],
+      "title": "Trailing whitespace",
+      "when": {
+        "of": [
+          {
+            "cmp": "gt",
+            "fact": "whitespace.trailing_space_count",
+            "op": "compare",
+            "value": 0
+          }
+        ],
+        "op": "all"
+      }
+    }
+  ]
+}

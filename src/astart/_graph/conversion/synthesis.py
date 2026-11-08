@@ -53,7 +53,7 @@ from typing import TYPE_CHECKING, Final, Literal, Never, final
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
-ExistingTopNode = (
+type ExistingTopNode = (
     Import
     | ImportFrom
     | ClassDef
@@ -62,15 +62,15 @@ ExistingTopNode = (
     | Assign
     | AnnAssign
 )
-ArgumentKind = Literal[
+type ArgumentKind = Literal[
     "positional_only",
     "positional_or_keyword",
     "keyword_only",
     "vararg",
     "kwarg",
 ]
-ImportSourceKind = Literal["absolute", "relative"]
-LiteralValue = str | int | float | bool | None
+type ImportSourceKind = Literal["absolute", "relative"]
+type LiteralValue = str | int | float | bool | None
 
 
 @final

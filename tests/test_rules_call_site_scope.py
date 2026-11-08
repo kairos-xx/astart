@@ -126,7 +126,7 @@ def test_unreliable_names_give_no_evidence() -> None:
         ),
         "unknown call result": (
             "def show(n):\n    print(n)\n\n\ndef main():\n"
-            "    v = input()\n    show(v)\n"
+            "    v = mystery()\n    show(v)\n"
         ),
         "global rebinding": (
             "LIMIT = 10\n\n\ndef show(n):\n    print(n)\n\n\n"

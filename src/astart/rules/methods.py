@@ -21,6 +21,7 @@ from ast import (
     Import,
     ImportFrom,
     Lambda,
+    Load,
     Name,
     Starred,
     Store,
@@ -63,6 +64,9 @@ class Constants:
             ``__init__``.
         init_methods: Method names that replace the generated ``__init__``.
         name_rebinders: Builtins that can rebind module-level names.
+        name_readers: Dict methods that only read a namespace view.
+        namespace_views: Builtins that return a view of a namespace, which
+            only rebinds names when it is written or kept.
         attribute_rebinders: Builtins that can rebind attributes.
         attribute_hooks: Attributes whose use can rebind or intercept others.
         interceptors: Methods that intercept every attribute access.
@@ -86,6 +90,12 @@ class Constants:
     init_methods: Final[frozenset[str]] = frozenset({"__init__", "__new__"})
     name_rebinders: Final[frozenset[str]] = frozenset(
         {"globals", "vars", "locals", "exec", "eval"},
+    )
+    name_readers: Final[frozenset[str]] = frozenset(
+        {"get", "keys", "values", "items", "copy"},
+    )
+    namespace_views: Final[frozenset[str]] = frozenset(
+        {"globals", "vars", "locals"},
     )
     attribute_rebinders: Final[frozenset[str]] = frozenset(
         {"setattr", "delattr", "vars", "exec", "eval"},
@@ -179,10 +189,39 @@ class MethodIndex:
             elif isinstance(node, Call) and isinstance(node.func, Name):
                 self._dynamic_names = self._dynamic_names or (
                     node.func.id in Constants.name_rebinders
+                    and not self._only_reads(call=node)
                 )
                 self._dynamic_attributes = self._dynamic_attributes or (
                     node.func.id in Constants.attribute_rebinders
                 )
+
+    def _only_reads(self, *, call: Call) -> bool:
+        """Tell whether a namespace-view call is used only to read names.
+
+        ``globals()["f"]`` and ``globals().get("f")`` cannot rebind a name;
+        a store, ``update``, an alias, or ``exec``/``eval`` can.
+
+        Args:
+            call: A call of ``globals``, ``vars``, ``locals``, ``exec`` or
+                ``eval``.
+
+        Returns:
+            ``True`` when the call only reads from the view.
+
+        """
+        if not (
+            isinstance(call.func, Name)
+            and call.func.id in Constants.namespace_views
+        ):
+            return False
+        parent: AST | None = self._parents.get(id(call))
+        if isinstance(parent, Subscript) and parent.value is call:
+            return isinstance(parent.ctx, Load)
+        return (
+            isinstance(parent, Attribute)
+            and parent.value is call
+            and parent.attr in Constants.name_readers
+        )
 
     def is_class_name(self, *, name: str) -> bool:
         """Tell whether a name is a class defined once in the module.

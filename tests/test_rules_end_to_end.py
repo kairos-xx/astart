@@ -108,12 +108,18 @@ def test_default_catalog_loads_and_validates() -> None:
         actual=sorted(rule.code for rule in catalog.rules),
         expected=[
             "CAL001",
+            "DOC001",
             "DOC002",
+            "DOC003",
+            "DOC007",
             "STR001",
             "TYP001",
             "TYP003",
             "TYP004",
             "TYP005",
+            "TYP007",
+            "WSP001",
+            "WSP002",
         ],
     )
     verify_catalog(catalog=catalog, registries=default_registries())

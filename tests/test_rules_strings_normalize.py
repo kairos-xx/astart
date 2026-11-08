@@ -3,16 +3,30 @@
 from __future__ import annotations
 
 from ast import Assign, Constant, Module, parse
-from typing import Final
+from typing import Final, final
 
 from astart.rules.strings_normalize import normalize_strings
 
 from tests.expectations import expect_equal, expect_instance, expect_true
 
-_LINE_LENGTH: Final[int] = 60
+
+@final
+class Constants:
+    """Constants for the strings normalize tests.
+
+    Attributes:
+        line_length: Width the string normalizer wraps literals to.
+
+    """
+
+    line_length: Final[int] = 60
 
 
-def _normalize(source: str, *, line_length: int = 88) -> str:
+def _normalize(
+    source: str,
+    *,
+    line_length: int = Constants.line_length,
+) -> str:
     """Return rewritten source for ``source``.
 
     Args:
@@ -44,11 +58,11 @@ def test_overlong_string_splits_at_word_boundaries() -> None:
     """A long literal becomes a parenthesised implicit concatenation."""
     words: str = " ".join(["word"] * 30)
     source: str = f'x = "{words}"\n'
-    output: str = _normalize(source=source, line_length=60)
+    output: str = _normalize(source=source, line_length=Constants.line_length)
     expect_true(condition="(\n" in output)
     for line in output.splitlines():
         expect_true(
-            condition=len(line) <= _LINE_LENGTH,
+            condition=len(line) <= Constants.line_length,
             message=f"overlong: {line!r}",
         )
     # The value round-trips through the AST.

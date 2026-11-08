@@ -14,10 +14,10 @@ from astart.rules import (
 )
 from astart.rules.vocabulary import FixSafety
 
+from tests.expectations import expect_equal, expect_true
+
 if TYPE_CHECKING:
     from astart.rules.registry import Registries
-
-from tests.expectations import expect_equal, expect_true
 
 
 def _run(*, source: str) -> FixResult:

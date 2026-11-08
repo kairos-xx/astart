@@ -13,10 +13,10 @@ from astart.rules import (
 )
 from astart.rules.vocabulary import FixSafety
 
+from tests.expectations import expect_in, expect_not_in
+
 if TYPE_CHECKING:
     from astart.rules.registry import Registries
-
-from tests.expectations import expect_in, expect_not_in
 
 
 def _fixed(*, source: str) -> str:
@@ -35,7 +35,7 @@ def _fixed(*, source: str) -> str:
         filename="m.py",
         catalog=load_default_catalog(registries=registries),
         registries=registries,
-        settings=FixSettings(ceiling=FixSafety.guarded),
+        settings=FixSettings(ceiling=FixSafety.guarded, negotiate=False),
     ).source
 
 

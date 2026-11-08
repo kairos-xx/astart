@@ -31,6 +31,7 @@ from types import GenericAlias, MappingProxyType, UnionType
 from typing import TYPE_CHECKING, ClassVar, Final, Literal, final
 
 from astart.node_attributes import initialize_node
+from astart.tokens import TokenAwareMixin
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -453,7 +454,7 @@ class _LinkTables:
     returns: list[Return]
 
 
-class DocstringNode(AST):
+class DocstringNode(TokenAwareMixin):
     """Parsed Python docstring, addressable through ``ast.walk``.
 
     Attributes:

@@ -7,28 +7,38 @@ loop can run ``pytest -m "not slow"`` (a fast tier) while CI runs everything.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, final
 
 import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-SLOW_MODULES: Final[frozenset[str]] = frozenset(
-    {
-        "test_cli_idempotence_corpus",
-        "test_cli_idempotence_full",
-        "test_format_annotations_corpus",
-        "test_graph_corpus",
-        "test_rules_idempotence",
-        "test_rules_recovery",
-        "test_rules_runner_corpus",
-        "test_rules_synthesis_corpus",
-        "test_rules_writer_fuzz",
-        "test_semantic_corpus",
-        "test_writer_fuzz",
-    },
-)
+
+@final
+class Constants:
+    """Constants used in the tests module.
+
+    Attributes:
+        slow_modules: Test module names marked as slow.
+
+    """
+
+    slow_modules: Final[frozenset[str]] = frozenset(
+        {
+            "test_cli_idempotence_corpus",
+            "test_cli_idempotence_full",
+            "test_format_annotations_corpus",
+            "test_graph_corpus",
+            "test_rules_idempotence",
+            "test_rules_recovery",
+            "test_rules_runner_corpus",
+            "test_rules_synthesis_corpus",
+            "test_rules_writer_fuzz",
+            "test_semantic_corpus",
+            "test_writer_fuzz",
+        },
+    )
 
 
 def pytest_collection_modifyitems(
@@ -44,5 +54,5 @@ def pytest_collection_modifyitems(
     """
     _ = config
     for item in items:
-        if item.path.stem in SLOW_MODULES:
+        if item.path.stem in Constants.slow_modules:
             item.add_marker(marker=pytest.mark.slow)

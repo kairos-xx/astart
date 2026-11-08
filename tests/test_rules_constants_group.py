@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from textwrap import dedent
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, final
 
 from astart.rules import (
     FixSettings,
@@ -18,7 +18,17 @@ if TYPE_CHECKING:
 
 from tests.expectations import expect_equal, expect_in, expect_not_in
 
-CLASS: Final[str] = '''\
+
+@final
+class Constants:
+    """Constants for the test.
+
+    Attributes:
+        class_source: Source text the constants-grouping fix rewrites.
+
+    """
+
+    class_source: Final[str] = '''\
 from typing import Final, final
 
 
@@ -60,7 +70,7 @@ def _fixed(
 def test_new_constant_is_added_to_the_existing_class() -> None:
     """Check that new constant is added to the existing class."""
     out: str = _fixed(
-        source=CLASS
+        source=Constants.class_source
         + """
 
 LIMIT = 3  # how many
@@ -89,7 +99,8 @@ def test_without_a_constants_class_the_safe_ceiling_keeps_the_global() -> None:
 def test_second_run_changes_nothing() -> None:
     """Check that second run changes nothing."""
     first: str = _fixed(
-        source=CLASS + "\n\nLIMIT = 3\n\n\ndef f():\n    return LIMIT\n",
+        source=Constants.class_source
+        + "\n\nLIMIT = 3\n\n\ndef f():\n    return LIMIT\n",
     )
     expect_equal(actual=_fixed(source=first), expected=first)
 
@@ -98,22 +109,26 @@ def test_unsafe_moves_are_refused() -> None:
     """Check that unsafe moves are refused."""
     cases: dict[str, str] = {
         "name already in the class": (
-            CLASS + "\n\nDEPTH = 5\n\n\ndef f():\n    return DEPTH\n"
+            Constants.class_source
+            + "\n\nDEPTH = 5\n\n\ndef f():\n    return DEPTH\n"
         ),
         "exported": (
-            CLASS + '\n\n__all__ = ["LIMIT"]\nLIMIT = 3\n\n\n'
+            Constants.class_source + '\n\n__all__ = ["LIMIT"]\nLIMIT = 3\n\n\n'
             "def f():\n    return LIMIT\n"
         ),
         "used at import time before the class": (
             "LIMIT = 3\nTWICE = LIMIT * 2\n\n\n"
-            + CLASS.split(sep="\n\n\n", maxsplit=1)[1]
+            + Constants.class_source.split(sep="\n\n\n", maxsplit=1)[1]
         ),
         "used in the class body": (
-            CLASS.replace("DEPTH: Final[int] = 2", "DEPTH: Final[int] = LIMIT")
+            Constants.class_source.replace(
+                "DEPTH: Final[int] = 2",
+                "DEPTH: Final[int] = LIMIT",
+            )
             + "\n\nLIMIT = 3\n"
         ),
         "declared global elsewhere": (
-            CLASS
+            Constants.class_source
             + "\n\nLIMIT = 3\n\n\ndef f():\n    global LIMIT\n    return 1\n"
         ),
     }
@@ -126,7 +141,8 @@ def test_unsafe_moves_are_refused() -> None:
 def test_a_default_after_the_class_uses_the_class() -> None:
     """Check that a default after the class uses the class."""
     out: str = _fixed(
-        source=CLASS + "\n\nLIMIT = 3\n\n\ndef f(n=LIMIT):\n    return n\n",
+        source=Constants.class_source
+        + "\n\nLIMIT = 3\n\n\ndef f(n=LIMIT):\n    return n\n",
     )
     expect_in(item="def f(n=Constants.LIMIT)", container=out)
 
@@ -134,7 +150,7 @@ def test_a_default_after_the_class_uses_the_class() -> None:
 def test_several_new_constants_all_join_the_class() -> None:
     """Check that several new constants all join the class."""
     source: str = (
-        CLASS
+        Constants.class_source
         + "\n\nLIMIT = 3\nNAME = 'x'\nRATE = 0.5\n\n\n"
         + "def f(v):\n    return v < LIMIT or NAME == v or RATE\n"
     )
@@ -188,7 +204,8 @@ def test_a_class_without_an_attributes_section_is_left_documented_as_is() -> (
 ):
     """Check that a class without an attributes section keeps its docstring."""
     out: str = _fixed(
-        source=CLASS + "\n\nLIMIT = 3\n\n\ndef f():\n    return LIMIT\n",
+        source=Constants.class_source
+        + "\n\nLIMIT = 3\n\n\ndef f():\n    return LIMIT\n",
     )
     expect_in(item='"""Group module-level constants."""', container=out)
     expect_not_in(item="LIMIT: Grouped", container=out)
@@ -197,7 +214,8 @@ def test_a_class_without_an_attributes_section_is_left_documented_as_is() -> (
 def test_the_proven_ceiling_adds_final_but_does_not_move() -> None:
     """Check that the proven ceiling adds final but does not move."""
     out: str = _fixed(
-        source=CLASS + "\n\nLIMIT = 3\n\n\ndef f():\n    return LIMIT\n",
+        source=Constants.class_source
+        + "\n\nLIMIT = 3\n\n\ndef f():\n    return LIMIT\n",
         ceiling=FixSafety.proven,
     )
     expect_in(item="LIMIT: Final[int] = 3", container=out)
@@ -208,7 +226,7 @@ def test_the_proven_ceiling_adds_final_but_does_not_move() -> None:
 def test_an_already_final_global_moves_into_the_class() -> None:
     """Check that an already final global moves into the class."""
     out: str = _fixed(
-        source=CLASS
+        source=Constants.class_source
         + "\n\nLIMIT: Final[int] = 3\n\n\ndef f():\n    return LIMIT\n",
     )
     expect_in(item="    LIMIT: Final[int] = 3", container=out)

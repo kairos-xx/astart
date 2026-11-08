@@ -13,10 +13,10 @@ from astart.rules import (
 )
 from astart.rules.vocabulary import FixSafety
 
+from tests.expectations import expect_in, expect_not_in
+
 if TYPE_CHECKING:
     from astart.rules.registry import Registries
-
-from tests.expectations import expect_in, expect_not_in
 
 
 def _fixed(

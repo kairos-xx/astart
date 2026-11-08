@@ -21,7 +21,9 @@ Astart: mutable Python AST, preserved source, semantic analysis and typing.
 
 - [`_graph/`](_graph/README.md) — API-first AST graph inference package.
 - [`cli/`](cli/README.md) — Command-line layer over the rule engine and fix runner.
+- [`project/`](project/README.md) — Whole-project analysis: imports, call graph, libraries and versions.
 - [`rules/`](rules/README.md) — A rule ontology: rules, fixes, profiles and relations as typed, serializable data, plus a small reference engine that evaluates the catalog against Python source parsed once with astart.
 - [`semantic/`](semantic/README.md) — Dependency-free semantic graph and safe abstract evaluation for Python ASTs.
+- [`stubs/`](stubs/README.md) — Read typeshed-style stubs: locate, parse and resolve names.
 
 <!-- exactus:inventory:end -->

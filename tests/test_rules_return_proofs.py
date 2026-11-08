@@ -167,7 +167,10 @@ def test_fix_refuses_returns_that_depend_on_the_argument() -> None:
     """Check that fix refuses returns that depend on the argument."""
     for source in (
         "def f(x):\n    return abs(x)\n",
-        "def f(x):\n    return x == 1\n",
         "def f(x):\n    return sorted(x)\n",
     ):
         expect_not_in(item="->", container=_fixed(source=source))
+    expect_in(
+        item="-> bool",
+        container=_fixed(source="def f(x):\n    return x == 1\n"),
+    )

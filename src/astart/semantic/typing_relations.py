@@ -24,7 +24,6 @@ if TYPE_CHECKING:
         ContractIndex,
         ParameterContract,
     )
-PAIR_SIZE: Final[int] = 2
 
 
 @final
@@ -42,6 +41,7 @@ class Compatibility:
     evidence: tuple[str, ...] = ()
 
 
+@final
 class Constants:
     """Static collection ABC edges and generic variance policies.
 
@@ -51,6 +51,7 @@ class Constants:
         ALIASES: Aliases retained as ClassVar[dict[str, str]] by this instance.
         COVARIANT: Covariant retained as frozenset[str] by this instance.
         INVARIANT: Invariant retained as frozenset[str] by this instance.
+        PAIR_SIZE: Arity of key/value type-argument pairs.
 
     """
 
@@ -343,6 +344,7 @@ class Constants:
         "typing.ByteString": "ByteString",
         "typing.Hashable": "Hashable",
     }
+    PAIR_SIZE: Final[int] = 2
 
 
 def normalize(*, name: str) -> str:
@@ -831,7 +833,9 @@ def _rule_callable(query: _SubtypeQuery) -> Compatibility | None:
     if not (
         query.left == "Callable"
         and query.right == "Callable"
-        and len(actual.arguments) == len(expected.arguments) == PAIR_SIZE
+        and len(actual.arguments)
+        == len(expected.arguments)
+        == Constants.PAIR_SIZE
     ):
         return None
     given, wanted = actual.arguments[0], expected.arguments[0]
@@ -997,7 +1001,7 @@ def _rule_generic_nominal(query: _SubtypeQuery) -> Compatibility | None:
         )
     if (
         right == "Mapping"
-        and len(largs) == len(rargs) == PAIR_SIZE
+        and len(largs) == len(rargs) == Constants.PAIR_SIZE
         and largs[0] != rargs[0]
     ):
         return Compatibility(

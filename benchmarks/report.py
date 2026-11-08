@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from json import dumps, loads
-from typing import TYPE_CHECKING, Final, Self, TypedDict, final
+from typing import TYPE_CHECKING, Final, NotRequired, Self, TypedDict, final
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -32,7 +32,7 @@ class ModuleResult:
         name: Module file name.
         truth: Annotations the original had.
         correct: Recovered annotations equal to the original.
-        wrong: Annotations written that differ from the original.
+        wrong: Annotations written that contradict the original.
         synthesized: Annotations that are synthesized Protocols/TypeVars.
         seconds: Time of the fix run.
         rounds: Passes the fix run needed.
@@ -40,6 +40,8 @@ class ModuleResult:
         new_errors: New type-checker errors the fixes introduced, or
             ``None`` when the checker did not run.
         crash: ``Type: message`` when the module crashed, else ``None``.
+        compatible: Annotations written that are a subtype or supertype of
+            the original (neither correct nor wrong).
 
     """
 
@@ -53,6 +55,7 @@ class ModuleResult:
     missed_reasons: tuple[tuple[str, int], ...]
     new_errors: int | None
     crash: str | None
+    compatible: tuple[str, ...] = ()
 
 
 @final
@@ -132,15 +135,25 @@ class Report:
         return sum(len(item.wrong) for item in self.modules)
 
     @property
+    def compatible(self) -> int:
+        """Annotations that differ from the original but do not contradict it.
+
+        Returns:
+            The total over scored modules.
+
+        """
+        return sum(len(item.compatible) for item in self.modules)
+
+    @property
     def precision(self) -> float:
-        """Share of written annotations that match the original.
+        """Share of written annotations that do not contradict the original.
 
         Returns:
             ``1.0`` when nothing was written.
 
         """
-        written: int = self.correct + self.wrong
-        return 1.0 if written == 0 else self.correct / written
+        written: int = self.correct + self.compatible + self.wrong
+        return 1.0 if written == 0 else 1 - self.wrong / written
 
     @property
     def recall(self) -> float:
@@ -229,6 +242,7 @@ def to_json(*, report: Report) -> str:
                 "truth": report.truth,
                 "correct": report.correct,
                 "wrong": report.wrong,
+                "compatible": report.compatible,
                 "precision": round(number=report.precision, ndigits=6),
                 "recall": round(number=report.recall, ndigits=6),
                 "crashed": list(report.crashed),
@@ -243,6 +257,7 @@ def to_json(*, report: Report) -> str:
                     "truth": item.truth,
                     "correct": item.correct,
                     "wrong": list(item.wrong),
+                    "compatible": list(item.compatible),
                     "synthesized": item.synthesized,
                     "seconds": item.seconds,
                     "rounds": item.rounds,
@@ -265,6 +280,8 @@ class _ModuleJson(TypedDict):
         truth: Annotations the original had.
         correct: Recovered annotations equal to the original.
         wrong: Annotations written that differ from the original.
+        compatible: Annotations compatible with but not equal to the
+            original.
         synthesized: Annotations that are synthesized Protocols/TypeVars.
         seconds: Time of the fix run.
         rounds: Passes the fix run needed.
@@ -278,6 +295,7 @@ class _ModuleJson(TypedDict):
     truth: int
     correct: int
     wrong: list[str]
+    compatible: NotRequired[list[str]]
     synthesized: int
     seconds: float
     rounds: int
@@ -323,6 +341,7 @@ def from_json(*, text: str) -> Report:
                 ),
                 new_errors=item["new_errors"],
                 crash=item["crash"],
+                compatible=tuple(item.get("compatible", [])),
             )
             for item in data["modules"]
         ],

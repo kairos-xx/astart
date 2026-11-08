@@ -81,6 +81,14 @@ def _parser() -> ArgumentParser:
     recovery.add_argument("--checker-delta", action="store_true")
     recovery.add_argument("--checker-gate", action="store_true")
     recovery.add_argument("--delta-limit", type=int, default=20)
+    recovery.add_argument("--jobs", type=int, default=1)
+    recovery.add_argument(
+        "--no-negotiate",
+        dest="negotiate",
+        action="store_false",
+    )
+    recovery.add_argument("--variables", action="store_true")
+    recovery.add_argument("--engine", action="store_true")
     gate: ArgumentParser = commands.add_parser(name="gate")
     gate.add_argument("--report", type=Path, required=True)
     gate.add_argument("--baseline", type=Path, default=Constants.baseline)
@@ -122,6 +130,10 @@ def _recovery(*, args: Namespace, out: TextIO) -> int:
             else None,
             delta_limit=args.delta_limit,
             gated=args.checker_gate,
+            jobs=args.jobs,
+            negotiate=args.negotiate,
+            variables=args.variables,
+            engine=args.engine,
         ),
     )
     text: str = to_json(report=report) + "\n"

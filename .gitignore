@@ -58,3 +58,5 @@ mutants/
 *.bak
 *.orig
 *.log
+
+.astart_cache/

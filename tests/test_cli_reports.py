@@ -67,12 +67,6 @@ class _DefusedParser(Protocol):
         ...
 
 
-_fromstring: Callable[..., Element] = cast(
-    typ="_DefusedParser",
-    val=ElementTree,
-).fromstring
-
-
 @final
 class Constants:
     """Group module-level constants.
@@ -81,12 +75,17 @@ class Constants:
         flagged_source: Source that produces a typing finding.
         clean_source: Source that produces none.
         minimum_results: Lower bound on SARIF results for one report set.
+        fromstring: Defused XML parser used to read SARIF output.
 
     """
 
     flagged_source: Final[str] = "def f(x):\n    return x\n\nf(1)\n"
     clean_source: Final[str] = "def g(y: int) -> int:\n    return y\n"
     minimum_results: Final[int] = 2
+    fromstring: Final[Callable[..., Element]] = cast(
+        typ="_DefusedParser",
+        val=ElementTree,
+    ).fromstring
 
 
 def _catalog() -> Catalog:
@@ -167,7 +166,7 @@ def test_junit_counts() -> None:
     """JUnit XML counts tests, failures and skips."""
     catalog: Catalog = _catalog()
     text: str = render_junit(results=_reports(), catalog=catalog)
-    root: Element = _fromstring(text=text)
+    root: Element = Constants.fromstring(text=text)
     suite: Element = expect_not_none(value=root.find(path="testsuite"))
     expect_true(condition=int(suite.get(key="tests", default="0")) >= 1)
     expect_true(condition=int(suite.get(key="failures", default="0")) >= 1)

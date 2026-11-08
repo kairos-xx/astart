@@ -65,8 +65,11 @@ class Constants:
         "timedelta": "datetime",
         "Final": "typing",
         "NoReturn": "typing",
+        "Optional": "typing",
         "Protocol": "typing",
+        "Self": "typing",
         "TypeVar": "typing",
+        "Union": "typing",
     }
     constructors: Final[frozenset[str]] = frozenset(
         {
@@ -289,11 +292,29 @@ def insert_import(
     return name
 
 
+def module_classes(*, module: Module) -> frozenset[str]:
+    """List the classes defined at the top level of a module.
+
+    Args:
+        module: Parsed module.
+
+    Returns:
+        Their names.
+
+    """
+    return frozenset(
+        statement.name
+        for statement in module.body
+        if isinstance(statement, ClassDef)
+    )
+
+
 def ensure_names(
     *,
     module: Module,
     expression: expr,
     before: int,
+    skip: frozenset[str] = frozenset(),
 ) -> None:
     """Import every known name an annotation uses but the module lacks.
 
@@ -303,10 +324,12 @@ def ensure_names(
         module: Module to modify in place.
         expression: Annotation expression about to be written.
         before: Index of the statement that will use the annotation.
+        skip: Names that already mean what the annotation means (classes the
+            module defines itself) and must not be imported.
 
     """
     for node in walk(node=expression):
-        if isinstance(node, Name):
+        if isinstance(node, Name) and node.id not in skip:
             source: str | None = Constants.known_imports.get(node.id)
             if source is not None:
                 node.id = insert_import(

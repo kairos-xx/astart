@@ -48,7 +48,7 @@
       ],
       "idempotent": true,
       "key": "typing.add-inferred-annotation",
-      "min_confidence": 0.9,
+      "min_confidence": 0.5,
       "preconditions": {
         "cmp": "eq",
         "fact": "annotation.has_inferred_hint",

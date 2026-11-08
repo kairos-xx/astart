@@ -23,19 +23,17 @@ from ast import (
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
-from astart._graph.inference.post_refinements import (
-    refine_keyword_arguments,
-)
-
-if TYPE_CHECKING:
-    from astart._graph.graph.document import AstDocument, AstGraphNode
 from astart._graph.backend.refiner import (
     self_attr_assignment_param_map,
     self_attr_return_attr_name,
 )
 from astart._graph.inference.post_refinements import (
     class_instance_attributes,
+    refine_keyword_arguments,
 )
+
+if TYPE_CHECKING:
+    from astart._graph.graph.document import AstDocument, AstGraphNode
 
 
 @dataclass(slots=True)

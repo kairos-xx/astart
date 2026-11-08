@@ -270,6 +270,35 @@ def _member_signature(
     return None
 
 
+def stub_signatures(
+    *,
+    source: str,
+    module_name: str,
+    chosen: str,
+) -> tuple[StubSignature, ...]:
+    """Extract declared signatures from parsed stub source.
+
+    Args:
+        source: Text of a ``.pyi`` file or of a ``.py`` file from a
+            ``py.typed`` package.
+        module_name: Dotted name the source provides.
+        chosen: Path recorded on each signature for provenance.
+
+    Returns:
+        The signatures the source declares.
+
+    """
+    try:
+        module: Module = parse(source=source, filename=chosen)
+    except SyntaxError:
+        return ()
+    return _stub_signatures(
+        module=module,
+        module_name=module_name,
+        chosen=chosen,
+    )
+
+
 def _stub_signatures(
     *,
     module: Module,

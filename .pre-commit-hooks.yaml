@@ -1,0 +1,5 @@
+- id: astart-fix
+  name: astart fix
+  entry: astart fix --check
+  language: python
+  types: [python]

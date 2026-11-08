@@ -35,7 +35,7 @@ def _fixed(*, source: str) -> str:
         filename="m.py",
         catalog=load_default_catalog(registries=registries),
         registries=registries,
-        settings=FixSettings(ceiling=FixSafety.guarded),
+        settings=FixSettings(ceiling=FixSafety.guarded, negotiate=False),
     ).source
 
 

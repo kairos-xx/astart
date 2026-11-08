@@ -1,0 +1,75 @@
+{
+  "fixes": [
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "typing.add-variable-annotation"
+      ],
+      "idempotent": true,
+      "key": "typing.add-variable-annotation",
+      "min_confidence": 0.5,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "variable.has_inferred_hint",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "typing.missing-variable-annotation"
+      ],
+      "safety": "guarded"
+    }
+  ],
+  "profiles": [],
+  "relations": [],
+  "rules": [
+    {
+      "aliases": {},
+      "code": "TYP007",
+      "domain": "typing",
+      "evidence": [
+        {
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "examples": [
+        {
+          "note": "The module already annotates a local, so the rest follow.",
+          "source": "def f() -> None:\n    a: int = 1\n    b = 2\n    print(a, b)\n",
+          "triggers": true
+        },
+        {
+          "note": "Every local is annotated.",
+          "source": "def f() -> None:\n    a: int = 1\n    b: int = 2\n    print(a, b)\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [
+        "typing.add-variable-annotation"
+      ],
+      "key": "typing.missing-variable-annotation",
+      "maturity": "stable",
+      "message": "`{name}` is assigned without a type annotation.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "A local whose type the evidence proves can say so, in modules whose author annotates locals or when asked with --annotate-variables.",
+      "requires": [
+        "variable.has_inferred_hint"
+      ],
+      "severity": "info",
+      "subject": [
+        "Assign"
+      ],
+      "title": "Local variable without annotation",
+      "when": {
+        "cmp": "eq",
+        "fact": "variable.has_inferred_hint",
+        "op": "compare",
+        "value": true
+      }
+    }
+  ]
+}

@@ -2,18 +2,36 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from difflib import unified_diff
 from enum import StrEnum
 from io import BytesIO
 from os import fsync
 from pathlib import Path
 from shutil import copymode
+from sysconfig import get_paths
 from tokenize import detect_encoding
 from typing import TYPE_CHECKING, Final, final
 
+from astart.cli.cache import (
+    CachedFix,
+    FixCache,
+    tool_fingerprint,
+)
+from astart.cli.cache import (
+    Constants as CacheConstants,
+)
 from astart.cli.discovery import DiscoveryResult, discover_files
 from astart.cli.render import FileReport, render_json, render_text
+from astart.project.builder import build_index
+from astart.project.index import ProjectConfig
+from astart.project.libraries import LibraryIndex, find_library_roots
+from astart.project.naming import module_name
+from astart.project.versions import (
+    PythonTarget,
+    find_pyproject,
+    resolve_target,
+)
 from astart.rules import (
     CheckOptions,
     CheckResult,
@@ -27,11 +45,14 @@ from astart.rules import (
     load_default_catalog,
 )
 from astart.rules.checker import build_checker
+from astart.rules.process import run_command
+from astart.rules.project_bridge import ProjectView
 from astart.rules.vocabulary import FixSafety, Severity
 
 if TYPE_CHECKING:
     from typing import TextIO
 
+    from astart.project.index import ProjectIndex
     from astart.rules.checker import Checker
     from astart.rules.model import Catalog
     from astart.rules.registry import Registries
@@ -42,6 +63,7 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
+        cache_ignored: Settings that do not change a file's result.
         severity_rank: Grouped module constant.
         usage_error: Grouped module constant.
         findings: Grouped module constant.
@@ -59,6 +81,9 @@ class Constants:
     findings: Final[int] = 1
     text_format: Final[str] = "text"
     no_checker_floor: Final[float] = 0.95
+    cache_ignored: Final[frozenset[str]] = frozenset(
+        {"paths", "mode", "use_cache"},
+    )
 
 
 @final
@@ -71,6 +96,13 @@ class CheckSettings:
         output_format: ``text`` or ``json``.
         fail_on: Least severe finding that makes the exit status non-zero.
         stubs_path: Stub directory for type hints, or ``None``.
+        project: Whether to analyse the discovered files as one project.
+        assume_external_callers: In project mode, whether exported
+            functions may have callers outside the file set.
+        source_roots: Import roots for deriving dotted module names.
+        target_version: Oldest Python version emitted code must run on,
+            or ``None`` to read ``pyproject.toml``/the interpreter.
+        exclude: ``fnmatch`` globs discovery skips.
 
     """
 
@@ -78,6 +110,11 @@ class CheckSettings:
     output_format: str
     fail_on: Severity
     stubs_path: Path | None
+    project: bool = False
+    assume_external_callers: bool = True
+    source_roots: tuple[Path, ...] = ()
+    target_version: str | None = None
+    exclude: tuple[str, ...] = ()
 
 
 @final
@@ -111,8 +148,24 @@ class FixCommandSettings:
         min_confidence: Fixes with less confidence than this are skipped.
         create_constants: Whether a missing ``Constants`` class may be
             created to hold ``Final`` module constants.
+        stub_docstrings: Whether undocumented public definitions get a stub
+            docstring.
+        annotate_variables: Whether function-local variables get a type
+            annotation.
+        negotiate: Whether negotiated annotations supplement the hint
+            index.
+        engine: Conversion mode: the inference engine's annotations fill
+            what nothing else decided.
+        use_cache: Whether unchanged files are served from the on-disk cache.
         source_roots: Extra directories the type checker resolves absolute
             imports from.
+        project: Whether to analyse the discovered files as one project.
+        assume_external_callers: In project mode, whether exported
+            functions may have callers outside the file set.
+        target_version: Oldest Python version emitted code must run on,
+            or ``None`` to read ``pyproject.toml``/the interpreter.
+        exclude: ``fnmatch`` globs discovery skips.
+        no_docs: Whether ``docs.*`` fixes are excluded from the run.
 
     """
 
@@ -124,7 +177,17 @@ class FixCommandSettings:
     use_checker: bool = False
     min_confidence: float = 0.0
     create_constants: bool = False
+    stub_docstrings: bool = False
+    annotate_variables: bool = False
+    negotiate: bool = True
+    engine: bool = False
+    use_cache: bool = False
     source_roots: tuple[Path, ...] = ()
+    project: bool = False
+    assume_external_callers: bool = True
+    target_version: str | None = None
+    exclude: tuple[str, ...] = ()
+    no_docs: bool = False
 
 
 @final
@@ -204,6 +267,129 @@ def read_source(*, path: Path) -> SourceFile:
     return SourceFile(text=data.decode(encoding=encoding), encoding=encoding)
 
 
+def _target_for(
+    *,
+    configured: str | None,
+    paths: tuple[Path, ...],
+) -> PythonTarget:
+    """Resolve the Python version emitted code must run on.
+
+    Args:
+        configured: Explicit ``major.minor`` target, or ``None``.
+        paths: Command paths, used to find the governing
+            ``pyproject.toml``.
+
+    Returns:
+        The target.
+
+    """
+    return resolve_target(
+        configured=configured,
+        pyproject=find_pyproject(paths=paths),
+    )
+
+
+def _index_for(
+    *,
+    found: DiscoveryResult,
+    enabled: bool,
+    assume_external_callers: bool,
+    source_roots: tuple[Path, ...],
+) -> ProjectIndex | None:
+    """Build the project index when project mode is on.
+
+    Args:
+        found: Discovered files.
+        enabled: Whether project mode was requested.
+        assume_external_callers: Whether exported functions may have
+            callers outside the file set.
+        source_roots: Import roots for dotted module naming.
+
+    Returns:
+        The index, or ``None`` when project mode is off.
+
+    """
+    if not enabled:
+        return None
+    return build_index(
+        files=found.files,
+        source_roots=source_roots,
+        config=ProjectConfig(
+            assume_external_callers=assume_external_callers,
+        ),
+    ).index
+
+
+def _site_packages() -> tuple[Path, ...]:
+    """Directories holding the running environment's installed packages.
+
+    Returns:
+        The ``purelib``/``platlib`` directories that exist.
+
+    """
+    paths: dict[str, str] = get_paths()
+    out: list[Path] = []
+    for key in ("purelib", "platlib"):
+        candidate: Path = Path(paths[key])
+        if candidate.is_dir() and candidate not in out:
+            out.append(candidate)
+    return tuple(out)
+
+
+def _libraries_for(
+    *,
+    enabled: bool,
+    stubs_path: Path | None,
+) -> LibraryIndex | None:
+    """Build the external signature index when project mode is on.
+
+    Args:
+        enabled: Whether project mode was requested.
+        stubs_path: Typeshed root, or ``None``.
+
+    Returns:
+        The index over typeshed, ``py.typed`` and stub-only packages, or
+        ``None``.
+
+    """
+    if not enabled:
+        return None
+    return LibraryIndex(
+        typeshed=stubs_path,
+        roots=find_library_roots(
+            site_packages=_site_packages(),
+            typeshed=stubs_path,
+        ),
+    )
+
+
+def _view_for(
+    *,
+    index: ProjectIndex | None,
+    path: Path,
+    source_roots: tuple[Path, ...],
+    libraries: LibraryIndex | None = None,
+) -> ProjectView | None:
+    """Derive one file's view of the project index.
+
+    Args:
+        index: Whole-project index, or ``None``.
+        path: File being analysed.
+        source_roots: Import roots for dotted module naming.
+        libraries: External signature index, or ``None``.
+
+    Returns:
+        The view, or ``None`` when the file is not part of the index.
+
+    """
+    if index is None:
+        return None
+    name: str | None = module_name(path=path, source_roots=source_roots)
+    if name is None or index.module_scan(module=name) is None:
+        return None
+    return ProjectView(index=index, module=name, libraries=libraries)
+
+
 def _check_file(
     *,
     path: Path,
@@ -255,11 +441,41 @@ def run_check(*, settings: CheckSettings, out: TextIO) -> int:
         a path is missing or a file cannot be analysed.
 
     """
-    found: DiscoveryResult = discover_files(paths=settings.paths)
+    found: DiscoveryResult = discover_files(
+        paths=settings.paths,
+        exclude=settings.exclude,
+    )
     catalog: Catalog = load_default_catalog(registries=default_registries())
-    options: CheckOptions = CheckOptions(stubs_path=settings.stubs_path)
+    index: ProjectIndex | None = _index_for(
+        found=found,
+        enabled=settings.project,
+        assume_external_callers=settings.assume_external_callers,
+        source_roots=settings.source_roots,
+    )
+    libraries: LibraryIndex | None = _libraries_for(
+        enabled=settings.project,
+        stubs_path=settings.stubs_path,
+    )
+    target: PythonTarget = _target_for(
+        configured=settings.target_version,
+        paths=settings.paths,
+    )
     reports: list[FileReport] = [
-        _check_file(path=path, catalog=catalog, options=options)
+        _check_file(
+            path=path,
+            catalog=catalog,
+            options=CheckOptions(
+                stubs_path=settings.stubs_path,
+                project=_view_for(
+                    index=index,
+                    path=path,
+                    source_roots=settings.source_roots,
+                    libraries=libraries,
+                ),
+                libraries=libraries,
+                target=target,
+            ),
+        )
         for path in found.files
     ]
     reports.extend(
@@ -298,6 +514,51 @@ def run_check(*, settings: CheckSettings, out: TextIO) -> int:
         for finding in report.findings
     )
     return Constants.findings if reached else 0
+
+
+def run_rules(*, out: TextIO) -> int:
+    """Print every catalog rule, one per line, sorted by code.
+
+    Args:
+        out: Stream the listing is written to.
+
+    Returns:
+        Always zero.
+
+    """
+    catalog: Catalog = load_default_catalog(registries=default_registries())
+    for rule in sorted(catalog.rules, key=lambda item: item.code):
+        _ = out.write(
+            f"{rule.code}  {rule.key}  {rule.severity.value}  {rule.title}\n",
+        )
+    return 0
+
+
+def run_explain(*, code: str, out: TextIO, err: TextIO) -> int:
+    """Print a rule's rationale and its triggering and clean examples.
+
+    Args:
+        code: Rule code to explain.
+        out: Stream the explanation is written to.
+        err: Stream the error is written to.
+
+    Returns:
+        Zero when the code is known, ``Constants.usage_error`` otherwise.
+
+    """
+    catalog: Catalog = load_default_catalog(registries=default_registries())
+    for rule in catalog.rules:
+        if rule.code == code:
+            break
+    else:
+        _ = err.write(f"astart: unknown rule code: {code}\n")
+        return Constants.usage_error
+    _ = out.write(f"{rule.code}  {rule.key}  {rule.title}\n")
+    _ = out.write(f"{rule.rationale}\n")
+    for example in rule.examples:
+        marker: str = "flagged" if example.triggers else "clean"
+        _ = out.write(f"\n{marker}:\n{example.source}\n")
+    return 0
 
 
 def _write_atomic(*, path: Path, text: str, encoding: str) -> None:
@@ -343,12 +604,30 @@ def _make_checker(*, settings: FixCommandSettings) -> Checker | None:
     )
 
 
+@final
+@dataclass(frozen=True, slots=True)
+class _ProjectContext:
+    """Whole-project services shared by every file of a run.
+
+    Attributes:
+        index: Whole-project index, or ``None`` for single-file mode.
+        libraries: External signature index, or ``None``.
+        cache: On-disk result cache, or ``None``.
+
+    """
+
+    index: ProjectIndex | None = None
+    libraries: LibraryIndex | None = None
+    cache: FixCache | None = None
+
+
 def _fix_file(
     *,
     path: Path,
     settings: FixCommandSettings,
     catalog: Catalog,
     checker: Checker | None,
+    project: _ProjectContext,
 ) -> FixOutcome:
     """Fix one file in memory.
 
@@ -357,6 +636,7 @@ def _fix_file(
         settings: Command options.
         catalog: Rules and fixes.
         checker: External type-checker gate, or ``None``.
+        project: Whole-project services, empty for single-file mode.
 
     Returns:
         What happened; failures are reported, never raised.
@@ -374,12 +654,41 @@ def _fix_file(
             error=str(object=error),
             note="",
         )
+    cache: FixCache | None = project.cache if project.index is None else None
+    if cache is not None:
+        hit: CachedFix | None = cache.load(path=path, source=source.text)
+        if hit is not None:
+            return FixOutcome(
+                path=path,
+                before=source.text,
+                after=hit.after,
+                applied=hit.applied,
+                skipped=hit.skipped,
+                error=None,
+                note=hit.note,
+            )
     fix_settings: FixSettings = FixSettings(
         ceiling=settings.ceiling,
         stubs_path=settings.stubs_path,
         min_confidence=settings.min_confidence,
         create_constants=settings.create_constants,
+        stub_docstrings=settings.stub_docstrings,
+        annotate_variables=settings.annotate_variables,
+        negotiate=settings.negotiate,
+        engine=settings.engine,
         checker=checker,
+        project=_view_for(
+            index=project.index,
+            path=path,
+            source_roots=settings.source_roots,
+            libraries=project.libraries,
+        ),
+        libraries=project.libraries,
+        target=_target_for(
+            configured=settings.target_version,
+            paths=settings.paths,
+        ),
+        excluded_prefixes=("docs.",) if settings.no_docs else (),
     )
     registries: Registries = default_registries()
     note: str = ""
@@ -405,13 +714,25 @@ def _fix_file(
             settings=fix_settings,
         )
         text = fixed.source
-    return _outcome(
+    outcome: FixOutcome = _outcome(
         path=path,
         before=source.text,
         after=text,
         fixed=fixed,
         note=note,
     )
+    if cache is not None and outcome.error is None:
+        cache.store(
+            path=path,
+            source=source.text,
+            entry=CachedFix(
+                after=outcome.after,
+                applied=outcome.applied,
+                skipped=outcome.skipped,
+                note=outcome.note,
+            ),
+        )
+    return outcome
 
 
 def _outcome(
@@ -449,6 +770,42 @@ def _outcome(
     )
 
 
+def _make_cache(
+    *,
+    settings: FixCommandSettings,
+    checker: Checker | None,
+) -> FixCache | None:
+    """Open the result cache when it is wanted.
+
+    Args:
+        settings: Command options.
+        checker: External type-checker gate, or ``None``.
+
+    Returns:
+        A cache keyed on everything that decides a result, or ``None``.
+
+    """
+    if not settings.use_cache:
+        return None
+    options: list[str] = [
+        f"{item.name}={getattr(settings, item.name)!r}"
+        for item in fields(class_or_instance=settings)
+        if item.name not in Constants.cache_ignored
+    ]
+    try:
+        formatter: str = run_command(
+            arguments=("ruff", "--version"),
+            cwd=Path.cwd(),
+        ).stdout
+    except (OSError, TimeoutError):
+        formatter = ""
+    environment: str = repr((options, type(checker).__name__, formatter))
+    return FixCache(
+        directory=Path.cwd() / CacheConstants.directory,
+        fingerprint=tool_fingerprint(environment=environment, root=Path.cwd()),
+    )
+
+
 def run_fix(*, settings: FixCommandSettings, out: TextIO) -> int:
     """Fix files in place, or show or check what would change.
 
@@ -461,9 +818,22 @@ def run_fix(*, settings: FixCommandSettings, out: TextIO) -> int:
         ``2`` when a path is missing or a file cannot be fixed.
 
     """
-    found: DiscoveryResult = discover_files(paths=settings.paths)
+    found: DiscoveryResult = discover_files(
+        paths=settings.paths,
+        exclude=settings.exclude,
+    )
     catalog: Catalog = load_default_catalog(registries=default_registries())
     failed: bool = bool(found.missing)
+    index: ProjectIndex | None = _index_for(
+        found=found,
+        enabled=settings.project,
+        assume_external_callers=settings.assume_external_callers,
+        source_roots=settings.source_roots,
+    )
+    libraries: LibraryIndex | None = _libraries_for(
+        enabled=settings.project,
+        stubs_path=settings.stubs_path,
+    )
     checker: Checker | None = _make_checker(settings=settings)
     if settings.use_checker and checker is None:
         settings = replace(
@@ -477,6 +847,7 @@ def run_fix(*, settings: FixCommandSettings, out: TextIO) -> int:
 note: no type checker found; guarded fixes need confidence >= \
 {Constants.no_checker_floor}
 """)
+    cache: FixCache | None = _make_cache(settings=settings, checker=checker)
     for path in found.missing:
         _ = out.write(f"""\
 {path}: error: no such file or directory
@@ -490,6 +861,11 @@ note: no type checker found; guarded fixes need confidence >= \
             settings=settings,
             catalog=catalog,
             checker=checker,
+            project=_ProjectContext(
+                index=index,
+                libraries=libraries,
+                cache=cache,
+            ),
         )
         if outcome.error is not None:
             failed = True

@@ -29,8 +29,20 @@ from ast import (
     walk,
 )
 from dataclasses import dataclass, field, replace
+from functools import partial
 from typing import TYPE_CHECKING, Final, cast, final
 
+from astart.project.versions import resolve_target
+from astart.rules.docs_fixes import (
+    is_editable,
+    is_missing_public,
+    is_untidy,
+    stale_count,
+    stale_evidence,
+    stubs_wanted,
+    triple_quoted_owners,
+)
+from astart.rules.engine_hints import LazyConversion, engine_hints
 from astart.rules.grouping import creatable, find_group
 from astart.rules.hints import (
     HintBasis,
@@ -39,10 +51,19 @@ from astart.rules.hints import (
     is_declaration,
     returns_nothing,
 )
+from astart.rules.library_calls import library_binding
+from astart.rules.negotiation.supplement import negotiated_hints
+from astart.rules.negotiation.variables import LazyVariables
 from astart.rules.predicate import FactValue
+from astart.rules.protocol_verify import call_site_objection
 from astart.rules.protocols import Constants as ProtocolConstants
 from astart.rules.protocols import parameter_has_default, structural_usage
-from astart.rules.provable import module_constants, never_returns, scope_types
+from astart.rules.provable import (
+    mark_noreturn_calls,
+    module_constants,
+    never_returns,
+    scope_types,
+)
 from astart.rules.registry import FactSpec, Registries
 from astart.rules.resolve import CallBindings, binding_counts
 from astart.rules.typevars import (
@@ -53,6 +74,10 @@ from astart.rules.typevars import (
     typevar_plan,
 )
 from astart.rules.vocabulary import Cost
+from astart.rules.whitespace_rules import (
+    count_blank_line_runs,
+    count_trailing_space_lines,
+)
 from astart.semantic import ArgumentOrigin, ParameterKind
 
 if TYPE_CHECKING:
@@ -60,8 +85,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from astart import BoundCall, CommentedModule
-    from astart.rules.hints import Hint
+    from astart.project.libraries import LibraryIndex
+    from astart.project.versions import PythonTarget
+    from astart.rules.hints import Hint, HintIndex, Key
     from astart.rules.jsonvalue import JsonValue
+    from astart.rules.project_bridge import ProjectView
     from astart.rules.protocols import StructuralUsage
 type FactProvider = Callable[[Subject, ModuleFacts], FactValue]
 type Applier = Callable[[Subject, ModuleFacts], None]
@@ -186,14 +214,27 @@ class ModuleFacts:
         final_names: Local names bound to ``typing.Final``.
         typing_names: Local names bound to the ``typing`` module.
         hints: Lazily computed type hints for the module.
+        variables: Lazily negotiated annotations for local variables, or
+            ``None`` when variable annotation is off.
         calls: Trusted call bindings, computed in one batch on first use.
         method_owner: Class that directly defines each method, by node id.
         overloaded: Node ids of functions that belong to an overload group.
+        triple_quoted: Node ids of definitions whose docstring literal uses
+            triple quotes, read before any fix changes the tree.
         create_constants: Whether a missing ``Constants`` class may be
             created for ``Final`` module constants.
+        stub_docstrings: Whether undocumented public definitions get a stub
+            docstring.
         binding_counts: How many times each name is bound in the module,
             ignoring names bound directly in class bodies (they do not
             shadow module-level names).
+        project: Cross-module view of the project, or ``None`` for
+            single-module analysis.
+        libraries: External signature index for callees outside the
+            project, or ``None``.
+        target: Oldest Python version emitted code must run on.
+        source: Module source text, or ``None`` when only the tree is
+            known.
 
     """
 
@@ -203,12 +244,19 @@ class ModuleFacts:
     typing_names: frozenset[str] = field(default_factory=frozenset)
     binding_counts: Mapping[str, int] = field(default_factory=_no_counts)
     hints: LazyHints | None = None
+    variables: LazyVariables | None = None
     calls: CallBindings | None = None
     method_owner: Mapping[int, ClassDef] = field(
         default_factory=_no_owners,
     )
     overloaded: frozenset[int] = field(default_factory=frozenset)
+    triple_quoted: frozenset[int] = field(default_factory=frozenset)
     create_constants: bool = False
+    stub_docstrings: bool = False
+    project: ProjectView | None = None
+    libraries: LibraryIndex | None = None
+    target: PythonTarget = field(default_factory=resolve_target)
+    source: str | None = None
 
 
 @final
@@ -261,6 +309,7 @@ class Constants:
             "typing.add-final",
             "structure.group-constants",
             "typing.add-attribute-annotation",
+            "typing.add-variable-annotation",
             "calls.add-keywords",
             "typing.add-none-return",
             "typing.add-noreturn",
@@ -268,6 +317,10 @@ class Constants:
             "typing.synthesize-protocol",
             "typing.synthesize-typevar",
             "typing.synthesize-self",
+            "docs.add-parameter-entries",
+            "docs.heal-parameter-rename",
+            "docs.remove-stale-entries",
+            "docs.tidy-docstring",
         },
     )
     immutable_literals: Final[tuple[type, ...]] = (
@@ -279,28 +332,63 @@ class Constants:
     )
 
 
+@final
+@dataclass(frozen=True, slots=True)
+class FactsOptions:
+    """Optional knobs for :func:`module_facts`.
+
+    Attributes:
+        stubs_path: Stub directory for type hints, or ``None``.
+        source: Source text of the module, to share hints through
+            ``cache``.
+        cache: Shared hint cache, or ``None``.
+        create_constants: Whether a missing ``Constants`` class may be
+            created to hold ``Final`` module constants.
+        stub_docstrings: Whether undocumented public definitions get a stub
+            docstring.
+        annotate_variables: Whether function-local variables get a type
+            annotation.
+        negotiate: Whether negotiated annotations supplement the hint
+            index.
+        engine: Conversion mode: the inference engine's annotations fill
+            what nothing else decided.
+        project: Cross-module view of the project, or ``None``.
+        libraries: External signature index for callees outside the
+            project, or ``None``.
+        target: Oldest Python version emitted code must run on, or
+            ``None`` for the running interpreter.
+
+    """
+
+    stubs_path: Path | None = None
+    source: str | None = None
+    cache: HintCache | None = None
+    create_constants: bool = False
+    stub_docstrings: bool = False
+    annotate_variables: bool = False
+    negotiate: bool = False
+    engine: bool = False
+    project: ProjectView | None = None
+    libraries: LibraryIndex | None = None
+    target: PythonTarget | None = None
+
+
 def module_facts(
     *,
     module: CommentedModule,
-    stubs_path: Path | None = None,
-    source: str | None = None,
-    cache: HintCache | None = None,
-    create_constants: bool = False,
+    options: FactsOptions | None = None,
 ) -> ModuleFacts:
     """Resolve typing imports of a module.
 
     Args:
         module: Parsed module.
-        stubs_path: Stub directory for type hints, or ``None``.
-        source: Source text of the module, to share hints through ``cache``.
-        cache: Shared hint cache, or ``None``.
-        create_constants: Whether a missing ``Constants`` class may be
-            created to hold ``Final`` module constants.
+        options: Optional knobs, or ``None`` for the defaults.
 
     Returns:
         The resolved import information.
 
     """
+    chosen: FactsOptions = options or FactsOptions()
     any_names: set[str] = set()
     final_names: set[str] = set()
     typing_names: set[str] = set()
@@ -324,23 +412,39 @@ def module_facts(
             case _:
                 continue
     counts: dict[str, int] = binding_counts(module=module)
+    _ = mark_noreturn_calls(module=module, counts=counts)
     owners, overloaded = _structure(module=module)
+    conversion: LazyConversion | None = (
+        LazyConversion(module=module) if chosen.engine else None
+    )
     return ModuleFacts(
-        create_constants=create_constants,
+        create_constants=chosen.create_constants,
+        stub_docstrings=chosen.stub_docstrings,
         method_owner=owners,
         overloaded=overloaded,
+        triple_quoted=triple_quoted_owners(module=module),
         module=module,
         any_names=frozenset(any_names),
         final_names=frozenset(final_names),
         typing_names=frozenset(typing_names),
         binding_counts=counts,
-        hints=LazyHints(
+        hints=_hints_for(
             module=module,
-            stubs_path=stubs_path,
-            source=source,
-            cache=cache,
+            options=chosen,
+            conversion=conversion,
+        ),
+        variables=LazyVariables(
+            module=module,
+            forced=chosen.annotate_variables or chosen.engine,
+            conversion=conversion,
         ),
         calls=CallBindings(module=module, counts=counts),
+        project=chosen.project,
+        libraries=chosen.libraries,
+        target=(
+            chosen.target if chosen.target is not None else resolve_target()
+        ),
+        source=chosen.source,
     )
 
 
@@ -688,7 +792,26 @@ def _has_structural_protocol(
         facts: Resolved imports and lazily computed hints.
 
     Returns:
-        Whether a ``Protocol`` can be synthesized for it.
+        Whether a ``Protocol`` can be synthesized for it and the hint index
+        itself (not a negotiated supplement) has no hint for it.
+
+    """
+    return _structural_candidate(subject=subject, facts=facts) and (
+        facts.hints is None
+        or facts.hints.index().own_hint_for(node=subject.node) is None
+    )
+
+
+def _structural_candidate(subject: Subject, facts: ModuleFacts) -> bool:
+    """Report whether a parameter's usage would justify a ``Protocol``.
+
+    Args:
+        subject: Parameter subject.
+        facts: Resolved imports and lazily computed hints.
+
+    Returns:
+        Whether the parameter is used only through members and no call site
+        objects.
 
     """
     plain: tuple[arg, FunctionDef | AsyncFunctionDef] | None = (
@@ -716,11 +839,14 @@ def _has_structural_protocol(
             ),
         ),
     )
-    if usage is None:
-        return False
-    return (
-        facts.hints is None
-        or facts.hints.index().hint_for(node=parameter) is None
+    return not (
+        usage is None
+        or call_site_objection(
+            function=function,
+            parameter=parameter.arg,
+            members=[member.name for member in usage.members],
+            facts=facts,
+        )
     )
 
 
@@ -791,6 +917,8 @@ def _self_return(subject: Subject, facts: ModuleFacts) -> FactValue:
             pass
         case _:
             return False
+    if not facts.target.self_type:
+        return False
     if function.returns is not None:
         return False
     receiver: tuple[str, bool] | None = receiver_info(
@@ -891,7 +1019,100 @@ def _has_inferred_hint(subject: Subject, facts: ModuleFacts) -> FactValue:
     if facts.hints is None:
         return False
     hint: Hint | None = facts.hints.index().hint_for(node=subject.node)
-    return hint is not None and hint.basis is not HintBasis.proven_none
+    if hint is None or hint.basis is HintBasis.proven_none:
+        return False
+    if hint.basis is HintBasis.negotiated and subject.kind == "Parameter":
+        return not _structural_candidate(subject=subject, facts=facts)
+    return True
+
+
+def _hints_for(
+    *,
+    module: CommentedModule,
+    options: FactsOptions,
+    conversion: LazyConversion | None,
+) -> LazyHints:
+    """Build the lazy hints of a module, with negotiation if asked for.
+
+    Args:
+        module: Parsed module.
+        options: Options of the facts run.
+        conversion: The inference engine's lazy output in conversion mode.
+
+    Returns:
+        The lazy hint index.
+
+    """
+    lazy: LazyHints = LazyHints(
+        module=module,
+        stubs_path=options.stubs_path,
+        source=options.source,
+        cache=options.cache,
+        project=options.project,
+    )
+    if options.negotiate or options.engine:
+        return lazy.supplemented(
+            by=partial(
+                _negotiated,
+                module=module,
+                conversion=conversion,
+                negotiate=options.negotiate,
+            ),
+        )
+    return lazy
+
+
+def _negotiated(
+    index: HintIndex,
+    *,
+    module: CommentedModule,
+    conversion: LazyConversion | None,
+    negotiate: bool,
+) -> dict[Key, Hint]:
+    """Negotiate parameter and return hints to supplement the hint index.
+
+    Args:
+        index: The built hint index, whose engine proposals corroborate.
+        module: Parsed module.
+        conversion: The inference engine's lazy output in conversion mode, or
+            ``None``.
+        negotiate: Whether negotiated hints are produced.
+
+    Returns:
+        Hints for nodes the index has none for.
+
+    """
+    found: dict[Key, Hint] = (
+        negotiated_hints(module=module, proposals=index.proposals)
+        if negotiate
+        else {}
+    )
+    if conversion is not None:
+        for key, hint in engine_hints(
+            module=module,
+            conversion=conversion,
+        ).items():
+            _ = found.setdefault(key, hint)
+    return found
+
+
+def _has_variable_hint(subject: Subject, facts: ModuleFacts) -> FactValue:
+    """Report whether negotiation justified a variable annotation.
+
+    Args:
+        subject: Assignment subject.
+        facts: Resolved imports and the lazily negotiated variables.
+
+    Returns:
+        Whether the assignment statement can carry an annotation.
+
+    """
+    statement: AST | None = subject.statement
+    if facts.variables is None or not isinstance(statement, Assign):
+        return False
+    if len(statement.targets) != 1:
+        return False
+    return facts.variables.hint_for(node=statement) is not None
 
 
 def bound_call(subject: Subject, facts: ModuleFacts) -> BoundCall | None:
@@ -906,8 +1127,20 @@ def bound_call(subject: Subject, facts: ModuleFacts) -> BoundCall | None:
 
     """
     match subject.node:
-        case Call() as call if facts.calls is not None:
-            return facts.calls.get(call=call)
+        case Call() as call:
+            if facts.calls is not None:
+                bound: BoundCall | None = facts.calls.get(call=call)
+                if bound is not None:
+                    return bound
+            if facts.project is not None:
+                bound = facts.project.binding(call=call)
+                if bound is not None:
+                    return bound
+            return library_binding(
+                module=facts.module,
+                call=call,
+                counts=facts.binding_counts,
+            )
         case _:
             return None
 
@@ -1083,6 +1316,39 @@ def _undocumented_count(subject: Subject, facts: ModuleFacts) -> FactValue:
     return len(_undocumented(subject=subject, facts=facts))
 
 
+def _blank_run_count(_subject: Subject, facts: ModuleFacts) -> FactValue:
+    """Count blank-line runs beyond the tolerated maximum.
+
+    Args:
+        _subject: Module subject.
+        facts: Resolved facts; ``source`` carries the module text.
+
+    Returns:
+        The number of excessive blank-line runs, zero without source.
+
+    """
+    if facts.source is None:
+        return 0
+    return count_blank_line_runs(source=facts.source)
+
+
+def _trailing_space_count(_subject: Subject, facts: ModuleFacts) -> FactValue:
+    """Count lines ending in spaces or tabs.
+
+    Args:
+        _subject: Module subject.
+        facts: Resolved facts; ``source`` carries the module text.
+
+    Returns:
+        The number of lines with trailing whitespace, zero without
+        source.
+
+    """
+    if facts.source is None:
+        return 0
+    return count_trailing_space_lines(source=facts.source)
+
+
 def name_evidence(subject: Subject, _facts: ModuleFacts) -> JsonValue:
     """Provide the ``name`` evidence slot.
 
@@ -1231,6 +1497,11 @@ class Registry:
             cost=Cost.semantic,
         ),
         FactSpec(
+            name="variable.has_inferred_hint",
+            value_type="bool",
+            cost=Cost.semantic,
+        ),
+        FactSpec(
             name="parameter.has_structural_protocol",
             value_type="bool",
             cost=Cost.semantic,
@@ -1265,6 +1536,41 @@ class Registry:
             value_type="int",
             cost=Cost.syntactic,
         ),
+        FactSpec(
+            name="function.stale_documented_count",
+            value_type="int",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
+            name="docstring.is_editable",
+            value_type="bool",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
+            name="docstring.is_untidy",
+            value_type="bool",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
+            name="docs.stubs_wanted",
+            value_type="bool",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
+            name="docstring.is_missing_public",
+            value_type="bool",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
+            name="whitespace.blank_run_count",
+            value_type="int",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
+            name="whitespace.trailing_space_count",
+            value_type="int",
+            cost=Cost.syntactic,
+        ),
     )
     providers: Final[Mapping[str, FactProvider]] = {
         "annotation.uses_typing_any": _uses_typing_any,
@@ -1281,19 +1587,28 @@ class Registry:
         "constants.wanted": _constants_wanted,
         "function.never_returns": _never_returns,
         "annotation.has_inferred_hint": _has_inferred_hint,
+        "variable.has_inferred_hint": _has_variable_hint,
         "parameter.has_structural_protocol": _has_structural_protocol,
         "parameter.is_passthrough": _is_passthrough,
         "function.self_return": _self_return,
         "call.positional_keyword_candidates": _candidate_count,
         "call.is_resolved_in_module": _is_resolved,
         "function.has_docstring": _has_docstring,
+        "function.stale_documented_count": stale_count,
+        "docstring.is_editable": is_editable,
+        "docstring.is_untidy": is_untidy,
+        "docstring.is_missing_public": is_missing_public,
+        "docs.stubs_wanted": stubs_wanted,
         "function.undocumented_parameter_count": _undocumented_count,
+        "whitespace.blank_run_count": _blank_run_count,
+        "whitespace.trailing_space_count": _trailing_space_count,
     }
     evidence: Final[Mapping[str, EvidenceProvider]] = {
         "name": name_evidence,
         "callee": callee_evidence,
         "function": function_evidence,
         "parameters": call_parameters_evidence,
+        "stale": stale_evidence,
     }
 
 
@@ -1354,6 +1669,8 @@ def _visit(
 
     """
     kind: str = type(node).__name__
+    if isinstance(node, Module) and kind != "Module":
+        kind = "Module"
     inner: _Site = site
     match node:
         case FunctionDef() | AsyncFunctionDef():
@@ -1456,6 +1773,8 @@ def _call_name(node: AST) -> str:
     match node:
         case Call(func=func):
             return unparse(ast_obj=func)
+        case Module():
+            return "<module>"
         case _:
             return ""
 

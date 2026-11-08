@@ -130,8 +130,8 @@ def test_candidates_count_only_keyword_capable_parameters() -> None:
     )
 
 
-def test_unresolved_callee_is_not_resolved() -> None:
-    """Treat builtins and unknown names as unresolved."""
+def test_unbound_callee_is_not_resolved() -> None:
+    """Treat unknown names as unresolved; library callees still bind."""
     source: str = """\
     def f(a): ...
     f(1)
@@ -139,23 +139,29 @@ def test_unresolved_callee_is_not_resolved() -> None:
     unknown(1)
     """
     resolved: str = "call.is_resolved_in_module"
+    candidates: str = "call.positional_keyword_candidates"
     expect_true(
         condition=bool(
             _fact(source=source, kind="Call", path="f", fact=resolved),
         ),
     )
+    expect_true(
+        condition=bool(
+            _fact(source=source, kind="Call", path="print", fact=resolved),
+        ),
+    )
+    expect_false(
+        condition=bool(
+            _fact(source=source, kind="Call", path="unknown", fact=resolved),
+        ),
+    )
     for name in ("print", "unknown"):
-        expect_false(
-            condition=bool(
-                _fact(source=source, kind="Call", path=name, fact=resolved),
-            ),
-        )
         expect_equal(
             actual=_fact(
                 source=source,
                 kind="Call",
                 path=name,
-                fact="call.positional_keyword_candidates",
+                fact=candidates,
             ),
             expected=0,
         )

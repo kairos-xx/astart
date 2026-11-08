@@ -245,6 +245,10 @@ def test_scratch_files_live_in_a_temp_dir_yet_siblings_resolve(
         ),
     )
     expect_equal(
-        actual=sorted(path.name for path in tmp_path.iterdir()),
+        actual=sorted(
+            path.name
+            for path in tmp_path.iterdir()
+            if path.name != "README.md"
+        ),
         expected=["helper.py"],
     )

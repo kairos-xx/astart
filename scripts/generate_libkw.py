@@ -1,8 +1,8 @@
 """Generate ``src/astart/rules/libkw.py`` from typeshed stubs.
 
-Walks a typeshed root — the ``typeshed_client`` bundled copy by default —
-and emits a deterministic data module mapping every qualified callee to
-the parameter names that may be passed by keyword: positional-or-keyword
+Walks a typeshed root — the first one ``astart.stubs.find_typeshed`` finds by
+default — and emits a deterministic data module mapping every qualified callee
+to the parameter names that may be passed by keyword: positional-or-keyword
 and keyword-only parameters, never positional-only ones (``/`` markers
 and ``__name`` convention), never ``self``/``cls`` receivers.  Callees
 carrying ``**kwargs`` are marked as accepting arbitrary keywords.
@@ -26,18 +26,34 @@ from ast import (
     parse,
     stmt,
 )
+from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from sys import argv, stdout
-from typing import Final
+from typing import Final, final
 
-LINE_LENGTH: Final[int] = 79
 
-HEADER: Final[str] = '''"""Typeshed-generated library keyword-safety table.
+@final
+class Constants:
+    """Constants for the library keyword generator.
+
+    Attributes:
+        line_lenght: Width a rendered signature entry may occupy.
+        header: Docstring written at the top of the generated module.
+
+    """
+
+    line_lenght: Final[int] = 79
+
+    header: Final[str] = '''"""Typeshed-generated library keyword-safety table.
 
 ``SIGNATURES`` maps ``"module.qualname"`` to the parameter names a call
-may pass by keyword.  Positional-only parameters never appear: ``/``
-markers and the ``__name`` convention are excluded, as are ``self`` and
-``cls`` receivers.  ``ANY_KEYWORD`` holds callees with ``**kwargs``.
+may pass by keyword.  ``names`` lists keyword-passable parameters
+(positional-or-keyword and keyword-only); positional-only parameters
+never appear there: ``/`` markers and the ``__name`` convention are
+excluded, as are ``self`` and ``cls`` receivers.  ``positional`` lists
+every parameter a positional argument can fill, in order (positional-only
+included).  ``ANY_KEYWORD``/``var_positional`` mark ``**kwargs``/``*args``.
 
 Stdlib entries come first; third-party modules join only through an
 explicit allow-list.  Regenerate with ``scripts/generate_libkw.py``.
@@ -57,11 +73,15 @@ class KwSignature:
     Attributes:
         names: Parameters that accept a keyword, in signature order.
         any_keyword: Whether ``**kwargs`` accepts arbitrary names.
+        positional: Parameters a positional argument can fill, in order.
+        var_positional: Whether ``*args`` absorbs extra positionals.
 
     """
 
     names: tuple[str, ...]
     any_keyword: bool
+    positional: tuple[str, ...]
+    var_positional: bool
 
 
 def keyword_names(*, callee: str) -> tuple[str, ...] | None:
@@ -141,7 +161,10 @@ def _posonly(*, function: FunctionDef | AsyncFunctionDef) -> set[int]:
     return excluded
 
 
-def collect(*, root: Path) -> dict[str, tuple[tuple[str, ...], bool]]:
+def collect(
+    *,
+    root: Path,
+) -> dict[str, tuple[tuple[str, ...], bool, tuple[str, ...], bool]]:
     """Collect keyword signatures from every stub under a root.
 
     Args:
@@ -151,7 +174,7 @@ def collect(*, root: Path) -> dict[str, tuple[tuple[str, ...], bool]]:
         Qualified callee to ``(names, any_keyword)``.
 
     """
-    table: dict[str, tuple[tuple[str, ...], bool]] = {}
+    table: dict[str, tuple[tuple[str, ...], bool, tuple[str, ...], bool]] = {}
     for stub in sorted(root.rglob(pattern="*.pyi")):
         module: str = ".".join(
             stub.relative_to(root).with_suffix(suffix="").parts,
@@ -175,7 +198,7 @@ def _walk_body(
     body: list[stmt],
     module: str,
     parents: tuple[str, ...],
-    table: dict[str, tuple[tuple[str, ...], bool]],
+    table: dict[str, tuple[tuple[str, ...], bool, tuple[str, ...], bool]],
 ) -> None:
     """Walk a stub body, recording functions and recursing into classes.
 
@@ -196,9 +219,19 @@ def _walk_body(
                 if id(param) not in excluded
                 and param.arg not in {"self", "cls"}
             )
+            positional: tuple[str, ...] = tuple(
+                param.arg
+                for param in [*node.args.posonlyargs, *node.args.args]
+                if param.arg not in {"self", "cls"}
+            )
             table[
                 _qualname(module=module, parents=parents, name=node.name)
-            ] = (names, node.args.kwarg is not None)
+            ] = (
+                names,
+                node.args.kwarg is not None,
+                positional,
+                node.args.vararg is not None,
+            )
         elif isinstance(node, ClassDef):
             _walk_body(
                 body=node.body,
@@ -219,7 +252,7 @@ def _key_literal(*, key: str) -> str:
 
     """
     literal: str = repr(key)
-    if len(f"    {literal}: KwSignature(") <= LINE_LENGTH:
+    if len(f"    {literal}: KwSignature(") <= Constants.line_lenght:
         return literal
     width: int = 56
     return "\n    ".join(
@@ -244,32 +277,51 @@ def main() -> int:
             if client_file is not None
             else Path("typeshed")
         )
-    table: dict[str, tuple[tuple[str, ...], bool]] = collect(root=root)
+    table: dict[str, tuple[tuple[str, ...], bool, tuple[str, ...], bool]] = (
+        collect(root=root)
+    )
     lines: list[str] = [
-        HEADER,
+        Constants.header,
         "SIGNATURES: Final[dict[str, KwSignature]] = {\n",
     ]
     for key in sorted(table):
-        names, any_kw = table[key]
+        names, any_kw, positional, var_pos = table[key]
         rendered: str = (
             f"({', '.join(repr(name) for name in names)})"
             if len(names) != 1
             else f"({names[0]!r},)"
         )
+        positional_rendered: str = (
+            f"({', '.join(repr(name) for name in positional)})"
+            if len(positional) != 1
+            else f"({positional[0]!r},)"
+        )
         entry: str = (
             f"    {key!r}: KwSignature(names={rendered}, "
-            f"any_keyword={any_kw!r}),\n"
+            f"any_keyword={any_kw!r}, positional={positional_rendered}, "
+            f"var_positional={var_pos!r}),\n"
         )
-        if len(entry) - 1 <= LINE_LENGTH:
+        if len(entry) - 1 <= Constants.line_lenght:
             lines.append(entry)
             continue
         lines.append(
             f"    {_key_literal(key=key)}: KwSignature(\n"
             f"        names={rendered},\n"
             f"        any_keyword={any_kw!r},\n"
+            f"        positional={positional_rendered},\n"
+            f"        var_positional={var_pos!r},\n"
             f"    ),\n",
         )
     lines.append("}\n")
+    try:
+        client_version: str = version(distribution_name="typeshed_client")
+    except PackageNotFoundError:
+        client_version = "unknown"
+    lines.append(
+        f"\n# Generated by scripts/generate_libkw.py "
+        f"on {datetime.now(tz=UTC).isoformat()}\n"
+        f"# from {root} using typeshed_client {client_version}.\n",
+    )
     stdout.write("".join(lines))
     return 0
 

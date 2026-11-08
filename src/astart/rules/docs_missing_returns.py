@@ -21,10 +21,10 @@ from ast import (
 from typing import TYPE_CHECKING, final
 
 from astart.rules.docs_shared import documented_names
+from astart.rules.procedural import Candidate, span_of
 
 if TYPE_CHECKING:
     from astart.docstrings import DocKind
-from astart.rules.procedural import Candidate, span_of
 
 
 @final

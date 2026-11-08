@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, final
 
 import pytest
 from astart import parse
@@ -23,15 +23,25 @@ if TYPE_CHECKING:
     from astart.rules.registry import Registries
     from astart.rules.runner import FixResult
 
-SOURCES: Final[tuple[str, ...]] = (
-    'def f(a):\n    return a\n\n\nx = "éééééééééé"; y = (f(1))\n',
-    'def f(a):\n    s = "ééééééééééééééééé" + str((a))\n    return s\n',
-    'def f(a):\n    return ("ééééééééééééééééé", (a))\n',
-    'def f(a):\n    return ("日本語日本語日本語日本語", (a)) + (a,)\n',
-)
+
+@final
+class Constants:
+    """Constants for the test.
+
+    Attributes:
+        sources: Module sources mixing multibyte text and parentheses.
+
+    """
+
+    sources: Final[tuple[str, ...]] = (
+        'def f(a):\n    return a\n\n\nx = "éééééééééé"; y = (f(1))\n',
+        'def f(a):\n    s = "ééééééééééééééééé" + str((a))\n    return s\n',
+        'def f(a):\n    return ("ééééééééééééééééé", (a))\n',
+        'def f(a):\n    return ("日本語日本語日本語日本語", (a)) + (a,)\n',
+    )
 
 
-@pytest.mark.parametrize("source", SOURCES)
+@pytest.mark.parametrize("source", Constants.sources)
 def test_conversion_survives_multibyte_text_before_parentheses(
     *,
     source: str,

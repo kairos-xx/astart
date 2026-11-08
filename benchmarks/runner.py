@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
+from sys import stderr
 from typing import TYPE_CHECKING, Final, final
 
 from astart.rules.recovery import RecoveryOptions, RecoveryScore, recover
@@ -22,18 +24,12 @@ class Constants:
 
     Attributes:
         crashes: Exception types reported as one module's crash instead of
-            ending the whole run.
+            ending the whole run: any, since a harness that dies on the first
+            bug loses every other measurement.
 
     """
 
-    crashes: Final[tuple[type[Exception], ...]] = (
-        AttributeError,
-        IndexError,
-        KeyError,
-        RecursionError,
-        TypeError,
-        ValueError,
-    )
+    crashes: Final[tuple[type[Exception], ...]] = (Exception,)
 
 
 @final
@@ -47,6 +43,11 @@ class Plan:
         delta_limit: How many annotated modules get the checker delta.
         gated: Whether the delta checker also vetoes guarded fixes, as in
             a normal ``astart fix`` run.
+        jobs: Worker processes; with more than one, the checker delta goes
+            to the first ``delta_limit`` modules in the order given.
+        negotiate: Whether negotiated hints supplement the hint index.
+        variables: Whether local variables are annotated.
+        engine: Conversion mode (the engine's own annotations).
 
     """
 
@@ -54,6 +55,10 @@ class Plan:
     delta: PyrightChecker | MypyChecker | None = None
     delta_limit: int = 20
     gated: bool = False
+    jobs: int = 1
+    negotiate: bool = True
+    variables: bool = False
+    engine: bool = False
 
 
 def _measure(*, path: Path, plan: Plan, spent: int) -> ModuleResult:
@@ -78,6 +83,9 @@ def _measure(*, path: Path, plan: Plan, spent: int) -> ModuleResult:
                 attribute=plan.attribute,
                 delta=plan.delta if use_delta else None,
                 checker=plan.delta if use_delta and plan.gated else None,
+                negotiate=plan.negotiate,
+                annotate_variables=plan.variables,
+                engine=plan.engine,
             ),
         )
     except Constants.crashes as error:
@@ -104,7 +112,24 @@ def _measure(*, path: Path, plan: Plan, spent: int) -> ModuleResult:
         missed_reasons=score.missed_reasons,
         new_errors=score.new_errors,
         crash=None,
+        compatible=score.compatible,
     )
+
+
+def _measure_at(job: tuple[Path, Plan, int]) -> ModuleResult:
+    """Score one module in a worker process.
+
+    Args:
+        job: The module, the plan, and how many modules precede it (which
+            decides whether it still gets the checker delta).
+
+    Returns:
+        The module's result.
+
+    """
+    path, plan, spent = job
+    _ = stderr.write(f"{path.name}\n")
+    return _measure(path=path, plan=plan, spent=spent)
 
 
 def run_recovery(*, paths: Sequence[Path], plan: Plan) -> Report:
@@ -118,9 +143,24 @@ def run_recovery(*, paths: Sequence[Path], plan: Plan) -> Report:
         The report, one entry per module in the order given.
 
     """
+    if plan.jobs > 1:
+        pool: ProcessPoolExecutor = ProcessPoolExecutor(max_workers=plan.jobs)
+        with pool:
+            return Report.of(
+                modules=list(
+                    pool.map(
+                        _measure_at,
+                        [
+                            (path, plan, position)
+                            for position, path in enumerate(iterable=paths)
+                        ],
+                    ),
+                ),
+            )
     results: list[ModuleResult] = []
     spent: int = 0
-    for path in paths:
+    for position, path in enumerate(iterable=paths, start=1):
+        _ = stderr.write(f"[{position}/{len(paths)}] {path.name}\n")
         result: ModuleResult = _measure(path=path, plan=plan, spent=spent)
         if result.new_errors is not None:
             spent += 1

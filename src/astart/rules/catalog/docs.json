@@ -1,8 +1,151 @@
 {
-  "fixes": [],
+  "fixes": [
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "docs.add-parameter-entries"
+      ],
+      "idempotent": true,
+      "key": "docs.add-parameter-entries",
+      "min_confidence": 1.0,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "docstring.is_editable",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "docs.missing-parameter"
+      ],
+      "safety": "proven"
+    },
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "docs.remove-stale-entries"
+      ],
+      "idempotent": true,
+      "key": "docs.remove-stale-entries",
+      "min_confidence": 1.0,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "docstring.is_editable",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "docs.stale-parameter"
+      ],
+      "safety": "proven"
+    },
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "docs.tidy-docstring"
+      ],
+      "idempotent": true,
+      "key": "docs.tidy-docstring",
+      "min_confidence": 1.0,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "docstring.is_untidy",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "docs.untidy-docstring"
+      ],
+      "safety": "proven"
+    },
+    {
+      "after": [],
+      "before": [
+        "docs.add-parameter-entries",
+        "docs.remove-stale-entries"
+      ],
+      "edits": [
+        "docs.heal-parameter-rename"
+      ],
+      "idempotent": true,
+      "key": "docs.heal-parameter-rename",
+      "min_confidence": 1.0,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "docstring.is_editable",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "docs.stale-parameter"
+      ],
+      "safety": "proven"
+    }
+  ],
   "profiles": [],
   "relations": [],
   "rules": [
+    {
+      "aliases": {},
+      "code": "DOC001",
+      "domain": "docs",
+      "evidence": [
+        {
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "examples": [
+        {
+          "note": "",
+          "source": "\"\"\"Module.\"\"\"\n\n\ndef run() -> None:\n    pass\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "\"\"\"Module.\"\"\"\n\n\ndef run() -> None:\n    \"\"\"Run.\"\"\"\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [],
+      "key": "docs.missing-docstring",
+      "maturity": "stable",
+      "message": "`{name}` has no docstring.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "Public functions and classes owe their callers a sentence of prose.",
+      "requires": [
+        "docs.stubs_wanted",
+        "docstring.is_missing_public"
+      ],
+      "severity": "info",
+      "subject": [
+        "FunctionDef",
+        "AsyncFunctionDef",
+        "ClassDef"
+      ],
+      "title": "Public definition without a docstring",
+      "when": {
+        "of": [
+          {
+            "cmp": "eq",
+            "fact": "docs.stubs_wanted",
+            "op": "compare",
+            "value": true
+          },
+          {
+            "cmp": "eq",
+            "fact": "docstring.is_missing_public",
+            "op": "compare",
+            "value": true
+          }
+        ],
+        "op": "all"
+      }
+    },
     {
       "aliases": {
         "exactus": "DOC002"
@@ -31,7 +174,9 @@
           "triggers": false
         }
       ],
-      "fixes": [],
+      "fixes": [
+        "docs.add-parameter-entries"
+      ],
       "key": "docs.missing-parameter",
       "maturity": "stable",
       "message": "`{function}` does not document {parameters}.",
@@ -65,6 +210,114 @@
           }
         ],
         "op": "all"
+      }
+    },
+    {
+      "aliases": {},
+      "code": "DOC003",
+      "domain": "docs",
+      "evidence": [
+        {
+          "name": "function",
+          "type": "str"
+        },
+        {
+          "name": "stale",
+          "type": "list[str]"
+        }
+      ],
+      "examples": [
+        {
+          "note": "",
+          "source": "def run(a: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        a: First.\n        b: Gone.\n    \"\"\"\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "def run(a: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        a: First.\n    \"\"\"\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [
+        "docs.heal-parameter-rename",
+        "docs.remove-stale-entries"
+      ],
+      "key": "docs.stale-parameter",
+      "maturity": "stable",
+      "message": "`{function}` documents {stale}, which it does not take.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "A docstring entry for a parameter the function no longer takes misleads readers.",
+      "requires": [
+        "function.stale_documented_count"
+      ],
+      "severity": "error",
+      "subject": [
+        "FunctionDef",
+        "AsyncFunctionDef"
+      ],
+      "title": "Docstring documents a missing parameter",
+      "when": {
+        "cmp": "gt",
+        "fact": "function.stale_documented_count",
+        "op": "compare",
+        "value": 0
+      }
+    },
+    {
+      "aliases": {},
+      "code": "DOC007",
+      "domain": "docs",
+      "evidence": [
+        {
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "examples": [
+        {
+          "note": "",
+          "source": "\"\"\"Module doc.   \n\n\nMore.\n\"\"\"\n\nx = 1\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "def run() -> None:\n    \"\"\"Run.   \n\n\n\n    More.\n    \"\"\"\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "def run() -> None:\n    \"\"\"Run.\n\n    More.\n    \"\"\"\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [
+        "docs.tidy-docstring"
+      ],
+      "key": "docs.untidy-docstring",
+      "maturity": "stable",
+      "message": "`{name}` has a docstring with stray whitespace or misaligned lines.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "Trailing spaces, blank-line runs and misaligned lines inside a docstring add noise.",
+      "requires": [
+        "docstring.is_untidy"
+      ],
+      "severity": "info",
+      "subject": [
+        "Module",
+        "FunctionDef",
+        "AsyncFunctionDef",
+        "ClassDef"
+      ],
+      "title": "Docstring has stray whitespace",
+      "when": {
+        "cmp": "eq",
+        "fact": "docstring.is_untidy",
+        "op": "compare",
+        "value": true
       }
     }
   ]

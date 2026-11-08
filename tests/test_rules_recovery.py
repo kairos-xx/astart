@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, final
 
 import pytest
 from astart.rules.recovery import (
@@ -22,7 +22,17 @@ from tests.expectations import (
     expect_true,
 )
 
-TYPED: Final[str] = """\
+
+@final
+class Constants:
+    """Constants for the recovery tests.
+
+    Attributes:
+        typed: Fully annotated module the recovery maps are read from.
+
+    """
+
+    typed: Final[str] = """\
 def total(items: list[int], scale: int = 2) -> int:
     return sum(items) * scale
 
@@ -34,7 +44,7 @@ def shout(name: str) -> str:
 
 def test_annotation_map_keys_by_qualified_name() -> None:
     """Check that annotation map keys by qualified name."""
-    found: dict[str, str] = annotation_map(source=TYPED)
+    found: dict[str, str] = annotation_map(source=Constants.typed)
     expect_equal(actual=found["total.scale"], expected="int")
     expect_equal(actual=found["total->"], expected="int")
     expect_equal(actual=found["shout.name"], expected="str")
@@ -42,7 +52,7 @@ def test_annotation_map_keys_by_qualified_name() -> None:
 
 def test_strip_removes_every_annotation() -> None:
     """Check that strip removes every annotation."""
-    stripped: str = strip_annotations(source=TYPED)
+    stripped: str = strip_annotations(source=Constants.typed)
     expect_equal(actual=annotation_map(source=stripped), expected={})
     expect_in(item="def total(items, scale=2):", container=stripped)
     expect_not_in(item="->", container=stripped)
@@ -50,14 +60,18 @@ def test_strip_removes_every_annotation() -> None:
 
 def test_recover_scores_precision_and_recall() -> None:
     """Check that recover scores precision and recall."""
-    score: RecoveryScore = recover(source=TYPED, filename="typed.py")
+    score: RecoveryScore = recover(
+        source=Constants.typed,
+        filename="typed.py",
+        options=RecoveryOptions(min_confidence=0.0),
+    )
     expect_equal(actual=score.wrong, expected=())
     expect_in(item="shout.name", container=score.synthesized)
     expect_equal(actual=score.precision, expected=1.0)
     expect_equal(actual=score.recall > 0.0, expected=True)
     expect_equal(
         actual=score.truth,
-        expected=len(annotation_map(source=TYPED)),
+        expected=len(annotation_map(source=Constants.typed)),
     )
 
 
@@ -154,7 +168,7 @@ def test_misses_are_attributed_to_the_refusal_reason() -> None:
     score: RecoveryScore = recover(
         source=source,
         filename="t.py",
-        options=RecoveryOptions(attribute=True),
+        options=RecoveryOptions(attribute=True, min_confidence=0.0),
     )
     expect_equal(actual=score.missed, expected=("f->", "f.items"))
     expect_equal(
@@ -171,3 +185,9 @@ def test_attribution_is_off_unless_requested() -> None:
         filename="t.py",
     )
     expect_equal(actual=score.missed_reasons, expected=())
+
+
+def test_the_empty_tuple_type_survives_normalization_twice() -> None:
+    """Check that ``tuple[()]`` stays valid when normalized again."""
+    once: str = normalize_annotation(text="dict[str, int] | tuple[()]")
+    expect_equal(actual=normalize_annotation(text=once), expected=once)

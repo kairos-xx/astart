@@ -115,7 +115,7 @@ def f(x):
 f(1)
 f('a')
 """,
-            {"f": None, "f.x": None},
+            {"f": "int | str", "f.x": "int | str"},
         ),
         "int and float call sites disagree": (
             """\
@@ -128,7 +128,7 @@ f(1.5)
 """,
             {"f": None, "f.x": None},
         ),
-        "call site str, return not provable": (
+        "call site str, str-method return": (
             """\
 def shout(t):
     return t.upper()
@@ -136,7 +136,7 @@ def shout(t):
 
 shout('a')
 """,
-            {"shout": None, "shout.t": "str"},
+            {"shout": "str", "shout.t": "str"},
         ),
         "call site list": (
             """\

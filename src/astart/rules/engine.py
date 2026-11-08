@@ -12,6 +12,7 @@ from astart.rules.catalog import CatalogError, validate_catalog
 from astart.rules.confidence import offer_confidence
 from astart.rules.facts import (
     Constants,
+    FactsOptions,
     Registry,
     collect_subjects,
     module_facts,
@@ -26,6 +27,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from astart import CommentedModule as Module
+    from astart.project.libraries import LibraryIndex
+    from astart.project.versions import PythonTarget
     from astart.rules.facts import (
         Applier,
         EvidenceProvider,
@@ -36,6 +39,7 @@ if TYPE_CHECKING:
     from astart.rules.hints import HintCache
     from astart.rules.jsonvalue import JsonValue
     from astart.rules.model import Catalog, Fix, Rule
+    from astart.rules.project_bridge import ProjectView
     from astart.rules.registry import Registries
 
 
@@ -67,6 +71,20 @@ class CheckOptions:
         hint_cache: Cache shared between runs on the same text, or ``None``.
         create_constants: Whether a missing ``Constants`` class may be
             created to hold ``Final`` module constants.
+        stub_docstrings: Whether undocumented public definitions get a stub
+            docstring.
+        annotate_variables: Whether function-local variables get a type
+            annotation.
+        negotiate: Whether negotiated annotations supplement the hint
+            index.
+        engine: Conversion mode: the inference engine's annotations fill
+            what nothing else decided.
+        project: Cross-module view of the project, or ``None`` for
+            single-module analysis.
+        libraries: External signature index for callees outside the
+            project, or ``None``.
+        target: Oldest Python version emitted code must run on, or
+            ``None`` for the running interpreter.
 
     """
 
@@ -74,6 +92,13 @@ class CheckOptions:
     stubs_path: Path | None = None
     hint_cache: HintCache | None = None
     create_constants: bool = False
+    stub_docstrings: bool = False
+    annotate_variables: bool = False
+    negotiate: bool = False
+    engine: bool = False
+    project: ProjectView | None = None
+    libraries: LibraryIndex | None = None
+    target: PythonTarget | None = None
 
 
 @final
@@ -137,10 +162,19 @@ def check(
             ),
             facts=module_facts(
                 module=module,
-                stubs_path=chosen.stubs_path,
-                source=source,
-                cache=chosen.hint_cache,
-                create_constants=chosen.create_constants,
+                options=FactsOptions(
+                    stubs_path=chosen.stubs_path,
+                    source=source,
+                    cache=chosen.hint_cache,
+                    create_constants=chosen.create_constants,
+                    stub_docstrings=chosen.stub_docstrings,
+                    annotate_variables=chosen.annotate_variables,
+                    negotiate=chosen.negotiate,
+                    engine=chosen.engine,
+                    project=chosen.project,
+                    libraries=chosen.libraries,
+                    target=chosen.target,
+                ),
             ),
         )
         findings: tuple[Finding, ...] = _evaluate(

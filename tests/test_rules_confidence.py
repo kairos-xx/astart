@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from textwrap import dedent
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, final
 
 from astart.rules import (
     FixResult,
@@ -13,6 +13,7 @@ from astart.rules import (
     fix_source,
     load_default_catalog,
 )
+from astart.rules.confidence import Constants as ConfidenceConstants
 from astart.rules.vocabulary import FixSafety
 
 from tests.expectations import expect_equal, expect_in, expect_not_in
@@ -22,15 +23,25 @@ if TYPE_CHECKING:
     from astart.rules.registry import Registries
     from astart.rules.runner import FixResult
 
-SOURCE: Final[str] = dedent(
-    text="""\
+
+@final
+class Constants:
+    """Constants for the test.
+
+    Attributes:
+        source: Module whose fixes sit near the confidence floor.
+
+    """
+
+    source: Final[str] = dedent(
+        text="""\
     def pad(text, width=10):
         print(text, width)
 
 
     pad("a")
     """,
-)
+    )
 
 
 def _fix(*, minimum: float) -> FixResult:
@@ -45,7 +56,7 @@ def _fix(*, minimum: float) -> FixResult:
     """
     registries: Registries = default_registries()
     return fix_source(
-        source=SOURCE,
+        source=Constants.source,
         filename="m.py",
         catalog=load_default_catalog(registries=registries),
         registries=registries,
@@ -60,7 +71,7 @@ def test_offers_carry_the_confidence_of_their_evidence() -> None:
     """Check that offers carry the confidence of their evidence."""
     registries: Registries = default_registries()
     found: CheckResult = check(
-        source=SOURCE,
+        source=Constants.source,
         filename="m.py",
         catalog=load_default_catalog(registries=registries),
         registries=registries,
@@ -72,7 +83,7 @@ def test_offers_carry_the_confidence_of_their_evidence() -> None:
     }
     expect_equal(
         actual=by_path[("pad.width", "typing.add-inferred-annotation")],
-        expected=0.99,
+        expected=ConfidenceConstants.by_literal["int"],
     )
     expect_equal(
         actual=by_path[("pad.text", "typing.add-inferred-annotation")],
@@ -87,7 +98,11 @@ def test_offers_carry_the_confidence_of_their_evidence() -> None:
 def test_minimum_confidence_filters_weaker_evidence() -> None:
     """Check that minimum confidence filters weaker evidence."""
     strict: FixResult = _fix(minimum=0.97)
-    expect_in(item="width: int = 10", container=strict.source)
+    expect_not_in(item="width: int", container=strict.source)
     expect_not_in(item="text: str", container=strict.source)
+    middle: FixResult = _fix(minimum=0.9)
+    expect_in(item="text: str", container=middle.source)
+    expect_not_in(item="width: int", container=middle.source)
     relaxed: FixResult = _fix(minimum=0.0)
     expect_in(item="text: str", container=relaxed.source)
+    expect_in(item="width: int = 10", container=relaxed.source)

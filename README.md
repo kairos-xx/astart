@@ -3,6 +3,8 @@
 `astart` is a single Python 3.13+ package for mutable Python ASTs, complete
 lexical token snapshots, loss-aware source rewriting, and dependency-driven
 static type and value inference. It has no third-party runtime dependencies.
+[`docs/architecture.md`](docs/architecture.md) maps every module under
+`src/astart/rules/` to its documented role.
 
 ## Installation
 
@@ -91,7 +93,9 @@ Report rule violations, or fix them automatically:
 astart check src/ [--format text|json] [--fail-on error|warning|info]
 astart fix src/ [--safe-only] [--diff | --check] [--no-format] \
     [--checker auto|off] [--min-confidence 0.95] [--source-root DIR ...] \
-    [--create-constants-class]
+    [--create-constants-class] [--stub-docstrings] [--project] \
+    [--annotate-variables] [--engine] [--no-negotiate] [--closed-world] [--target-version VER] [--cache] \
+    [--exclude GLOB ...] [--no-docs]
 ```
 
 `astart fix` adds missing keyword arguments and type hints by default,
@@ -105,7 +109,27 @@ rejected fix is skipped with the code `checker-rejected`. The checker runs
 on a scratch copy in a temp directory; imports resolve as for the real file
 (its package, a `src/` layout, the project root and `PYTHONPATH` are detected,
 and `--source-root` adds more). `--min-confidence`
-drops fixes whose evidence is weaker than the given confidence. Exit status: `0` clean, `1` findings or changes, `2`
+drops fixes whose evidence is weaker than the given confidence. 
+Docstrings are healed too (Google style, triple-quoted only): missing
+parameters get a stub entry, entries for parameters that no longer exist are
+removed, and trailing space, blank-line runs and misaligned lines are tidied.
+`--stub-docstrings` goes further and adds a stub docstring to undocumented
+public definitions, and `--no-docs` skips every `docs.*` fix for typing-only
+runs. `--annotate-variables` annotates function-local variables whose type
+the evidence proves (`count: int = 0`, `h: int = helper()`); modules that
+already annotate some locals get the rest without the flag. The contract negotiator
+(see `docs/benchmarks.md`) adds parameter and return annotations the hint
+index has no hint for; `--no-negotiate` turns it off. `--engine` is the conversion mode: it also
+takes the annotations of the inference engine (the descendant of the author's
+earlier converter) for everything the evidence-based pipeline left undecided,
+at confidence 0.55 (the default floor drops to 0.5 with it); the type checker
+gate still vetoes any of them that introduces an error, so use it with a
+checker installed. `--exclude` skips discovery paths matching a glob (repeatable, on both
+`check` and `fix`). `--project` analyses the discovered files as one project
+so cross-module evidence can feed the hints; `--closed-world` then assumes
+all callers are inside that file set. `--target-version` sets the oldest
+Python version the emitted code must run on.
+Exit status: `0` clean, `1` findings or changes, `2`
 unreadable input or a missing path.
 
 ```console
@@ -122,6 +146,13 @@ annotations that cannot be inserted through lexical patches.
 PEP 263 source encodings and existing newline sequences are retained.
 
 ## Limits
+
+- recall is low where callers are not visible (about 11% on the
+  stripped-annotation benchmark) and precision is the priority;
+- cross-module call sites and typeshed stubs are not used yet;
+- Protocol and `TypeVar` synthesis covers common shapes only;
+- keyword fixes for constructors, overrides and callbacks are partial;
+- large files are slow (no cache or parallelism yet).
 
 The source editor deliberately rejects transformations that cannot be safely
 preserved instead of silently rewriting unrelated code. The static interpreter
@@ -142,13 +173,18 @@ python -m pytest -q --cov=astart --cov-branch --cov-report=term-missing
 
 ### Files
 
+- [`AGENTS.md`](AGENTS.md) — Provide AGENTS md content.
+- [`CHANGELOG.md`](CHANGELOG.md) — Provide CHANGELOG md content.
 - [`LICENSE`](LICENSE) — Provide LICENSE project content.
 - [`MANIFEST.in`](MANIFEST.in) — Provide MANIFEST in content.
 - [`pyproject.toml`](pyproject.toml) — Provide pyproject toml content.
 
 ### Subdirectories
 
+- [`benchmarks/`](benchmarks/README.md) — Benchmarks for the annotation fixer.
+- [`dev/`](dev/README.md) — Contain dev resources and their directory inventory.
 - [`docs/`](docs/README.md) — Use `from astart import ...`. The `astart.semantic` and `astart._graph` trees are implementation modules; the latter is not a separate distribution.
+- [`scripts/`](scripts/README.md) — Maintenance scripts for astart.
 - [`src/`](src/README.md) — Astart: mutable Python AST, preserved source, semantic analysis and typing.
 - [`tests/`](tests/README.md) — Tests for source-preserving comment AST nodes and safe AST rewrites.
 

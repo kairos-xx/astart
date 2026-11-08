@@ -103,3 +103,65 @@ def test_duplicate_arguments_collapse(*, tmp_path: Path) -> None:
     only: Path = _touch(root=tmp_path, name="a.py")
     result: DiscoveryResult = discover_files(paths=[only, tmp_path, only])
     expect_equal(actual=result.files, expected=(only,))
+
+
+def test_exclude_glob_skips_matching_files(*, tmp_path: Path) -> None:
+    """Check that ``--exclude`` globs drop walked files.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
+    kept: Path = _touch(root=tmp_path, name="a.py")
+    skipped: Path = _touch(root=tmp_path, name="skip/b.py")
+    result: DiscoveryResult = discover_files(
+        paths=[tmp_path],
+        exclude=["skip/*"],
+    )
+    expect_equal(actual=result.files, expected=(kept,))
+    expect_not_in(item=skipped, container=result.files)
+
+
+def test_exclude_glob_matches_nested_paths(*, tmp_path: Path) -> None:
+    """Check that ``*`` crosses directories in exclude globs.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
+    kept: Path = _touch(root=tmp_path, name="a.py")
+    _ = _touch(root=tmp_path, name="deep/nested/b.py")
+    result: DiscoveryResult = discover_files(
+        paths=[tmp_path],
+        exclude=["deep/*"],
+    )
+    expect_equal(actual=result.files, expected=(kept,))
+
+
+def test_exclude_glob_applies_to_explicit_files(*, tmp_path: Path) -> None:
+    """Check that ``--exclude`` also filters explicitly named files.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
+    kept: Path = _touch(root=tmp_path, name="a.py")
+    skipped: Path = _touch(root=tmp_path, name="skip/b.py")
+    result: DiscoveryResult = discover_files(
+        paths=[tmp_path, skipped],
+        exclude=["*/skip/*"],
+    )
+    expect_equal(actual=result.files, expected=(kept,))
+
+
+def test_no_exclude_keeps_everything(*, tmp_path: Path) -> None:
+    """Check that discovery is unchanged without exclude globs.
+
+    Args:
+        tmp_path: Directory to walk for files.
+
+    """
+    first: Path = _touch(root=tmp_path, name="a.py")
+    second: Path = _touch(root=tmp_path, name="skip/b.py")
+    result: DiscoveryResult = discover_files(paths=[tmp_path])
+    expect_equal(actual=result.files, expected=(first, second))

@@ -6,6 +6,7 @@ from ast import (
     AST,
     Add,
     AnnAssign,
+    Assert,
     Assign,
     AsyncFunctionDef,
     AsyncWith,
@@ -23,12 +24,15 @@ from ast import (
     Dict,
     DictComp,
     Div,
+    Expr,
     FloorDiv,
     FunctionDef,
     Global,
     If,
     IfExp,
     Invert,
+    Is,
+    IsNot,
     JoinedStr,
     Lambda,
     List,
@@ -40,12 +44,15 @@ from ast import (
     Name,
     Nonlocal,
     Not,
+    Pow,
     Raise,
     Return,
     Set,
     SetComp,
+    Slice,
     Store,
     Sub,
+    Subscript,
     Try,
     TryStar,
     Tuple,
@@ -63,7 +70,7 @@ from ast import (
 from ast import (
     arguments as ast_arguments,
 )
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, cast, final
 
 from astart.rules.resolve import constructor_key
 from astart.rules.scopes import names_bound_by
@@ -84,15 +91,74 @@ class Constants:
         scalar_annotations: Builtin scalars accepted as plain annotations.
         scope_nodes: Grouped module constant.
         min_bindings: Fewest bindings that make a local worth proving here.
+        noreturn_mark: Call-node attribute flagging a call that never returns.
+        noreturn_rounds: Passes that propagate never-returning helpers.
+        placeholder: Exception that marks an abstract hook.
+        str_to_list: ``str`` methods that return ``list[str]``.
         rebound_rounds: Passes that settle locals whose bindings depend on
             one another.
+        str_to_str: ``str`` methods whose result is always ``str``.
+        str_to_bool: ``str`` methods whose result is always ``bool``.
+        str_to_int: ``str`` methods whose result is always ``int``.
+        special_calls: Builtin names ``_call`` handles argument-by-argument.
 
     """
 
     rebound_rounds: Final[int] = 4
+    str_to_list: Final[frozenset[str]] = frozenset(
+        {"split", "rsplit", "splitlines"},
+    )
     min_bindings: Final[int] = 2
+    noreturn_mark: Final[str] = "astart_noreturn_call"
+    noreturn_rounds: Final[int] = 8
+    placeholder: Final[str] = "NotImplementedError"
 
     numeric: Final[frozenset[str]] = frozenset({"bool", "int", "float"})
+    str_to_str: Final[frozenset[str]] = frozenset(
+        {
+            "upper",
+            "lower",
+            "strip",
+            "lstrip",
+            "rstrip",
+            "title",
+            "capitalize",
+            "casefold",
+            "swapcase",
+            "replace",
+            "join",
+            "format",
+            "zfill",
+            "center",
+            "ljust",
+            "rjust",
+            "expandtabs",
+            "removeprefix",
+            "removesuffix",
+        },
+    )
+    str_to_bool: Final[frozenset[str]] = frozenset(
+        {
+            "startswith",
+            "endswith",
+            "isdigit",
+            "isalpha",
+            "isalnum",
+            "isspace",
+            "islower",
+            "isupper",
+            "isidentifier",
+            "isnumeric",
+            "isdecimal",
+            "istitle",
+        },
+    )
+    str_to_int: Final[frozenset[str]] = frozenset(
+        {"find", "rfind", "index", "rindex", "count"},
+    )
+    special_calls: Final[frozenset[str]] = frozenset(
+        {"abs", "round", "min", "max", "sorted", "list", "set", "tuple"},
+    )
     call_types: Final[dict[str, str]] = {
         "ascii": "str",
         "bin": "str",
@@ -153,6 +219,33 @@ def own_nodes(*, function: Function) -> Iterator[AST]:
         )
 
 
+def _method_result(*, receiver: str | None, attr: str) -> str | None:
+    """Give the result type of a known ``str`` or ``bytes`` method.
+
+    Args:
+        receiver: Proven type of the receiver.
+        attr: Method name.
+
+    Returns:
+        The result type, or ``None`` when the method is not known.
+
+    """
+    if receiver == "bytes":
+        return "str" if attr == "decode" else None
+    if receiver != "str":
+        return None
+    for names, kind in (
+        (Constants.str_to_list, "list[str]"),
+        (frozenset({"encode"}), "bytes"),
+        (Constants.str_to_str, "str"),
+        (Constants.str_to_bool, "bool"),
+        (Constants.str_to_int, "int"),
+    ):
+        if attr in names:
+            return kind
+    return None
+
+
 def _bound_names(*, target: AST) -> list[str]:
     """List the names a comprehension target binds.
 
@@ -209,6 +302,7 @@ class _Typer:
             Set: self._set,
             Tuple: self._tuple,
             Dict: self._dict,
+            Subscript: self._subscript,
             ListComp: self._comprehension,
             SetComp: self._comprehension,
             DictComp: self._comprehension,
@@ -409,17 +503,158 @@ class _Typer:
             The result type, or ``None``.
 
         """
-        if not isinstance(node, Call) or not isinstance(
-            node.func,
-            Name,
-        ):
+        if not isinstance(node, Call):
+            return None
+        if isinstance(node.func, Attribute):
+            return self._attribute_call(node=node)
+        if not isinstance(node.func, Name):
             return None
         name: str = node.func.id
         if self._counts.get(constructor_key(name=name)):
             return name
         if self._counts.get(name, 0) != 0:
             return None
-        return Constants.call_types.get(name)
+        return (
+            self._builtin_call(name=name, node=node)
+            if name in Constants.special_calls
+            else Constants.call_types.get(name)
+        )
+
+    def _attribute_call(self, *, node: Call) -> str | None:
+        """Type ``receiver.method(...)`` for known ``str`` methods.
+
+        Args:
+            node: Call whose function is an attribute.
+
+        Returns:
+            The result type, or ``None``.
+
+        """
+        func: expr = node.func
+        if not isinstance(func, Attribute):
+            return None
+        return _method_result(
+            receiver=self.type_of(node=func.value),
+            attr=func.attr,
+        )
+
+    def _builtin_call(self, *, name: str, node: Call) -> str | None:
+        """Type ``abs``/``round``/``min``/``max``/``sorted``/containers.
+
+        Args:
+            name: Callee name, one of ``Constants.special_calls``.
+            node: Call expression.
+
+        Returns:
+            The result type, or ``None``.
+
+        """
+        if name in {"list", "set", "tuple"}:
+            return self._collection_call(name=name, node=node)
+        return self._scalar_call(name=name, node=node)
+
+    def _scalar_call(self, *, name: str, node: Call) -> str | None:
+        """Type ``abs``, ``round``, ``min``, ``max`` and ``sorted``.
+
+        Args:
+            name: Callee name.
+            node: Call expression.
+
+        Returns:
+            The result type, or ``None``.
+
+        """
+        if node.keywords:
+            return None
+        if name in {"abs", "round"}:
+            return self._rounding_call(name=name, node=node)
+        if name == "sorted":
+            return self._sorted_call(node=node)
+        return self._extreme_call(node=node)
+
+    def _rounding_call(self, *, name: str, node: Call) -> str | None:
+        """Type ``abs``/``round`` over one typed numeric argument.
+
+        Args:
+            name: ``"abs"`` or ``"round"``.
+            node: Call expression.
+
+        Returns:
+            The operand type for ``abs``, ``"int"`` for ``round``, or
+            ``None``.
+
+        """
+        if len(node.args) != 1:
+            return None
+        found: str | None = self.type_of(node=node.args[0])
+        if found not in {"int", "float"}:
+            return None
+        return found if name == "abs" else "int"
+
+    def _sorted_call(self, *, node: Call) -> str | None:
+        """Type ``sorted`` over a ``list[T]`` argument.
+
+        Args:
+            node: Call expression.
+
+        Returns:
+            The ``list[T]`` type, or ``None``.
+
+        """
+        if not node.args:
+            return None
+        whole: str | None = self.type_of(node=node.args[0])
+        return (
+            whole if whole is not None and whole.startswith("list[") else None
+        )
+
+    def _extreme_call(self, *, node: Call) -> str | None:
+        """Type ``min``/``max`` over agreeing scalar arguments.
+
+        Args:
+            node: Call expression.
+
+        Returns:
+            The shared scalar type, or ``None``.
+
+        """
+        if len(node.args) <= 1:
+            return None
+        types: list[str | None] = [
+            self.type_of(node=argument) for argument in node.args
+        ]
+        first: str | None = types[0]
+        if first is None or first not in Constants.scalar_annotations:
+            return None
+        return first if all(item == first for item in types) else None
+
+    def _collection_call(self, *, name: str, node: Call) -> str | None:
+        """Type ``list``/``set``/``tuple`` over one typed iterable.
+
+        Args:
+            name: ``"list"``, ``"set"`` or ``"tuple"``.
+            node: Call expression.
+
+        Returns:
+            The container type, or ``None``.
+
+        """
+        if len(node.args) != 1 or node.keywords:
+            return None
+        whole: str | None = self.type_of(node=node.args[0])
+        if whole is None:
+            return None
+        if name == "tuple":
+            return whole if whole.startswith("tuple[") else None
+        item: str | None = None
+        if whole == "str":
+            item = "str"
+        else:
+            for prefix in ("list[", "set["):
+                if whole.startswith(prefix) and whole.endswith("]"):
+                    item = whole[len(prefix) : -1]
+                    break
+        return None if item is None else f"{name}[{item}]"
 
     def _binop(self, node: AST) -> str | None:
         """Type arithmetic and string operations on known scalars.
@@ -435,6 +670,8 @@ class _Typer:
             return None
         left: str | None = self.type_of(node=node.left)
         right: str | None = self.type_of(node=node.right)
+        if isinstance(node.op, Pow):
+            return self._pow(node=node, left=left, right=right)
         if (
             left is not None
             and right is not None
@@ -442,14 +679,73 @@ class _Typer:
             and right in Constants.numeric
         ):
             return self._numeric(op=node.op, left=left, right=right)
-        if left == "str" and right == "str" and isinstance(node.op, Add):
+        if (left == "str" and isinstance(node.op, Mod)) or (
+            left == "str" and right == "str" and isinstance(node.op, Add)
+        ):
             return "str"
-        repeats: bool = isinstance(node.op, Mult) and {left, right} <= {
-            "str",
-            "int",
-            "bool",
-        }
-        return "str" if repeats and "str" in {left, right} else None
+        if (
+            isinstance(node.op, Add)
+            and left is not None
+            and left == right
+            and left.startswith("list[")
+        ):
+            return left
+        return (
+            "str"
+            if isinstance(node.op, Mult)
+            and {left, right}
+            <= {
+                "str",
+                "int",
+                "bool",
+            }
+            and "str" in {left, right}
+            else None
+        )
+
+    @staticmethod
+    def _pow(
+        *,
+        node: BinOp,
+        left: str | None,
+        right: str | None,
+    ) -> str | None:
+        """Type ``base ** exponent`` without claiming complex results.
+
+        An integral exponent on an ``int``/``bool`` base stays ``int``; a
+        ``float`` on either side gives ``float`` only when no complex result
+        is possible — an integral exponent, or a base that is a non-negative
+        literal. A possibly negative base with a fractional exponent can be
+        ``complex``, so it is refused.
+
+        Args:
+            node: The ``**`` expression.
+            left: Left operand type.
+            right: Right operand type.
+
+        Returns:
+            ``"int"``, ``"float"`` or ``None``.
+
+        """
+        if (
+            left in {"int", "bool"}
+            and right in {"int", "bool"}
+            and isinstance(node.right, Constant)
+            and isinstance(node.right.value, int)
+            and node.right.value >= 0
+        ):
+            return "int"
+        if left == "float" and right in {"int", "bool"}:
+            return "float"
+        if right == "float" and left in {"int", "bool", "float"}:
+            base: AST = node.left
+            if (
+                isinstance(base, Constant)
+                and isinstance(base.value, int | float)
+                and base.value >= 0
+            ):
+                return "float"
+        return None
 
     def _list(self, node: AST) -> str | None:
         """Type a list display of equally typed items.
@@ -602,6 +898,73 @@ class _Typer:
             return None
         return f"dict[{key_type}, {value_type}]"
 
+    @staticmethod
+    def _dict_item(*, whole: str) -> tuple[str, str] | None:
+        """Split ``dict[K, V]`` into key and value type strings.
+
+        Args:
+            whole: Container type string.
+
+        Returns:
+            ``(K, V)``, or ``None`` when ``whole`` is not a dict type.
+
+        """
+        if not (whole.startswith("dict[") and whole.endswith("]")):
+            return None
+        inner: str = whole[len("dict[") : -1]
+        depth: int = 0
+        for index, char in enumerate(iterable=inner):
+            if char == "[":
+                depth += 1
+            elif char == "]":
+                depth -= 1
+            elif char == "," and depth == 0:
+                key: str = inner[:index].strip()
+                value: str = inner[index + 1 :].strip()
+                return (key, value) if key and value else None
+        return None
+
+    def _subscript(self, node: AST) -> str | None:
+        """Type ``value[index]`` for known containers.
+
+        ``list[T]`` with an integer literal gives ``T`` and with a slice
+        gives ``list[T]``; ``str`` gives ``str`` for either; ``dict[K, V]``
+        gives ``V`` when the key types to ``K``.
+
+        Args:
+            node: Expression.
+
+        Returns:
+            The element type, or ``None``.
+
+        """
+        if (
+            not isinstance(
+                node,
+                Subscript,
+            )
+            or (whole := self.type_of(node=node.value)) is None
+        ):
+            return None
+
+        slc: AST = node.slice
+        integer_index: bool = isinstance(slc, Constant) and isinstance(
+            slc.value,
+            int,
+        )
+        if whole.startswith("list[") and whole.endswith("]"):
+            if integer_index:
+                return whole[len("list[") : -1]
+            return whole if isinstance(slc, Slice) else None
+        if whole == "str":
+            return "str" if integer_index or isinstance(slc, Slice) else None
+        item: tuple[str, str] | None = self._dict_item(whole=whole)
+        if item is None:
+            return None
+        key, value = item
+        index_type: str | None = self.type_of(node=slc)
+        return value if index_type == key else None
+
 
 def _try_can_fall_off(*, statement: Try | TryStar) -> bool:
     """Report whether control can leave a ``try`` statement normally.
@@ -641,21 +1004,27 @@ def can_fall_off(*, body: list[stmt]) -> bool:
     if not body:
         return True
     last: stmt = body[-1]
+    result: bool = True
     match last:
         case Return() | Raise():
-            return False
+            result = False
+        case Expr(value=Call() as call) if vars(call).get(
+            Constants.noreturn_mark,
+        ):
+            result = False
         case If(body=then, orelse=otherwise):
-            return (
+            result = (
                 not otherwise
                 or can_fall_off(body=then)
                 or can_fall_off(body=otherwise)
             )
         case With(body=inner) | AsyncWith(body=inner):
-            return can_fall_off(body=inner)
+            result = can_fall_off(body=inner)
         case Try() | TryStar():
-            return _try_can_fall_off(statement=last)
+            result = _try_can_fall_off(statement=last)
         case _:
-            return True
+            pass
+    return result
 
 
 def _single_assignments(*, function: Function) -> dict[str, int]:
@@ -851,12 +1220,87 @@ def never_returns(*, function: Function) -> bool:
         cannot reach the end, so calling it never produces a value.
 
     """
-    if any(
-        isinstance(node, (Return, Yield, YieldFrom))
-        for node in own_nodes(function=function)
-    ):
+    nodes: list[AST] = list(own_nodes(function=function))
+    if any(isinstance(node, (Return, Yield, YieldFrom)) for node in nodes):
+        return False
+    raises: list[Raise] = [node for node in nodes if isinstance(node, Raise)]
+    if raises and all(_placeholder(statement=item) for item in raises):
         return False
     return not can_fall_off(body=function.body)
+
+
+def _placeholder(*, statement: Raise) -> bool:
+    """Tell whether a ``raise`` only marks an abstract hook.
+
+    A method that raises ``NotImplementedError`` is meant to be overridden by
+    one that returns, so calling it ``NoReturn`` would make every override an
+    incompatible one.
+
+    Args:
+        statement: A ``raise`` statement.
+
+    Returns:
+        ``True`` for ``raise NotImplementedError`` with or without arguments.
+
+    """
+    target: expr | None = statement.exc
+    if isinstance(target, Call):
+        target = target.func
+    return isinstance(target, Name) and target.id == Constants.placeholder
+
+
+def mark_noreturn_calls(
+    *,
+    module: Module,
+    counts: Mapping[str, int],
+) -> frozenset[str]:
+    """Flag calls to module functions that never return.
+
+    A function never returns when every path raises, or ends in a call to
+    another such function; the second case needs a fixed point. Only plain
+    synchronous module-level functions bound once qualify. Each qualifying
+    call node carries a mark that :func:`can_fall_off` reads, so nothing else
+    needs to know about the module.
+
+    Args:
+        module: Parsed module, marked in place.
+        counts: Module binding counts.
+
+    Returns:
+        The names of the functions that never return.
+
+    """
+    functions: dict[str, FunctionDef] = {
+        item.name: item
+        for item in module.body
+        if isinstance(item, FunctionDef) and counts.get(item.name) == 1
+    }
+    calls: list[Call] = [
+        node
+        for node in walk(node=module)
+        if isinstance(node, Call)
+        and isinstance(node.func, Name)
+        and node.func.id in functions
+    ]
+    known: set[str] = set()
+    for _round in range(Constants.noreturn_rounds):
+        for call in calls:
+            vars(call)[Constants.noreturn_mark] = (
+                cast(typ="Name", val=call.func).id in known
+            )
+        found: set[str] = {
+            name
+            for name, function in functions.items()
+            if name not in known and never_returns(function=function)
+        }
+        if not found:
+            break
+        known |= found
+    for call in calls:
+        vars(call)[Constants.noreturn_mark] = (
+            cast(typ="Name", val=call.func).id in known
+        )
+    return frozenset(known)
 
 
 def _declared_elsewhere(*, function: Function) -> frozenset[str]:
@@ -905,7 +1349,8 @@ def _type_locals(
                         typer.pure.add(name)
             case _:
                 continue
-    _type_rebound_locals(typer=typer, function=function, fixed=fixed)
+    if any(count >= Constants.min_bindings for count in stored.values()):
+        _type_rebound_locals(typer=typer, function=function, fixed=fixed)
 
 
 def _plain_bindings(
@@ -1095,6 +1540,340 @@ def provable_return(
     )[0]
 
 
+def _union_arms(*, kind: str) -> list[str]:
+    """Split a union spelling into its arms.
+
+    Args:
+        kind: Annotation source such as ``int | None``.
+
+    Returns:
+        The arms, or an empty list when ``kind`` is not a flat union.
+
+    """
+    arms: list[str] = kind.split(sep=" | ")
+    return (
+        arms if len(arms) > 1 and all("[" not in arm for arm in arms) else []
+    )
+
+
+def _narrowed(*, arms: list[str], keep: set[str]) -> str | None:
+    """Join the arms that survive a test.
+
+    Args:
+        arms: All arms of the union.
+        keep: Arm names that remain.
+
+    Returns:
+        The surviving union, or ``None`` when nothing or everything stays (the
+        test proves nothing then).
+
+    """
+    kept: list[str] = [arm for arm in arms if arm in keep]
+    return " | ".join(kept) if 0 < len(kept) < len(arms) else None
+
+
+def _isinstance_classes(*, test: Call) -> set[str] | None:
+    """Read the class names of ``isinstance(name, C)`` or ``(C, D)``.
+
+    Args:
+        test: An ``isinstance`` call.
+
+    Returns:
+        The names, or ``None`` when the second argument is not plain names.
+
+    """
+    second: AST = test.args[1]
+    if isinstance(second, Name):
+        return {second.id}
+    if isinstance(second, Tuple) and all(
+        isinstance(item, Name) for item in second.elts
+    ):
+        return {item.id for item in second.elts if isinstance(item, Name)}
+    return None
+
+
+def _none_arms(
+    *,
+    name: str,
+    arms: list[str],
+    when_none: bool,
+) -> tuple[str, str, str] | None:
+    """Arms of ``name is None`` (or ``is not None``).
+
+    Args:
+        name: The tested parameter.
+        arms: Its union arms.
+        when_none: ``True`` for ``is None``.
+
+    Returns:
+        The name and the type it has when the test is true and when false.
+
+    """
+    true_arm: str | None = _narrowed(arms=arms, keep={"None"})
+    false_arm: str | None = _narrowed(
+        arms=arms,
+        keep={arm for arm in arms if arm != "None"},
+    )
+    if true_arm is None or false_arm is None:
+        return None
+    return (
+        (name, true_arm, false_arm)
+        if when_none
+        else (name, false_arm, true_arm)
+    )
+
+
+def _isinstance_arms(
+    *,
+    test: Call,
+    name: str,
+    arms: list[str],
+) -> tuple[str, str, str] | None:
+    """Arms of ``isinstance(name, C)``.
+
+    Args:
+        test: The ``isinstance`` call.
+        name: The tested parameter.
+        arms: Its union arms.
+
+    Returns:
+        The name and the type it has when the test is true and when false.
+        ``bool`` among the arms blocks ``int`` tests, since ``bool`` is an
+        ``int`` instance.
+
+    """
+    classes: set[str] | None = _isinstance_classes(test=test)
+    if classes is None or ({"int"} & classes and "bool" in arms):
+        return None
+    true_arm: str | None = _narrowed(arms=arms, keep=classes)
+    false_arm: str | None = _narrowed(
+        arms=arms,
+        keep={arm for arm in arms if arm not in classes},
+    )
+    if true_arm is None or false_arm is None:
+        return None
+    return name, true_arm, false_arm
+
+
+def _test_arms(
+    *,
+    test: AST,
+    unions: Mapping[str, list[str]],
+) -> tuple[str, str, str] | None:
+    """Recognise a narrowing test and the type each arm sees.
+
+    Understands ``x is None``, ``x is not None``, ``isinstance(x, C)`` with a
+    class or a tuple of classes, and ``not`` of any of these.
+
+    Args:
+        test: An ``if`` condition.
+        unions: Union parameters by name, with their arms.
+
+    Returns:
+        The name, its type when the test is true, and when it is false; or
+        ``None`` when the test narrows nothing provably.
+
+    """
+    result: tuple[str, str, str] | None = None
+    match test:
+        case UnaryOp(op=Not(), operand=inner):
+            swapped: tuple[str, str, str] | None = _test_arms(
+                test=inner,
+                unions=unions,
+            )
+            if swapped is not None:
+                result = (swapped[0], swapped[2], swapped[1])
+        case Compare(
+            left=Name(id=name),
+            ops=[Is() | IsNot() as operator],
+            comparators=[Constant(value=None)],
+        ) if name in unions:
+            result = _none_arms(
+                name=name,
+                arms=unions[name],
+                when_none=isinstance(operator, Is),
+            )
+        case Name(id=name) if name in unions and "None" in unions[name]:
+            kept: str | None = _narrowed(
+                arms=unions[name],
+                keep={arm for arm in unions[name] if arm != "None"},
+            )
+            if kept is not None:
+                result = (name, kept, " | ".join(unions[name]))
+        case Call(func=Name(id="isinstance"), args=[Name(id=name), _]) if (
+            name in unions
+        ):
+            result = _isinstance_arms(
+                test=test,
+                name=name,
+                arms=unions[name],
+            )
+        case _:
+            pass
+    return result
+
+
+def _returns_below(*, node: AST) -> list[Return]:
+    """Collect the returns under a node, outside nested scopes.
+
+    Args:
+        node: A statement.
+
+    Returns:
+        Its ``return`` statements.
+
+    """
+    found: list[Return] = []
+    stack: list[AST] = [node]
+    while stack:
+        item: AST = stack.pop()
+        if isinstance(item, Return):
+            found.append(item)
+        stack.extend(
+            child
+            for child in iter_child_nodes(node=item)
+            if not isinstance(
+                child,
+                (FunctionDef, AsyncFunctionDef, Lambda, ClassDef),
+            )
+        )
+    return found
+
+
+def _flow_returns(
+    *,
+    body: list[stmt],
+    narrowed: Mapping[str, str],
+    unions: Mapping[str, list[str]],
+    defaults: Mapping[int, str],
+) -> list[tuple[Return, dict[str, str]]]:
+    """Pair every return with the union parameters narrowed there.
+
+    A narrowing test (``is None``, ``isinstance``) narrows its two arms; when
+    one arm cannot fall through, the other arm's narrowing also holds for the
+    statements after the ``if``.
+
+    Args:
+        body: Statements in execution order.
+        narrowed: Narrowings in force when the body starts.
+        unions: Union parameters by name, with their arms.
+        defaults: Trusted ``if x is None: x = value`` statements, by
+            identity, mapped to the parameter they default.
+
+    Returns:
+        Each return with the types its narrowed names have at that point.
+
+    """
+    found: list[tuple[Return, dict[str, str]]] = []
+    current: dict[str, str] = dict(narrowed)
+    for statement in body:
+        if id(statement) in defaults:
+            name: str = defaults[id(statement)]
+            current = {
+                **current,
+                name: " | ".join(arm for arm in unions[name] if arm != "None"),
+            }
+            continue
+        if isinstance(statement, Assert):
+            held: tuple[str, str, str] | None = _test_arms(
+                test=statement.test,
+                unions=unions,
+            )
+            if held is not None:
+                current = {**current, held[0]: held[1]}
+            continue
+        guard: tuple[str, str, str] | None = (
+            _test_arms(test=statement.test, unions=unions)
+            if isinstance(statement, If)
+            else None
+        )
+        if not (isinstance(statement, If) and guard is not None):
+            found.extend(
+                (ret, dict(current)) for ret in _returns_below(node=statement)
+            )
+            continue
+        name, when_true, when_false = guard
+        inside: dict[str, str] = {**current, name: when_true}
+        outside: dict[str, str] = {**current, name: when_false}
+        found.extend(
+            _flow_returns(
+                body=statement.body,
+                narrowed=inside,
+                unions=unions,
+                defaults=defaults,
+            ),
+        )
+        found.extend(
+            _flow_returns(
+                body=statement.orelse,
+                narrowed=outside,
+                unions=unions,
+                defaults=defaults,
+            ),
+        )
+        body_open: bool = can_fall_off(body=statement.body)
+        else_open: bool = not statement.orelse or can_fall_off(
+            body=statement.orelse,
+        )
+        if not body_open and else_open:
+            current = outside
+        elif body_open and not else_open:
+            current = inside
+    return found
+
+
+def _defaulting_guards(
+    *,
+    function: Function,
+    typer: _Typer,
+    known_types: Mapping[str, str],
+    stored: Mapping[str, int],
+) -> dict[int, str]:
+    """Find ``if name is None: name = value`` statements the prover can trust.
+
+    A parameter qualifies when every write to it is such a statement and
+    every assigned value has a proven type that is one of the non-``None``
+    arms of its declared union; after the ``if`` it then holds only those
+    arms.
+
+    Args:
+        function: Function definition.
+        typer: Typer for the assigned values.
+        known_types: Declared types of the parameters.
+        stored: How often each name is written in the function.
+
+    Returns:
+        The trusted ``if`` statements (by identity) mapped to the parameter.
+
+    """
+    found: dict[str, list[tuple[AST, expr]]] = {}
+    for node in own_nodes(function=function):
+        match node:
+            case If(
+                test=Compare(
+                    left=Name(id=name),
+                    ops=[Is()],
+                    comparators=[Constant(value=None)],
+                ),
+                body=[Assign(targets=[Name(id=target)], value=value)],
+                orelse=[],
+            ) if name == target:
+                found.setdefault(name, []).append((node, value))
+            case _:
+                continue
+    trusted: dict[int, str] = {}
+    for name, items in found.items():
+        arms: list[str] = _union_arms(kind=known_types.get(name, ""))
+        allowed: set[str] = {arm for arm in arms if arm != "None"}
+        if (
+            "None" in arms
+            and stored.get(name) == len(items)
+            and all(typer.type_of(node=value) in allowed for _, value in items)
+        ):
+            trusted.update({id(node): name for node, _ in items})
+    return trusted
+
+
 def provable_return_detail(
     *,
     function: Function,
@@ -1131,12 +1910,33 @@ def provable_return_detail(
     )
     typer.reads = 0
     types: list[str] = []
-    for node in own_nodes(function=function):
-        if not isinstance(node, Return):
-            continue
+    stored: dict[str, int] = _single_assignments(function=function)
+    defaults: dict[int, str] = _defaulting_guards(
+        function=function,
+        typer=typer,
+        known_types=known_types,
+        stored=stored,
+    )
+    defaulted: set[str] = set(defaults.values())
+    unions: dict[str, list[str]] = {
+        name: arms
+        for name, kind in known_types.items()
+        if name not in rebound
+        and (name not in stored or name in defaulted)
+        and (arms := _union_arms(kind=kind))
+    }
+    for node, overrides in _flow_returns(
+        body=function.body,
+        narrowed={},
+        unions=unions,
+        defaults=defaults,
+    ):
+        saved: dict[str, str] = {name: typer.env[name] for name in overrides}
+        typer.env.update(overrides)
         result: str | None = (
             "None" if node.value is None else typer.type_of(node=node.value)
         )
+        typer.env.update(saved)
         if result is None:
             return None, False
         types.append(result)

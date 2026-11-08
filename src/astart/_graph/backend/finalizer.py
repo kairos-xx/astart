@@ -38,14 +38,15 @@ from ast import (
 )
 from typing import TYPE_CHECKING, Final, cast, final
 
-if TYPE_CHECKING:
-    from astart._graph.backend.engine import Parenthesized
 from astart._graph.dispatch import LowercaseTransformer
 from astart._graph.graph.semantics import (
     build_annotation,
     nodes_of_type,
     render_annotation,
 )
+
+if TYPE_CHECKING:
+    from astart._graph.backend.engine import Parenthesized
 
 
 @final

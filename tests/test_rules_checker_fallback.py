@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from io import StringIO
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, final
 
 from astart.cli import commands
 from astart.cli.commands import FixCommandSettings, FixMode, run_fix
@@ -29,19 +29,29 @@ if TYPE_CHECKING:
 
     import pytest
 
-MYPY_OUTPUT: Final[str] = (
-    '{"file": "m.py", "line": 1, "column": 0, "message": "Incompatible '
-    'return value", "hint": null, "code": "return-value", '
-    '"severity": "error"}\n'
-    '{"file": "m.py", "line": 1, "column": 0, "message": "defined here", '
-    '"hint": null, "code": null, "severity": "note"}\n'
-)
+
+@final
+class Constants:
+    """Constants for the test.
+
+    Attributes:
+        mypy_output: Sample mypy JSON-lines report for the parser.
+
+    """
+
+    mypy_output: Final[str] = (
+        '{"file": "m.py", "line": 1, "column": 0, "message": "Incompatible '
+        'return value", "hint": null, "code": "return-value", '
+        '"severity": "error"}\n'
+        '{"file": "m.py", "line": 1, "column": 0, "message": "defined here", '
+        '"hint": null, "code": null, "severity": "note"}\n'
+    )
 
 
 def test_mypy_json_lines_are_read() -> None:
     """Check that mypy json lines are read."""
     found: Counter[checker_module.Diagnostic] | None = parse_mypy(
-        output=MYPY_OUTPUT,
+        output=Constants.mypy_output,
     )
     expect_equal(actual=sum((found or {}).values()), expected=1)
     expect_equal(
@@ -152,7 +162,7 @@ def test_without_any_checker_weaker_evidence_is_refused(
     path.write_text(data=SOURCE, encoding="utf-8")
     report: str = _fix(path=path, use_checker=True)
     text: str = path.read_text(encoding="utf-8")
-    expect_in(item="x: int = 1", container=text)
+    expect_not_in(item="x: int = 1", container=text)
     expect_not_in(item="def twice(a: int) -> int", container=text)
     expect_in(item="no type checker", container=report)
 

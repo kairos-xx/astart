@@ -1,22 +1,92 @@
 [
-  {"name": "idna", "version": "3.20", "package": "idna",
-   "smoke": "import idna\nresult = [idna.encode('münchen.de'), idna.decode('xn--mnchen-3ya.de')]"},
-  {"name": "packaging", "version": "26.3", "package": "packaging",
-   "smoke": "from packaging.version import Version\nfrom packaging.specifiers import SpecifierSet\nresult = [Version('1.2.3') < Version('1.10'), SpecifierSet('>=1.0,<2').contains('1.5'), str(Version('2.0.0rc1'))]"},
-  {"name": "pluggy", "version": "1.7.0", "package": "pluggy",
-   "smoke": "import pluggy\nspec = pluggy.HookspecMarker('p')\nimpl = pluggy.HookimplMarker('p')\nclass Spec:\n    @spec\n    def hook(self, arg):\n        pass\nclass Plugin:\n    @impl\n    def hook(self, arg):\n        return arg + 1\nmanager = pluggy.PluginManager('p')\nmanager.add_hookspecs(Spec)\nmanager.register(Plugin())\nresult = manager.hook.hook(arg=1)"},
-  {"name": "platformdirs", "version": "4.14.4", "package": "platformdirs",
-   "smoke": "import platformdirs\ndirs = platformdirs.PlatformDirs('app', 'author')\nresult = [dirs.appname, dirs.appauthor, dirs.user_data_dir.endswith('app')]"},
-  {"name": "python-dotenv", "version": "1.2.4", "package": "dotenv",
-   "smoke": "from io import StringIO\nimport dotenv\nresult = dict(dotenv.dotenv_values(stream=StringIO('A=1\\nB=\"two words\"\\n')))"},
-  {"name": "defusedxml", "version": "0.7.1", "package": "defusedxml",
-   "smoke": "import defusedxml.ElementTree as ET\nroot = ET.fromstring('<a><b x=\"1\"/></a>')\nresult = [root.tag, root[0].attrib]"},
-  {"name": "PyJWT", "version": "2.15.1", "package": "jwt",
-   "smoke": "import jwt\ntoken = jwt.encode({'a': 1}, 'secret-key-secret-key-secret-key', algorithm='HS256')\nresult = jwt.decode(token, 'secret-key-secret-key-secret-key', algorithms=['HS256'])"},
-  {"name": "rfc3986", "version": "2.0.0", "package": "rfc3986",
-   "smoke": "import rfc3986\nuri = rfc3986.uri_reference('http://user@example.com:8080/a/b?c=1#f')\nresult = [uri.scheme, uri.host, uri.port, uri.path, uri.query, uri.fragment]"},
-  {"name": "markdown-it-py", "version": "4.2.0", "package": "markdown_it",
-   "smoke": "from markdown_it import MarkdownIt\nresult = MarkdownIt().render('# Title\\n\\nSome *emphasis* and `code`.')"},
-  {"name": "attrs", "version": "26.1.0", "package": "attr",
-   "smoke": "import attr\nPoint = attr.make_class('Point', ['x', 'y'])\npoint = Point(1, 2)\nresult = [point.x, point.y, repr(point), point == Point(1, 2)]"}
+ {
+  "name": "idna",
+  "version": "3.20",
+  "package": "idna",
+  "smoke": "import idna\nresult = [idna.encode('m\u00fcnchen.de'), idna.decode('xn--mnchen-3ya.de')]"
+ },
+ {
+  "name": "packaging",
+  "version": "26.3",
+  "package": "packaging",
+  "smoke": "from packaging.version import Version\nfrom packaging.specifiers import SpecifierSet\nresult = [Version('1.2.3') < Version('1.10'), SpecifierSet('>=1.0,<2').contains('1.5'), str(Version('2.0.0rc1'))]"
+ },
+ {
+  "name": "pluggy",
+  "version": "1.7.0",
+  "package": "pluggy",
+  "smoke": "import pluggy\nspec = pluggy.HookspecMarker('p')\nimpl = pluggy.HookimplMarker('p')\nclass Spec:\n    @spec\n    def hook(self, arg):\n        pass\nclass Plugin:\n    @impl\n    def hook(self, arg):\n        return arg + 1\nmanager = pluggy.PluginManager('p')\nmanager.add_hookspecs(Spec)\nmanager.register(Plugin())\nresult = manager.hook.hook(arg=1)"
+ },
+ {
+  "name": "platformdirs",
+  "version": "4.14.4",
+  "package": "platformdirs",
+  "smoke": "import platformdirs\ndirs = platformdirs.PlatformDirs('app', 'author')\nresult = [dirs.appname, dirs.appauthor, dirs.user_data_dir.endswith('app')]"
+ },
+ {
+  "name": "python-dotenv",
+  "version": "1.2.4",
+  "package": "dotenv",
+  "smoke": "from io import StringIO\nimport dotenv\nresult = dict(dotenv.dotenv_values(stream=StringIO('A=1\\nB=\"two words\"\\n')))"
+ },
+ {
+  "name": "defusedxml",
+  "version": "0.7.1",
+  "package": "defusedxml",
+  "smoke": "import defusedxml.ElementTree as ET\nroot = ET.fromstring('<a><b x=\"1\"/></a>')\nresult = [root.tag, root[0].attrib]"
+ },
+ {
+  "name": "PyJWT",
+  "version": "2.15.1",
+  "package": "jwt",
+  "smoke": "import jwt\ntoken = jwt.encode({'a': 1}, 'secret-key-secret-key-secret-key', algorithm='HS256')\nresult = jwt.decode(token, 'secret-key-secret-key-secret-key', algorithms=['HS256'])"
+ },
+ {
+  "name": "rfc3986",
+  "version": "2.0.0",
+  "package": "rfc3986",
+  "smoke": "import rfc3986\nuri = rfc3986.uri_reference('http://user@example.com:8080/a/b?c=1#f')\nresult = [uri.scheme, uri.host, uri.port, uri.path, uri.query, uri.fragment]"
+ },
+ {
+  "name": "markdown-it-py",
+  "version": "4.2.0",
+  "package": "markdown_it",
+  "smoke": "from markdown_it import MarkdownIt\nresult = MarkdownIt().render('# Title\\n\\nSome *emphasis* and `code`.')"
+ },
+ {
+  "name": "attrs",
+  "version": "26.1.0",
+  "package": "attr",
+  "smoke": "import attr\nPoint = attr.make_class('Point', ['x', 'y'])\npoint = Point(1, 2)\nresult = [point.x, point.y, repr(point), point == Point(1, 2)]"
+ },
+ {
+  "name": "toml",
+  "version": "0.10.2",
+  "package": "toml",
+  "smoke": "import toml\nresult = toml.loads(\"a = 1\\nb = 'x y'\\n\")"
+ },
+ {
+  "name": "tomli",
+  "version": "2.5.0",
+  "package": "tomli",
+  "smoke": "import tomli\nresult = tomli.loads(\"a = 1\\nb = [1, 2]\\n\")"
+ },
+ {
+  "name": "more-itertools",
+  "version": "11.2.1",
+  "package": "more_itertools",
+  "smoke": "import more_itertools as mi\nresult = list(mi.chunked([1, 2, 3, 4, 5], 2))"
+ },
+ {
+  "name": "tomlkit",
+  "version": "0.13.3",
+  "package": "tomlkit",
+  "smoke": "import tomlkit\ndoc = tomlkit.parse(\"a = 1\\n\")\nresult = str(doc)"
+ },
+ {
+  "name": "boltons",
+  "version": "25.0.0",
+  "package": "boltons",
+  "smoke": "from boltons.iterutils import chunked\nresult = list(chunked([1, 2, 3, 4], 2))"
+ }
 ]

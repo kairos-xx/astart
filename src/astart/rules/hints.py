@@ -11,8 +11,10 @@ from ast import (
     AugAssign,
     BinOp,
     BitOr,
+    BoolOp,
     Call,
     ClassDef,
+    Compare,
     Constant,
     Expr,
     Expression,
@@ -24,12 +26,14 @@ from ast import (
     Module,
     Name,
     NamedExpr,
+    Not,
     Pass,
     Raise,
     Return,
     Store,
     Subscript,
     Tuple,
+    UnaryOp,
     Yield,
     YieldFrom,
     alias,
@@ -43,7 +47,7 @@ from ast import (
     walk,
     withitem,
 )
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -58,6 +62,7 @@ from astart.rules.attributes import (
 from astart.rules.imports import Constants as ImportConstants
 from astart.rules.imports import bound_names
 from astart.rules.methods import MethodIndex
+from astart.rules.project_bridge import qualified_names
 from astart.rules.provable import (
     expression_type,
     module_constants,
@@ -74,6 +79,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
     from astart import BoundArgument, BoundCall, CommentedModule
+    from astart.rules.project_bridge import CrossSite, ProjectView
     from astart.semantic.graph_conversion import GraphAnnotation
 type Function = FunctionDef | AsyncFunctionDef
 
@@ -94,6 +100,15 @@ class HintBasis(StrEnum):
             the same type.
         protocol_result: A protocol dunder (``__exit__``, ``__len__``, …)
             whose body is consistent with the type the protocol declares.
+        union_sites: Call sites pass several syntax-proven types and the
+            inference candidate is exactly their union.
+        negotiated: A type settled by the contract negotiator from evidence
+            that proves it (local variables and instance attributes).
+        engine: An annotation of the inference engine alone, taken in
+            conversion mode (``--engine``) and left to the checker gate.
+        calibrated_candidate: An inference-engine candidate in a category
+            measured against annotated real-world code and found reliable
+            (see ``Constants.calibrated_returns``).
 
     """
 
@@ -105,6 +120,10 @@ class HintBasis(StrEnum):
     optional_default = "optional_default"
     protocol_result = "protocol_result"
     attribute_assignments = "attribute_assignments"
+    calibrated_candidate = "calibrated_candidate"
+    union_sites = "union_sites"
+    negotiated = "negotiated"
+    engine = "engine"
 
 
 @final
@@ -129,8 +148,14 @@ class Constants:
     Attributes:
         protocol_results: Result type each protocol dunder must declare.
         variadic_origins: Origins of arguments bound to ``*args``/``**kwargs``.
+        calibrated_returns: Return candidates accepted on the engine's word
+            alone: ``bool`` matched the original in 97 % of 232 cases and
+            contradicted it in none (stdlib + 25 typed libraries).
+        predicate_calls: Builtins whose result is always a ``bool``.
         propagation_passes: Most times accepted parameter hints are fed back
             into call-site evidence before the index is final.
+        max_union_members: Most distinct types a call-site union may have to
+            be written.
         shape_specific: Prefix of types that describe one literal's exact
             shape (a tuple's length), which says nothing about other callers.
         inference_errors: Failures of the inference layer that are contained:
@@ -164,12 +189,18 @@ class Constants:
         {ArgumentOrigin.VAR_POSITIONAL, ArgumentOrigin.VAR_KEYWORD},
     )
     propagation_passes: Final[int] = 12
+    max_union_members: Final[int] = 3
+    calibrated_returns: Final[frozenset[str]] = frozenset({"bool"})
+    predicate_calls: Final[frozenset[str]] = frozenset(
+        {"isinstance", "issubclass", "callable", "hasattr", "bool"},
+    )
     shape_specific: Final[str] = "tuple["
     inference_errors: Final[tuple[type[Exception], ...]] = (
         AttributeError,
         IndexError,
         KeyError,
         RecursionError,
+        SyntaxError,
         TypeError,
         ValueError,
     )
@@ -627,6 +658,9 @@ class _Judging:
         escaped: Names of functions used as values.
         counts: Module binding counts.
         constants: Types of the module's constants, for typing defaults.
+        project: Cross-module view of the project, or ``None``.
+        qualifieds: ``id`` of each definition to its project-qualified
+            name, for reading cross-module evidence and open-world status.
 
     """
 
@@ -635,6 +669,30 @@ class _Judging:
     escaped: frozenset[str]
     counts: dict[str, int]
     constants: dict[str, str]
+    project: ProjectView | None = None
+    qualifieds: Mapping[int, str] = field(default_factory=dict[int, str])
+
+    def function_escaped(self, *, function: Function) -> bool:
+        """Whether a function's callers cannot all be known.
+
+        Local escapes apply as always; with a project view an escaped or
+        externally callable qualified name counts too.
+
+        Args:
+            function: The definition being judged.
+
+        Returns:
+            Whether its caller set is incomplete.
+
+        """
+        if function.name in self.escaped:
+            return True
+        if self.project is None:
+            return False
+        qualified: str | None = self.qualifieds.get(id(function))
+        return qualified is not None and self.project.open_world(
+            qualified=qualified,
+        )
 
 
 @final
@@ -718,6 +776,8 @@ class HintIndex:
         """
         self._hints: dict[Key, Hint] = hints
         self._rejections: dict[Key, str] = rejections
+        self._extra: dict[Key, Hint] = {}
+        self.proposals: dict[Key, str] = {}
         self._accepted: dict[int, dict[str, str]] = {}
         self._attribute_types: dict[int, dict[str, str]] = {}
 
@@ -727,12 +787,15 @@ class HintIndex:
         *,
         module: CommentedModule,
         stubs_path: Path | None,
+        project: ProjectView | None = None,
     ) -> Self:
         """Compute hints for every unannotated parameter of a module.
 
         Args:
             module: Parsed module.
             stubs_path: Stub directory, or ``None`` for an empty one.
+            project: Cross-module view of the project, or ``None`` for
+                single-module analysis.
 
         Returns:
             The index.
@@ -747,7 +810,12 @@ class HintIndex:
         else:
             candidates = _candidates(module=module, stubs_path=stubs_path)
         index: Self = cls(hints={}, rejections={})
-        index.judge_parameters(module=module, candidates=candidates)
+        index.proposals = candidates
+        index.judge_parameters(
+            module=module,
+            candidates=candidates,
+            project=project,
+        )
         index.judge_attributes(module=module)
         index.judge_returns(
             module=module,
@@ -766,7 +834,31 @@ class HintIndex:
             The hint or ``None``.
 
         """
+        key: Key = _key(node=node)
+        return self._hints.get(key) or self._extra.get(key)
+
+    def own_hint_for(self, *, node: AST) -> Hint | None:
+        """Return the hint this index itself accepted, ignoring supplements.
+
+        Args:
+            node: Parameter or function node.
+
+        Returns:
+            The hint or ``None``.
+
+        """
         return self._hints.get(_key(node=node))
+
+    def supplement(self, *, hints: Mapping[Key, Hint]) -> None:
+        """Add hints from another source where this index has none.
+
+        Args:
+            hints: Hints by node identity; existing ones always win.
+
+        """
+        self._extra = {
+            key: hint for key, hint in hints.items() if key not in self._hints
+        }
 
     def rejection_for(self, *, node: AST) -> str | None:
         """Explain why a candidate was refused.
@@ -856,29 +948,19 @@ class HintIndex:
             key: Function node key.
 
         """
-        declared: str = Constants.protocol_results[function.name]
-        allowed: set[str] = set(declared.split(sep=" | "))
-        if is_declaration(function=function) or _is_generator(
+        declared: str | None = protocol_result_for(
             function=function,
-        ):
-            self._rejections[key] = Rejection.declaration_body
-            return
-        if "None" in allowed and _body_returns_nothing(function=function):
-            fits: bool = True
-        else:
-            proved: str | None = provable_return_detail(
-                function=function,
-                known_types={},
-                counts=counts,
-            )[0]
-            fits = (
-                proved is not None and set(proved.split(sep=" | ")) <= allowed
-            )
-        if fits:
+            counts=counts,
+        )
+        if declared is not None:
             self._hints[key] = Hint(
                 source=declared,
                 basis=HintBasis.protocol_result,
             )
+        elif is_declaration(function=function) or _is_generator(
+            function=function,
+        ):
+            self._rejections[key] = Rejection.declaration_body
         else:
             self._rejections[key] = Rejection.protocol_mismatch
 
@@ -919,12 +1001,14 @@ class HintIndex:
         *,
         module: CommentedModule,
         candidates: dict[Key, str],
+        project: ProjectView | None = None,
     ) -> None:
         """Accept or refuse a hint for every unannotated parameter.
 
         Args:
             module: Parsed module.
             candidates: Proposed annotation sources by node identity.
+            project: Cross-module view of the project, or ``None``.
 
         """
         known: frozenset[str] = _imported_names(module=module) | _importable(
@@ -937,6 +1021,11 @@ class HintIndex:
             module=module,
             counts=counts,
         )
+        qualifieds: dict[int, str] = (
+            qualified_names(module=module, name=project.module)
+            if project is not None
+            else {}
+        )
         accepted: dict[int, dict[str, str]] = self._accepted
         for _pass in range(Constants.propagation_passes):
             sites: dict[tuple[int, str], list[_Site]] = _call_sites(
@@ -944,6 +1033,7 @@ class HintIndex:
                 counts=counts,
                 bindings=bindings,
                 accepted=accepted,
+                project=project,
             )
             if not self._judge_pass(
                 module=module,
@@ -953,6 +1043,8 @@ class HintIndex:
                     escaped=escaped,
                     counts=counts,
                     constants=constants,
+                    project=project,
+                    qualifieds=qualifieds,
                 ),
                 sites=sites,
                 accepted=accepted,
@@ -1001,7 +1093,9 @@ class HintIndex:
                     candidate=context.candidates.get(key),
                     evidence=_Evidence(
                         sites=sites.get((id(function), parameter.arg), []),
-                        escaped=function.name in context.escaped,
+                        escaped=context.function_escaped(
+                            function=function,
+                        ),
                         default_type=_default_type(
                             default=default,
                             context=context,
@@ -1051,7 +1145,7 @@ class HintIndex:
                 candidate=None,
                 evidence=_Evidence(
                     sites=sites.get((id(function), parameter.arg), []),
-                    escaped=function.name in context.escaped,
+                    escaped=context.function_escaped(function=function),
                 ),
                 known=context.known,
             )
@@ -1126,6 +1220,46 @@ class HintIndex:
                 )
         return types
 
+    def _judge_unproven(
+        self,
+        *,
+        function: Function,
+        candidate: str | None,
+        tainted: str | None,
+    ) -> None:
+        """Decide a return the prover could not type.
+
+        Only a candidate from a category measured as reliable is accepted;
+        everything else is refused with the reason.
+
+        Args:
+            function: Function definition.
+            candidate: Proposed annotation source, if any.
+            tainted: The untyped parameter the return depends on, if any.
+
+        """
+        key: Key = _key(node=function)
+        if (
+            tainted is not None
+            and candidate is not None
+            and candidate in Constants.calibrated_returns
+            and not _is_generator(function=function)
+            and all(
+                _boolean_by_syntax(node=value)
+                for value in _value_returns(function=function)
+            )
+        ):
+            self._hints[key] = Hint(
+                source=candidate,
+                basis=HintBasis.calibrated_candidate,
+            )
+        else:
+            self._rejections[key] = (
+                Rejection.not_provable
+                if tainted is None
+                else f"{Rejection.tainted} {tainted}"
+            )
+
     def _judge_derived(
         self,
         *,
@@ -1178,10 +1312,10 @@ class HintIndex:
             None,
         )
         if proved is None:
-            self._rejections[key] = (
-                Rejection.not_provable
-                if tainted is None
-                else f"{Rejection.tainted} {tainted}"
+            self._judge_unproven(
+                function=function,
+                candidate=candidate,
+                tainted=tainted,
             )
             return
         if not is_allowed_source(source=proved, known_names=known):
@@ -1199,9 +1333,16 @@ class HintIndex:
         if candidate is None:
             self._rejections[key] = Rejection.no_candidate
             return
-        if candidate != proved and not (
-            receiver is not None
-            and _drops_none(candidate=candidate, proved=proved)
+        if (
+            candidate != proved
+            and not (
+                receiver is not None
+                and _drops_none(candidate=candidate, proved=proved)
+            )
+            and not (
+                any(" | " in kind for kind in types.values())
+                and _refines(candidate=candidate, proved=proved)
+            )
         ):
             self._rejections[key] = Rejection.engine_disagrees
             return
@@ -1254,7 +1395,11 @@ class HintIndex:
             if literal == candidate:
                 self._hints[key] = Hint(
                     source=candidate,
-                    basis=HintBasis.default_literal,
+                    basis=(
+                        HintBasis.call_sites
+                        if _call_sites_agree(evidence=evidence, kind=literal)
+                        else HintBasis.default_literal
+                    ),
                 )
             else:
                 self._rejections[key] = Rejection.default_disagrees
@@ -1339,7 +1484,75 @@ class HintIndex:
                 basis=HintBasis.call_sites,
             )
         else:
-            self._rejections[key] = Rejection.call_sites_disagree
+            union: str | None = _site_union(
+                evidence=evidence,
+                candidate=candidate,
+            )
+            if union is None:
+                self._rejections[key] = Rejection.call_sites_disagree
+            else:
+                self._hints[key] = Hint(
+                    source=union,
+                    basis=HintBasis.union_sites,
+                )
+
+
+def _union_members(*, source: str) -> tuple[str, ...]:
+    """Split a ``A | B | C`` annotation into its members.
+
+    Args:
+        source: Annotation source.
+
+    Returns:
+        The unparsed top-level members in source order; one element when it
+        is no union.
+
+    """
+    try:
+        tree: Expression = parse(source=source, mode="eval")
+    except SyntaxError:
+        return (source,)
+    pending: list[expr] = [tree.body]
+    members: list[str] = []
+    while pending:
+        node: expr = pending.pop()
+        if isinstance(node, BinOp) and isinstance(node.op, BitOr):
+            pending.extend((node.right, node.left))
+        else:
+            members.append(unparse(ast_obj=node))
+    return tuple(dict.fromkeys(members))
+
+
+def _site_union(*, evidence: _Evidence, candidate: str) -> str | None:
+    """Spell the union of the call sites when the candidate corroborates it.
+
+    Every site must be syntax-proven, the types must differ, there must be at
+    most ``Constants.max_union_members`` of them, and the inference
+    candidate must name precisely that set (the second, independent signal).
+    ``bool`` is dropped beside ``int`` because it is a subtype.
+
+    Args:
+        evidence: What the module shows about the parameter's callers.
+        candidate: Proposed annotation source.
+
+    Returns:
+        The annotation source, or ``None`` when the union is not corroborated.
+
+    """
+    if not all(site.proven for site in evidence.sites):
+        return None
+    seen: frozenset[str] = frozenset(site.types[0] for site in evidence.sites)
+    members: tuple[str, ...] = _union_members(source=candidate)
+    if not (
+        1 < len(seen) <= Constants.max_union_members
+        and "None" not in seen
+        and frozenset(members) == seen
+    ):
+        return None
+    kept: tuple[str, ...] = tuple(
+        item for item in members if not (item == "bool" and "int" in seen)
+    )
+    return " | ".join(kept)
 
 
 def _candidates(
@@ -1425,6 +1638,80 @@ def _argument_evidence(
     if syntax is None or syntax.startswith(Constants.shape_specific):
         return _Site(definite=False, types=())
     return _Site(definite=True, types=(syntax,), proven=True)
+
+
+def _call_sites_agree(*, evidence: _Evidence, kind: str) -> bool:
+    """Tell whether every in-module call independently proves one type.
+
+    A literal default alone matches the original annotation only about 70 %
+    of the time for ``int`` and ``str``; callers that all pass that type are
+    the second signal that lifts it to the strong tier.
+
+    Args:
+        evidence: What the module shows about the parameter's callers.
+        kind: The default literal's type.
+
+    Returns:
+        ``True`` when there are call sites and all prove ``kind``.
+
+    """
+    return (
+        not evidence.escaped
+        and bool(evidence.sites)
+        and all(
+            site.definite and site.proven and site.types == (kind,)
+            for site in evidence.sites
+        )
+    )
+
+
+def _boolean_by_syntax(*, node: AST) -> bool:
+    """Tell whether an expression is boolean because of how it is written.
+
+    The calibration behind ``Constants.calibrated_returns`` was measured on
+    results like these; a bare name that merely *happens* to carry a ``bool``
+    elsewhere is not covered by it.
+
+    Args:
+        node: A returned expression.
+
+    Returns:
+        ``True`` for comparisons, ``not``, ``and``/``or`` of such
+        expressions, ``bool`` constants and calls of builtin predicates.
+
+    """
+    match node:
+        case Compare() | UnaryOp(op=Not()):
+            return True
+        case Constant(value=bool()):
+            return True
+        case BoolOp(values=values):
+            return all(_boolean_by_syntax(node=item) for item in values)
+        case Call(func=Name(id=name)):
+            return name in Constants.predicate_calls
+        case _:
+            return False
+
+
+def _refines(*, candidate: str, proved: str) -> bool:
+    """Tell whether the proof is a strict part of the candidate's union.
+
+    Flow narrowing (``isinstance``, ``is None``) can prove less than the
+    inference layer's union; such a proof refines the candidate instead of
+    contradicting it.
+
+    Args:
+        candidate: Inference candidate source.
+        proved: Syntax-proven source.
+
+    Returns:
+        ``True`` when every arm of ``proved`` is an arm of ``candidate`` and
+        some arm of ``candidate`` is missing from ``proved``.
+
+    """
+    mine: set[str] = set(proved.split(sep=" | "))
+    theirs: set[str] = set(candidate.split(sep=" | "))
+    return mine < theirs
 
 
 def _drops_none(*, candidate: str, proved: str) -> bool:
@@ -1519,12 +1806,45 @@ def _bound_evidence(
     return _argument_evidence(argument=argument, counts=counts, env=env)
 
 
+def _scope_env(
+    *,
+    scope: Function,
+    envs: dict[int, dict[str, str]],
+    counts: dict[str, int],
+    constants: dict[str, str],
+    declared: Mapping[str, str] | None,
+) -> dict[str, str]:
+    """Return the types visible in a scope, computing them once per pass.
+
+    Args:
+        scope: Enclosing function.
+        envs: Environments computed so far, by function identity.
+        counts: Module binding counts.
+        constants: Types of the module's constants.
+        declared: Parameter hints already accepted for the scope.
+
+    Returns:
+        The scope's environment.
+
+    """
+    found: dict[str, str] | None = envs.get(id(scope))
+    if found is None:
+        found = envs[id(scope)] = scope_types(
+            function=scope,
+            counts=counts,
+            constants=constants,
+            declared=declared,
+        )
+    return found
+
+
 def _call_sites(
     *,
     module: CommentedModule,
     counts: dict[str, int],
     bindings: CallBindings,
     accepted: Mapping[int, Mapping[str, str]],
+    project: ProjectView | None = None,
 ) -> dict[tuple[int, str], list[_Site]]:
     """Index argument types by callee definition and parameter name.
 
@@ -1538,6 +1858,7 @@ def _call_sites(
         bindings: Trusted call bindings of the module.
         accepted: Hints already accepted for parameters, by function identity
             and parameter name; they type the names callers pass on.
+        project: Cross-module view of the project, or ``None``.
 
     Returns:
         For each (definition identity, parameter name), one entry per call
@@ -1566,14 +1887,12 @@ def _call_sites(
         if scope is None:
             env: dict[str, str] = constants
         else:
-            env = envs.setdefault(
-                id(scope),
-                scope_types(
-                    function=scope,
-                    counts=counts,
-                    constants=constants,
-                    declared=accepted.get(id(scope)),
-                ),
+            env = _scope_env(
+                scope=scope,
+                envs=envs,
+                counts=counts,
+                constants=constants,
+                declared=accepted.get(id(scope)),
             )
         bound: BoundCall | None = bindings.get(call=call)
         if bound is not None and bound.signature.declaration is not None:
@@ -1603,7 +1922,67 @@ def _call_sites(
                 index.setdefault((id(target), parameter.arg), []).append(
                     _Site(definite=False, types=()),
                 )
+    if project is not None:
+        _merge_project_sites(
+            index=index,
+            module=module,
+            project=project,
+            qualifieds=qualified_names(
+                module=module,
+                name=project.module,
+            ),
+        )
     return index
+
+
+def _merge_project_sites(
+    *,
+    index: dict[tuple[int, str], list[_Site]],
+    module: CommentedModule,
+    project: ProjectView,
+    qualifieds: Mapping[int, str],
+) -> None:
+    """Add cross-module call evidence to the site index.
+
+    A qualified name claimed by more than one definition (a function
+    defined in both branches of an ``if``, a method defined twice) is
+    ambiguous and contributes nothing — the index's record may describe
+    the other one.
+
+    Args:
+        index: The site index, extended in place.
+        module: Parsed module.
+        project: Cross-module view of the project.
+        qualifieds: ``id`` of each definition to its qualified name.
+
+    """
+    counts: dict[str, int] = {}
+    for qualified in qualifieds.values():
+        counts[qualified] = counts.get(qualified, 0) + 1
+    for function in walk(node=module):
+        if not isinstance(function, (FunctionDef, AsyncFunctionDef)):
+            continue
+        qualified: str | None = qualifieds.get(id(function))
+        if qualified is None or counts.get(qualified, 0) != 1:
+            continue
+        extras: list[dict[str, tuple[CrossSite, ...]] | None] = [
+            project.sites(qualified=qualified),
+        ]
+        if function.name in ("__init__", "__new__"):
+            owner, _, _leaf = qualified.rpartition(".")
+            extras.append(project.sites(qualified=owner))
+        for extra in extras:
+            if not extra:
+                continue
+            for name, sites in extra.items():
+                index.setdefault((id(function), name), []).extend(
+                    _Site(
+                        definite=site.definite,
+                        types=site.types,
+                        proven=site.proven,
+                    )
+                    for site in sites
+                )
 
 
 @final
@@ -1612,7 +1991,10 @@ class HintCache:
 
     def __init__(self) -> None:
         """Start with no indexes."""
-        self._entries: dict[tuple[str, str | None], HintIndex] = {}
+        self._entries: dict[
+            tuple[str, str | None, tuple[int, int, str] | None],
+            HintIndex,
+        ] = {}
 
     def fetch(
         self,
@@ -1620,6 +2002,7 @@ class HintCache:
         source: str,
         stubs_path: Path | None,
         build: Callable[[], HintIndex],
+        project: ProjectView | None = None,
     ) -> HintIndex:
         """Return the index for a text, building it on the first request.
 
@@ -1627,14 +2010,19 @@ class HintCache:
             source: Source text the index describes.
             stubs_path: Stub directory used for inference.
             build: Builds the index when it is not cached.
+            project: Cross-module view the hints were computed with; the
+                index's identity and version discriminate the cache key.
 
         Returns:
             The cached or newly built index.
 
         """
-        key: tuple[str, str | None] = (
+        key: tuple[str, str | None, tuple[int, int, str] | None] = (
             source,
             None if stubs_path is None else str(object=stubs_path),
+            None
+            if project is None
+            else (id(project.index), project.index.version, project.module),
         )
         if key not in self._entries:
             self._entries[key] = build()
@@ -1657,6 +2045,7 @@ class LazyHints:
         stubs_path: Path | None,
         source: str | None = None,
         cache: HintCache | None = None,
+        project: ProjectView | None = None,
     ) -> None:
         """Remember what is needed to build the index.
 
@@ -1665,13 +2054,35 @@ class LazyHints:
             stubs_path: Stub directory, or ``None`` for an empty one.
             source: Source text of the module, needed for caching.
             cache: Shared cache, or ``None`` to compute privately.
+            project: Cross-module view of the project, or ``None``.
 
         """
         self._module: CommentedModule = module
         self._stubs_path: Path | None = stubs_path
         self._source: str | None = source
         self._cache: HintCache | None = cache
+        self._project: ProjectView | None = project
+        self._supplement: Callable[[HintIndex], Mapping[Key, Hint]] | None = (
+            None
+        )
         self._index: HintIndex | None = None
+
+    def supplemented(
+        self,
+        *,
+        by: Callable[[HintIndex], Mapping[Key, Hint]],
+    ) -> Self:
+        """Add hints from another source for nodes the index has none for.
+
+        Args:
+            by: Produces the extra hints from the built index.
+
+        Returns:
+            This object, for chaining.
+
+        """
+        self._supplement = by
+        return self
 
     def index(self) -> HintIndex:
         """Return the index, building it on the first call.
@@ -1692,6 +2103,7 @@ class LazyHints:
                 return HintIndex.create(
                     module=self._module,
                     stubs_path=self._stubs_path,
+                    project=self._project,
                 )
 
             if self._cache is not None and self._source is not None:
@@ -1699,7 +2111,122 @@ class LazyHints:
                     source=self._source,
                     stubs_path=self._stubs_path,
                     build=build,
+                    project=self._project,
                 )
             else:
                 self._index = build()
+            if self._supplement is not None:
+                self._index.supplement(hints=self._supplement(self._index))
         return self._index
+
+
+def engine_proposals(*, module: CommentedModule) -> dict[Key, str]:
+    """Run the inference engine and list its parameter and return proposals.
+
+    Args:
+        module: Parsed module.
+
+    Returns:
+        Proposed annotation sources by node position (see :func:`_key`).
+
+    """
+    with TemporaryDirectory() as scratch:
+        return _candidates(module=module, stubs_path=Path(scratch))
+
+
+def escaped_function_names(*, module: Module) -> frozenset[str]:
+    """Collect names read anywhere other than as a direct callee.
+
+    Args:
+        module: Parsed module.
+
+    Returns:
+        Names used as values, which may reach callers the module cannot see.
+
+    """
+    return _escaped_names(module=module)
+
+
+def node_key(*, node: AST) -> Key:
+    """Identify a parameter or function by kind and source position.
+
+    Args:
+        node: Parameter or function node.
+
+    Returns:
+        (kind, line, column), the identity used by :class:`HintIndex`.
+
+    """
+    return _key(node=node)
+
+
+def protocol_result_for(
+    *,
+    function: Function,
+    counts: Mapping[str, int],
+) -> str | None:
+    """Give a protocol dunder its declared result when its body fits.
+
+    Args:
+        function: A function; only those listed in
+            ``Constants.protocol_results`` can qualify.
+        counts: Module binding counts.
+
+    Returns:
+        The declared result (``__len__`` gives ``int``), or ``None`` when the
+        function is no protocol dunder, is a declaration or generator, or
+        its body does not fit the declared type.
+
+    """
+    declared: str | None = Constants.protocol_results.get(function.name)
+    if (
+        declared is None
+        or is_declaration(function=function)
+        or _is_generator(function=function)
+    ):
+        return None
+    allowed: set[str] = set(declared.split(sep=" | "))
+    if "None" in allowed and _body_returns_nothing(function=function):
+        return declared
+    proved: str | None = provable_return_detail(
+        function=function,
+        known_types={},
+        counts=counts,
+    )[0]
+    fits: bool = proved is not None and set(proved.split(sep=" | ")) <= allowed
+    return declared if fits else None
+
+
+def boolean_returns(*, function: Function) -> bool:
+    """Tell whether every returned value is boolean by how it is written.
+
+    This is the category the calibrated-candidate rule was measured on.
+
+    Args:
+        function: Function definition.
+
+    Returns:
+        ``True`` for a non-generator that returns at least one value, all of
+        them comparisons, ``not``, ``bool`` constants, predicate calls or
+        ``and``/``or`` of those.
+
+    """
+    values: list[expr] = _value_returns(function=function)
+    return (
+        bool(values)
+        and not _is_generator(function=function)
+        and all(_boolean_by_syntax(node=value) for value in values)
+    )
+
+
+def allowed_names(*, module: Module) -> frozenset[str]:
+    """List the names a new annotation of this module may use.
+
+    Args:
+        module: Parsed module.
+
+    Returns:
+        Imported names plus those a fix can import on its own.
+
+    """
+    return _imported_names(module=module) | _importable(module=module)

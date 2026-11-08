@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from argparse import Action, ArgumentParser
+from importlib.metadata import PackageNotFoundError, version
 from io import BytesIO
 from json import dumps
 from pathlib import Path
-from sys import stdout
+from sys import stderr, stdout
 from tokenize import detect_encoding
 from typing import TYPE_CHECKING, Protocol, cast, final
 
@@ -16,8 +17,11 @@ from astart.cli.commands import (
     FixCommandSettings,
     FixMode,
     run_check,
+    run_explain,
     run_fix,
+    run_rules,
 )
+from astart.rules.confidence import Constants as ConfidenceConstants
 from astart.rules.vocabulary import FixSafety, Severity
 
 if TYPE_CHECKING:
@@ -47,7 +51,19 @@ class _Arguments(Protocol):
         min_confidence: Least confidence a fix needs to be applied.
         create_constants_class: Whether to create a missing ``Constants``
             class for ``Final`` module constants.
+        stub_docstrings: Whether to stub missing docstrings.
+        annotate_variables: Whether to annotate function-local variables.
+        negotiate: Whether to use contract negotiation for hints.
+        engine: Conversion mode: take the inference engine's annotations.
+        cache: Whether to reuse results for unchanged files.
         source_root: Extra import roots for the type checker.
+        project: Whether to analyse the paths as one project.
+        closed_world: In project mode, assume every caller is in the
+            file set.
+        target_version: Oldest Python version emitted code must run on.
+        exclude: Path globs discovery skips.
+        no_docs: Whether ``docs.*`` fixes are excluded.
+        code: Rule code for the ``explain`` subcommand.
 
     """
 
@@ -67,9 +83,34 @@ class _Arguments(Protocol):
     check: bool
     no_format: bool
     checker: str
-    min_confidence: float
+    min_confidence: float | None
     create_constants_class: bool
+    stub_docstrings: bool
+    annotate_variables: bool
+    negotiate: bool
+    engine: bool
+    cache: bool
     source_root: list[str] | None
+    project: bool
+    closed_world: bool
+    target_version: str | None
+    exclude: list[str] | None
+    no_docs: bool
+    code: str
+
+
+def _package_version() -> str:
+    """Return the installed astart version.
+
+    Returns:
+        The distribution version, or ``"0+unknown"`` when astart is not
+        installed as a distribution.
+
+    """
+    try:
+        return version(distribution_name="astart")
+    except PackageNotFoundError:
+        return "0+unknown"
 
 
 @final
@@ -115,6 +156,22 @@ def _stubs(*, args: _Arguments) -> Path | None:
     return Path(args.stubs_dir) if args.stubs_dir else None
 
 
+def _floor(*, args: _Arguments) -> float:
+    """Pick the confidence floor: the flag, else the mode's default.
+
+    Args:
+        args: Parsed arguments.
+
+    Returns:
+        The flag when given; ``0.5`` in conversion mode (``--engine``),
+        otherwise the standard default.
+
+    """
+    if args.min_confidence is not None:
+        return args.min_confidence
+    return 0.5 if args.engine else ConfidenceConstants.default_minimum
+
+
 def _mode(*, args: _Arguments) -> FixMode:
     """Pick the fix mode from the flags.
 
@@ -150,6 +207,30 @@ def _configure_check(*, command: ArgumentParser) -> None:
         default=Severity.error.value,
     )
     command.add_argument("--stubs", dest="stubs_dir")
+    command.add_argument(
+        "--project",
+        action="store_true",
+        help="Analyse the discovered files as one project",
+    )
+    command.add_argument(
+        "--closed-world",
+        action="store_true",
+        help="With --project, assume all callers are in the file set",
+    )
+    command.add_argument(
+        "--source-root",
+        action="append",
+        help="Directory absolute imports resolve from (repeatable)",
+    )
+    command.add_argument(
+        "--target-version",
+        help="Oldest Python version emitted code must run on",
+    )
+    command.add_argument(
+        "--exclude",
+        action="append",
+        help="Skip paths matching this glob during discovery (repeatable)",
+    )
 
 
 def _configure_fix(*, command: ArgumentParser) -> None:
@@ -176,16 +257,75 @@ def _configure_fix(*, command: ArgumentParser) -> None:
         help="Let an installed pyright veto guarded fixes (default: auto)",
     )
     command.add_argument("--stubs", dest="stubs_dir")
-    command.add_argument("--min-confidence", type=float, default=0.0)
+    command.add_argument(
+        "--min-confidence",
+        type=float,
+        default=None,
+        help="Skip fixes below this confidence (default: 0.8, or 0.5 with "
+        "--engine; 0 also "
+        "writes int/str annotations taken from a literal default alone)",
+    )
     command.add_argument(
         "--create-constants-class",
         action="store_true",
         help="Create a Constants class when a module has none",
     )
     command.add_argument(
+        "--stub-docstrings",
+        action="store_true",
+        help="Add a stub docstring to undocumented public definitions",
+    )
+    command.add_argument(
+        "--annotate-variables",
+        action="store_true",
+        help="Annotate function-local variables the evidence proves",
+    )
+    command.add_argument(
+        "--engine",
+        action="store_true",
+        help="Conversion mode: also take the inference engine's own "
+        "annotations where nothing else decided (lowers the default "
+        "--min-confidence to 0.5; the checker gate still applies)",
+    )
+    command.add_argument(
+        "--no-negotiate",
+        dest="negotiate",
+        action="store_false",
+        help="Do not use contract negotiation for parameter and return hints",
+    )
+    command.add_argument(
+        "--cache",
+        action="store_true",
+        help="Reuse results for unchanged files (stored in .astart_cache)",
+    )
+    command.add_argument(
         "--source-root",
         action="append",
         help="Directory the type checker resolves imports from (repeatable)",
+    )
+    command.add_argument(
+        "--project",
+        action="store_true",
+        help="Analyse the discovered files as one project",
+    )
+    command.add_argument(
+        "--closed-world",
+        action="store_true",
+        help="With --project, assume all callers are in the file set",
+    )
+    command.add_argument(
+        "--target-version",
+        help="Oldest Python version emitted code must run on",
+    )
+    command.add_argument(
+        "--exclude",
+        action="append",
+        help="Skip paths matching this glob during discovery (repeatable)",
+    )
+    command.add_argument(
+        "--no-docs",
+        action="store_true",
+        help="Skip docs.* fixes, applying typing and structure fixes only",
     )
 
 
@@ -205,6 +345,11 @@ def main(*, argv: list[str] | None = None) -> int:
 
     """
     parser: ArgumentParser = ArgumentParser(prog="astart")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=_package_version(),
+    )
     commands: _SubParsers = cast(
         typ="_SubParsers",
         val=parser.add_subparsers(dest="command"),
@@ -231,10 +376,20 @@ def main(*, argv: list[str] | None = None) -> int:
     command.add_argument("--report")
     command.add_argument("--dry-run", action="store_true")
     command.add_argument("--strict-formatting", action="store_true")
+    commands.add_parser(name="rules", help="List every rule")
+    explain: ArgumentParser = commands.add_parser(
+        name="explain",
+        help="Explain a rule code",
+    )
+    explain.add_argument("code")
     args: _Arguments = cast(typ="_Arguments", val=parser.parse_args(args=argv))
     if args.command is None:
         parser.print_help()
         return 0
+    if args.command == "rules":
+        return run_rules(out=stdout)
+    if args.command == "explain":
+        return run_explain(code=args.code, out=stdout, err=stderr)
     if args.command == "check":
         return run_check(
             settings=CheckSettings(
@@ -242,6 +397,13 @@ def main(*, argv: list[str] | None = None) -> int:
                 output_format=args.output_format,
                 fail_on=Severity(args.fail_on),
                 stubs_path=_stubs(args=args),
+                project=args.project,
+                assume_external_callers=not args.closed_world,
+                source_roots=tuple(
+                    Path(item) for item in args.source_root or ()
+                ),
+                target_version=args.target_version,
+                exclude=tuple(args.exclude or ()),
             ),
             out=stdout,
         )
@@ -256,11 +418,21 @@ def main(*, argv: list[str] | None = None) -> int:
                 mode=_mode(args=args),
                 run_formatter=not args.no_format,
                 use_checker=args.checker == "auto",
-                min_confidence=args.min_confidence,
+                min_confidence=_floor(args=args),
                 create_constants=args.create_constants_class,
+                stub_docstrings=args.stub_docstrings,
+                annotate_variables=args.annotate_variables,
+                negotiate=args.negotiate,
+                engine=args.engine,
+                use_cache=args.cache,
                 source_roots=tuple(
                     Path(item) for item in args.source_root or ()
                 ),
+                project=args.project,
+                assume_external_callers=not args.closed_world,
+                target_version=args.target_version,
+                exclude=tuple(args.exclude or ()),
+                no_docs=args.no_docs,
             ),
             out=stdout,
         )

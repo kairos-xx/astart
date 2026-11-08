@@ -47,6 +47,7 @@ def _run(
     ceiling: FixSafety = FixSafety.guarded,
     mode: FixMode = FixMode.write,
     run_formatter: bool = False,
+    no_docs: bool = False,
 ) -> tuple[int, str]:
     """Run the fix command while capturing its output.
 
@@ -55,6 +56,7 @@ def _run(
         ceiling: Highest fix safety to apply.
         mode: Whether to write, diff, or only check.
         run_formatter: Whether to run the formatter afterwards.
+        no_docs: Whether ``docs.*`` fixes are excluded.
 
     Returns:
         The exit code and the captured output.
@@ -68,6 +70,7 @@ def _run(
             stubs_path=None,
             mode=mode,
             run_formatter=run_formatter,
+            no_docs=no_docs,
         ),
         out=out,
     )
@@ -262,3 +265,30 @@ X  =  3
 
 """),
     )
+
+
+def test_no_docs_skips_docstring_fixes(*, tmp_path: Path) -> None:
+    """Check that ``--no-docs`` leaves docstrings alone but still hints.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
+    path: Path = _sample(
+        tmp_path=tmp_path,
+        text=(
+            "def scale(x):\n"
+            '    """Scale.   \n'
+            "\n"
+            '    """\n'
+            "    return x * 2\n"
+            "\n"
+            "\n"
+            "scale(2)\n"
+        ),
+    )
+    code, _ = _run(paths=[path], no_docs=True)
+    expect_equal(actual=code, expected=1)
+    after: str = path.read_text(encoding="utf-8")
+    expect_in(item="x: int", container=after)
+    expect_in(item="Scale.   \n", container=after)

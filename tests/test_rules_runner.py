@@ -479,7 +479,11 @@ def test_remaining_lists_unfixed_findings() -> None:
     """Report findings that have no applicable fix."""
     source: str = """\
 def f(a: int) -> None:
-    \"""Doc.\"""
+    \"""Doc.
+
+    Parameters
+    ----------
+    \"""
 """
     result: FixResult = _run(source=source, ceiling=FixSafety.guarded)
     expect_equal(

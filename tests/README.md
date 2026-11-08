@@ -8,26 +8,47 @@ Tests for source-preserving comment AST nodes and safe AST rewrites.
 ### Files
 
 - [`__init__.py`](__init__.py) — Astart regression tests and typed expectation helpers.
+- [`conftest.py`](conftest.py) — Pytest hooks shared by the whole suite.
 - [`expectations.py`](expectations.py) — Typed, keyword-only expectation helpers used by the test-suite.
 - [`test_ast_comments.py`](test_ast_comments.py) — Tests for source-preserving comment AST nodes and safe AST rewrites.
 - [`test_astart_api.py`](test_astart_api.py) — Validate astart's sole supported public package API.
+- [`test_bench_baseline.py`](test_bench_baseline.py) — The accepted benchmark baseline is well formed and clean.
+- [`test_bench_cli.py`](test_bench_cli.py) — The benchmark harness end to end on a tiny corpus.
+- [`test_bench_pair.py`](test_bench_pair.py) — The untyped-to-typed conversion benchmark keeps its accepted baseline.
+- [`test_bench_report.py`](test_bench_report.py) — The benchmark report, its JSON form and the regression gate.
+- [`test_bench_semantic.py`](test_bench_semantic.py) — Semantic-equivalence runs on a synthetic package.
+- [`test_cli_cache.py`](test_cli_cache.py) — ``astart fix --cache`` skips files whose inputs have not changed.
+- [`test_cli_catalog.py`](test_cli_catalog.py) — Verify the ``--version``, ``rules`` and ``explain`` commands.
 - [`test_cli_check.py`](test_cli_check.py) — Verify the check command.
+- [`test_cli_config.py`](test_cli_config.py) — Tests for the ``\[tool.astart\]`` configuration loader.
 - [`test_cli_discovery.py`](test_cli_discovery.py) — Verify file discovery for the command line.
+- [`test_cli_exit_codes.py`](test_cli_exit_codes.py) — ``astart fix --check`` reports clean, pending and missing inputs.
 - [`test_cli_fix.py`](test_cli_fix.py) — Verify the fix command.
+- [`test_cli_formats.py`](test_cli_formats.py) — ``check --format json`` emits parseable JSON findings.
+- [`test_cli_idempotence_corpus.py`](test_cli_idempotence_corpus.py) — A full fix-and-format run must reach a fixed point on real modules.
+- [`test_cli_idempotence_full.py`](test_cli_idempotence_full.py) — M1-14: full-run idempotence beyond the small-file test.
 - [`test_cli_main.py`](test_cli_main.py) — Verify command-line wiring.
 - [`test_cli_render.py`](test_cli_render.py) — Verify text and JSON rendering of findings.
+- [`test_cli_reports.py`](test_cli_reports.py) — Tests for the SARIF, JUnit, GitHub, baseline and ignore reporters.
+- [`test_cli_source_root.py`](test_cli_source_root.py) — ``astart fix --source-root`` reaches the type checker.
+- [`test_conventions.py`](test_conventions.py) — House rules that must never regress.
+- [`test_engine_hints.py`](test_engine_hints.py) — Engine-sourced hints: lazy conversion, variable scan, hint gating.
 - [`test_format_annotations.py`](test_format_annotations.py) — Add and remove annotations while preserving the surrounding source.
 - [`test_format_annotations_corpus.py`](test_format_annotations_corpus.py) — Write inferred annotations back into real modules without losing source.
 - [`test_format_ast.py`](test_format_ast.py) — Regression tests for exact and conservative syntax-preserving AST edits.
 - [`test_format_edits.py`](test_format_edits.py) — Apply many small AST edits and check source preservation fails closed.
 - [`test_format_inline_bodies.py`](test_format_inline_bodies.py) — Inline bodies belong to their statement; real semicolons stay ambiguous.
+- [`test_format_list_element_replacement.py`](test_format_list_element_replacement.py) — The writer can swap one element of a child list for an atom.
+- [`test_gold_expansion.py`](test_gold_expansion.py) — Expanded gold set: evidence-ladder expectations over 500 typed cases.
 - [`test_graph_application.py`](test_graph_application.py) — Exercise the graph command-line application and conversion artifacts.
 - [`test_graph_compatibility.py`](test_graph_compatibility.py) — Verify graph type synthesis without executing source code.
 - [`test_graph_context.py`](test_graph_context.py) — Exercise conversion contexts, pipeline order and the checkpoint backend.
 - [`test_graph_corpus.py`](test_graph_corpus.py) — Convert a corpus of real-world modules through the full graph pipeline.
 - [`test_graph_document.py`](test_graph_document.py) — Exercise graph documents, positions, usage graphs and the resolver.
+- [`test_graph_element_type_union.py`](test_graph_element_type_union.py) — The element type of a union of containers is the merge of their elements.
 - [`test_graph_engine.py`](test_graph_engine.py) — Exercise the from-scratch engine's type helpers and inferer classes.
 - [`test_graph_integration.py`](test_graph_integration.py) — Tests adapted from the Astart project's structured-annotation design.
+- [`test_graph_nonascii_columns.py`](test_graph_nonascii_columns.py) — Non-ASCII source must not break inference: AST columns are byte offsets.
 - [`test_graph_post_refinements.py`](test_graph_post_refinements.py) — Drive the generic post-refinement passes with pre-annotated modules.
 - [`test_graph_protocols.py`](test_graph_protocols.py) — Exercise the conversion protocols and the print-like helper.
 - [`test_graph_refinements.py`](test_graph_refinements.py) — Exercise the document-based refiner and the refinement service.
@@ -37,32 +58,116 @@ Tests for source-preserving comment AST nodes and safe AST rewrites.
 - [`test_graph_unified.py`](test_graph_unified.py) — Regression tests for the integrated annotation conversion pipeline.
 - [`test_incremental_ast.py`](test_incremental_ast.py) — Regression tests for incremental coordinates and PEP 701 f-string edits.
 - [`test_lexical_ast.py`](test_lexical_ast.py) — Regression tests for semantic shebangs and immutable synchronized tokens.
+- [`test_negotiation_algebra.py`](test_negotiation_algebra.py) — Union and intersection of annotation sources.
+- [`test_negotiation_beliefs.py`](test_negotiation_beliefs.py) — Beliefs: how candidates combine and when a node settles.
+- [`test_negotiation_graph.py`](test_negotiation_graph.py) — The contract graph: stable queries whatever the insertion order.
+- [`test_negotiation_model.py`](test_negotiation_model.py) — Candidates, provenance and contracts of the negotiation model.
+- [`test_negotiation_module.py`](test_negotiation_module.py) — Negotiating a whole module: builders, solver and acceptance policy.
+- [`test_negotiation_solver.py`](test_negotiation_solver.py) — The negotiator: forward and backward propagation to a fixpoint.
+- [`test_perf_budgets.py`](test_perf_budgets.py) — Performance budgets: structural counters first, generous clocks second.
+- [`test_precommit_hook.py`](test_precommit_hook.py) — The pre-commit hook definition exists.
+- [`test_project_bridge.py`](test_project_bridge.py) — Verify cross-module evidence flowing into the hint engine.
+- [`test_project_builder.py`](test_project_builder.py) — Verify project builds: naming, collisions and skipped files.
+- [`test_project_index.py`](test_project_index.py) — Verify the whole-project index: call graph, escapes and refresh.
+- [`test_project_libraries.py`](test_project_libraries.py) — Verify external signature loading: typeshed, ``py.typed``, stubs.
+- [`test_project_m3.py`](test_project_m3.py) — M3 exit gate: whole-project analysis end to end.
+- [`test_project_naming.py`](test_project_naming.py) — Verify filesystem-to-module-name mapping.
+- [`test_project_scan.py`](test_project_scan.py) — Verify per-module scanning: imports, ``__all__`` and bound names.
+- [`test_project_table.py`](test_project_table.py) — Verify cross-module symbol resolution.
+- [`test_project_versions.py`](test_project_versions.py) — Verify Python-version target resolution and syntax gates.
+- [`test_readme_flags.py`](test_readme_flags.py) — Every ``astart fix`` flag is documented in ``README.md``.
 - [`test_review3_fixes.py`](test_review3_fixes.py) — Regression tests for the final review of the check/fix work.
+- [`test_rule_docs.py`](test_rule_docs.py) — ``docs/rules.md`` covers every catalog rule code.
+- [`test_rules_attribute_reads.py`](test_rules_attribute_reads.py) — ``return self.x`` is typed from the class's agreed attribute table.
+- [`test_rules_attributes.py`](test_rules_attributes.py) — ``self.x = value`` assignments get an annotation when all writes agree.
+- [`test_rules_calibrated_candidates.py`](test_rules_calibrated_candidates.py) — The one inference-engine candidate category measured as reliable.
+- [`test_rules_call_problems.py`](test_rules_call_problems.py) — Tests for the M6-05…M6-08 call-shape detectors.
+- [`test_rules_call_site_scope.py`](test_rules_call_site_scope.py) — Call-site arguments that are variables are typed from their scope.
 - [`test_rules_catalog.py`](test_rules_catalog.py) — Verify catalog loading and the data invariants.
+- [`test_rules_checker.py`](test_rules_checker.py) — Verify the external type-checker gate.
+- [`test_rules_checker_fallback.py`](test_rules_checker_fallback.py) — mypy support and the floor that applies when no checker is installed.
+- [`test_rules_comprehension_types.py`](test_rules_comprehension_types.py) — Comprehension displays are typed when their element types are provable.
+- [`test_rules_confidence.py`](test_rules_confidence.py) — Verify offer confidence and the minimum-confidence gate.
+- [`test_rules_constants_group.py`](test_rules_constants_group.py) — New Final constants join an existing ``Constants`` class.
 - [`test_rules_constructors.py`](test_rules_constructors.py) — Verify that imported constructors type their calls.
+- [`test_rules_constructors_kw.py`](test_rules_constructors_kw.py) — Verify keyword fixes on constructor calls (M2-03).
+- [`test_rules_default_confidence.py`](test_rules_default_confidence.py) — A literal default is only as trustworthy as its measured exactness.
+- [`test_rules_default_expression_edges.py`](test_rules_default_expression_edges.py) — Default-expression hints refuse contradictory or unprovable types.
+- [`test_rules_determinism.py`](test_rules_determinism.py) — ``fix_source`` output does not depend on ``PYTHONHASHSEED``.
+- [`test_rules_docs_fixes.py`](test_rules_docs_fixes.py) — Docstring healing through the fixer: add, remove and tidy.
+- [`test_rules_docs_shared.py`](test_rules_docs_shared.py) — Tests for the shared docstring helpers of the DOC rule family.
+- [`test_rules_docs_whitespace.py`](test_rules_docs_whitespace.py) — Tests for the DOC/WSP/Constants standalone rule detectors.
+- [`test_rules_docstring_edit.py`](test_rules_docstring_edit.py) — Pure text edits for Google-style docstrings.
+- [`test_rules_docstring_stubs.py`](test_rules_docstring_stubs.py) — ``--stub-docstrings`` writes stubs for undocumented public definitions.
+- [`test_rules_dunder_results.py`](test_rules_dunder_results.py) — Protocol dunders take their declared result, not the body-derived one.
 - [`test_rules_end_to_end.py`](test_rules_end_to_end.py) — Exercise the seeded rule catalog end to end.
 - [`test_rules_engine.py`](test_rules_engine.py) — Verify the reference engine and the syntactic and scope facts.
+- [`test_rules_engine_mode.py`](test_rules_engine_mode.py) — Conversion mode: the inference engine fills what nothing else decided.
+- [`test_rules_environment.py`](test_rules_environment.py) — The checker environment is detected from where the file lives.
 - [`test_rules_exists_guard.py`](test_rules_exists_guard.py) — Verify that unsupported predicates fail at validation, not at check time.
+- [`test_rules_expression_defaults.py`](test_rules_expression_defaults.py) — Non-literal defaults (``-1``, ``LIMIT``) corroborate a parameter's type.
 - [`test_rules_facts_semantic.py`](test_rules_facts_semantic.py) — Verify the call and docstring facts of the reference engine.
 - [`test_rules_fixes.py`](test_rules_fixes.py) — Verify the fixes and the behavioural catalog invariants.
+- [`test_rules_flow_narrowing.py`](test_rules_flow_narrowing.py) — ``is None`` guards narrow an Optional parameter for return typing.
 - [`test_rules_formatter.py`](test_rules_formatter.py) — Verify the one-shot ruff formatting phase.
+- [`test_rules_fstring_normalize.py`](test_rules_fstring_normalize.py) — Tests for the M8-25 f-string interior normalisation fixer.
+- [`test_rules_hint_cache.py`](test_rules_hint_cache.py) — Repeated ``fix_source`` calls on identical text give identical output.
 - [`test_rules_hints.py`](test_rules_hints.py) — Verify the corroborated type-hint engine.
+- [`test_rules_hostile_inputs.py`](test_rules_hostile_inputs.py) — ``fix_source`` survives hostile inputs without raising.
+- [`test_rules_idempotence.py`](test_rules_idempotence.py) — M1-11: ``fix_source`` is idempotent across the whole replay corpus.
 - [`test_rules_imports.py`](test_rules_imports.py) — Verify automatic import insertion.
+- [`test_rules_imports_bare_fix.py`](test_rules_imports_bare_fix.py) — Danger-matrix tests for the IMP001 bare-import fixer.
+- [`test_rules_kwargs_danger.py`](test_rules_kwargs_danger.py) — Danger matrix for the keyword fixer: unsafe calls must stay positional.
+- [`test_rules_libkw.py`](test_rules_libkw.py) — Tests for the typeshed-generated library keyword-safety table.
+- [`test_rules_library_calls.py`](test_rules_library_calls.py) — End-to-end tests for keywording calls via the ``libkw`` table.
+- [`test_rules_line_endings.py`](test_rules_line_endings.py) — Fixed sources keep the input's CRLF line endings.
+- [`test_rules_methods.py`](test_rules_methods.py) — Verify call-site resolution of methods (D4, D5).
 - [`test_rules_model.py`](test_rules_model.py) — Verify the entity model of the rule ontology.
+- [`test_rules_multi_binding_locals.py`](test_rules_multi_binding_locals.py) — Locals bound several times are typed when every binding agrees.
+- [`test_rules_negotiated_fix.py`](test_rules_negotiated_fix.py) — Negotiated annotations written by the fixer must be valid when evaluated.
 - [`test_rules_never_returns.py`](test_rules_never_returns.py) — Verify NoReturn for functions that always raise.
+- [`test_rules_noreturn_calls.py`](test_rules_noreturn_calls.py) — ``NoReturn`` follows tail calls to in-module helpers that never return.
+- [`test_rules_optional_defaults.py`](test_rules_optional_defaults.py) — A ``None`` default becomes ``T | None`` when call sites prove ``T``.
+- [`test_rules_param_matrix.py`](test_rules_param_matrix.py) — Characterize parameter-hint synthesis through the fixer.
 - [`test_rules_predicate.py`](test_rules_predicate.py) — Verify the predicate algebra of the rule ontology.
+- [`test_rules_procedural.py`](test_rules_procedural.py) — Tests for the standalone IMP001/SUP001/PRS001/TYP002 detectors.
 - [`test_rules_protocol_fix.py`](test_rules_protocol_fix.py) — Verify Protocol synthesis through the fix runner.
+- [`test_rules_protocol_verify.py`](test_rules_protocol_verify.py) — A synthesized Protocol is dropped when a call site provably objects.
 - [`test_rules_protocols.py`](test_rules_protocols.py) — Verify structural-usage analysis and Protocol rendering.
+- [`test_rules_recovery.py`](test_rules_recovery.py) — Verify the annotation-recovery benchmark.
+- [`test_rules_recovery_relation.py`](test_rules_recovery_relation.py) — Recovery scoring tells contradictions from compatible differences.
 - [`test_rules_registry.py`](test_rules_registry.py) — Verify the registries of node kinds, facts and procedures.
+- [`test_rules_return_matrix.py`](test_rules_return_matrix.py) — Characterize return-type synthesis through the fixer.
+- [`test_rules_return_proofs.py`](test_rules_return_proofs.py) — Language-guaranteed return proofs and exit-path analysis.
 - [`test_rules_review2_fixes.py`](test_rules_review2_fixes.py) — Regression tests for wrong hints found by the second whole-branch review.
 - [`test_rules_review_fixes.py`](test_rules_review_fixes.py) — Regression tests for defects found by the whole-branch review.
+- [`test_rules_rounds.py`](test_rules_rounds.py) — ``FixResult`` reports how many rounds a run needed.
 - [`test_rules_runner.py`](test_rules_runner.py) — Verify the single-pass fix runner.
 - [`test_rules_runner_corpus.py`](test_rules_runner_corpus.py) — Precision and acceptance tests for the gated type-hint fixer.
 - [`test_rules_schema.py`](test_rules_schema.py) — Verify the generated JSON Schema of the rule catalog.
+- [`test_rules_skip_codes.py`](test_rules_skip_codes.py) — Verify the closed vocabulary of skip and rejection reasons.
+- [`test_rules_slots.py`](test_rules_slots.py) — ``SlotTable`` settles only when every claim names one kind.
+- [`test_rules_starred_calls.py`](test_rules_starred_calls.py) — ``*args`` in a call is never turned into a keyword.
+- [`test_rules_strings_normalize.py`](test_rules_strings_normalize.py) — Tests for the M8-24 string literal normalisation fixer.
 - [`test_rules_synthesis_corpus.py`](test_rules_synthesis_corpus.py) — Run every synthesizing fix over real modules.
+- [`test_rules_type_checks.py`](test_rules_type_checks.py) — Tests for the M8-02 TYP005 and M8-06 mismatch detectors.
+- [`test_rules_typer_binop.py`](test_rules_typer_binop.py) — ``%`` formatting and ``+`` on lists type when provable.
+- [`test_rules_typer_builtins.py`](test_rules_typer_builtins.py) — ``abs``/``round``/``min``/``max``/``sorted`` and container constructors.
+- [`test_rules_typer_matrix.py`](test_rules_typer_matrix.py) — Pin every verified ``expression_type`` row as a regression matrix.
+- [`test_rules_typer_negatives.py`](test_rules_typer_negatives.py) — The typer never guesses: unprovable expressions give ``None``.
+- [`test_rules_typer_positives.py`](test_rules_typer_positives.py) — Provable expressions give their exact type.
+- [`test_rules_typer_pow.py`](test_rules_typer_pow.py) — ``**`` types to ``int``/``float`` only when no ``complex`` is possible.
+- [`test_rules_typer_str_methods.py`](test_rules_typer_str_methods.py) — ``str`` method calls type by method name.
+- [`test_rules_typer_subscript.py`](test_rules_typer_subscript.py) — Subscripts type through ``list``/``str``/``dict`` element rules.
 - [`test_rules_typevar_fix.py`](test_rules_typevar_fix.py) — Verify TypeVar synthesis through the fix runner.
 - [`test_rules_typing_fixes.py`](test_rules_typing_fixes.py) — Verify the TYP003 rule and its two gated fixes.
+- [`test_rules_union_sites.py`](test_rules_union_sites.py) — Disagreeing call sites become a union when the engine corroborates it.
+- [`test_rules_variable_annotations_fix.py`](test_rules_variable_annotations_fix.py) — Function-local variables get the annotation the evidence proves.
+- [`test_rules_variadic_hints.py`](test_rules_variadic_hints.py) — ``*args`` and ``**kwargs`` are typed only when every call proves it.
+- [`test_rules_variadic_methods.py`](test_rules_variadic_methods.py) — ``*args``/``**kwargs`` hints on methods via ``self`` and instances.
 - [`test_rules_vocabulary.py`](test_rules_vocabulary.py) — Verify the closed vocabulary of the rule ontology.
+- [`test_rules_whitespace_fixes.py`](test_rules_whitespace_fixes.py) — Tests for the WSP catalog rules and their text-level fixes.
+- [`test_rules_writer_fuzz.py`](test_rules_writer_fuzz.py) — Fuzz the writer: any subset of fixes must still yield valid code.
 - [`test_semantic_advanced.py`](test_semantic_advanced.py) — Advanced semantic regression tests for statements, scopes and fallbacks.
 - [`test_semantic_ast.py`](test_semantic_ast.py) — Semantic integration, identity, CFG, aliasing, and safe inference tests.
 - [`test_semantic_bind_calls.py`](test_semantic_bind_calls.py) — Bind many calls with one revision check.
@@ -70,14 +175,20 @@ Tests for source-preserving comment AST nodes and safe AST rewrites.
 - [`test_semantic_mutations.py`](test_semantic_mutations.py) — Differential mutation checks against fresh full static analysis.
 - [`test_semantic_revisions.py`](test_semantic_revisions.py) — Revision-aware semantic features: roles, edges, provenance and reuse.
 - [`test_semantic_worklist.py`](test_semantic_worklist.py) — Differential and deletion-sensitive worklist/regression tests.
+- [`test_skip_docs.py`](test_skip_docs.py) — The skip-reason docs cover every enum member value.
 - [`test_structured_nodes.py`](test_structured_nodes.py) — Exercise docstring AST nodes, suppression rules and comment blocks.
+- [`test_stubs_package.py`](test_stubs_package.py) — The stub reader: locate, evaluate, parse, resolve, state returns.
 - [`test_type_inference.py`](test_type_inference.py) — Regression tests for bidirectional, provenance-carrying type inference.
+- [`test_type_mismatch.py`](test_type_mismatch.py) — M8-06 detectors: return-type mismatches and incompatible defaults.
 - [`test_typing_contracts.py`](test_typing_contracts.py) — Regression tests for signatures, overloads, generics and class types.
 - [`test_typing_relations.py`](test_typing_relations.py) — Direct, conservative generic/ABC/protocol compatibility regressions.
 - [`test_typing_spec_extended.py`](test_typing_spec_extended.py) — Python typing specification refinements for the unified semantic engine.
+- [`test_writer_fuzz.py`](test_writer_fuzz.py) — Writer fuzzer: random fix subsets must keep every writer invariant.
 
 ### Subdirectories
 
 - [`corpus/`](corpus/README.md) — Provide abc.py txt content.
+- [`corpus_ext/`](corpus_ext/README.md) — Real, already fully annotated library and application code, to complement the stdlib corpus in `tests/corpus` (which is mostly untyped). The recovery benchmark strips every annotation, runs the fixer, and scores what comes back against the original, so the original annotations are the ground truth.
+- [`pairs/`](pairs/README.md) — Each pair is one module in two forms: fully annotated (`*_typed.py.txt`) and unannotated (`*_untyped.py.txt`). The goal is that `astart fix` turns the untyped form into the typed one; `python -m benchmarks.pair` measures how far it gets.
 
 <!-- exactus:inventory:end -->

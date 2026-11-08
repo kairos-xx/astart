@@ -8,26 +8,34 @@ from typing import TYPE_CHECKING, Final, final
 
 from astart import FormatPreservationError, parse, unparse
 from astart.rules.appliers import Appliers
+from astart.rules.docs_fixes import stub_missing_docstrings
 from astart.rules.engine import (
     CheckOptions,
     check,
     preconditions_hold,
     subject_index,
 )
-from astart.rules.facts import module_facts
+from astart.rules.facts import FactsOptions, module_facts
 from astart.rules.hints import HintCache
 from astart.rules.reasons import SkipCode
 from astart.rules.vocabulary import FixSafety
+from astart.rules.whitespace_rules import (
+    collapse_blank_lines,
+    strip_trailing_space,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from astart import CommentedModule
+    from astart.project.libraries import LibraryIndex
+    from astart.project.versions import PythonTarget
     from astart.rules.checker import Checker
     from astart.rules.engine import CheckResult
     from astart.rules.facts import Applier, ModuleFacts, Subject
     from astart.rules.model import Catalog, Finding, Fix
+    from astart.rules.project_bridge import ProjectView
     from astart.rules.registry import Registries
 
 
@@ -41,8 +49,13 @@ class Constants:
         applier_errors: Grouped module constant.
         checker_reason: Why the external checker rejected a fix.
         write_back_reason: Grouped module constant.
+        no_op_reason: Why a text fix found nothing safe to edit.
+        docstring_prefix: Prefix of fix keys that rewrite only a docstring
+            and so never conflict with edits to the same definition.
 
     """
+
+    docstring_prefix: Final[str] = "docs."
 
     safety_rank: Final[dict[FixSafety, int]] = {
         FixSafety.proven: 0,
@@ -65,6 +78,17 @@ class Constants:
     write_back_reason: Final[str] = (
         "cannot write back without changing formatting"
     )
+    no_op_reason: Final[str] = "no editable violations remain"
+
+
+_TEXT_FIXES: Final[Mapping[str, Callable[[str], str]]] = {
+    "whitespace.collapse-blank-lines": lambda source: collapse_blank_lines(
+        source=source,
+    ),
+    "whitespace.strip-trailing-space": lambda source: strip_trailing_space(
+        source=source,
+    ),
+}
 
 
 @final
@@ -117,10 +141,26 @@ class FixSettings:
         appliers: Applier functions; ``None`` selects the built-in ones.
         create_constants: Whether a missing ``Constants`` class may be
             created to hold ``Final`` module constants.
+        stub_docstrings: Whether undocumented public definitions get a stub
+            docstring.
+        annotate_variables: Whether function-local variables get a type
+            annotation.
+        negotiate: Whether negotiated annotations supplement the hint
+            index.
+        engine: Conversion mode: the inference engine's annotations fill
+            what nothing else decided.
         min_confidence: Offers below this confidence are not applied, on top
             of each fix's own minimum.
         checker: External type checker that must not object to guarded
             fixes, or ``None`` to apply them on astart's evidence alone.
+        project: Cross-module view of the project, or ``None`` for
+            single-module analysis.
+        libraries: External signature index for callees outside the
+            project, or ``None``.
+        target: Oldest Python version emitted code must run on, or
+            ``None`` for the running interpreter.
+        excluded_prefixes: Fix-key prefixes that are never applied, so a
+            run can leave whole fix families (such as ``docs.``) off.
 
     """
 
@@ -129,8 +169,16 @@ class FixSettings:
     max_rounds: int = 3
     appliers: Mapping[str, Applier] | None = None
     create_constants: bool = False
+    stub_docstrings: bool = False
+    annotate_variables: bool = False
+    negotiate: bool = True
+    engine: bool = False
     min_confidence: float = 0.0
     checker: Checker | None = None
+    project: ProjectView | None = None
+    libraries: LibraryIndex | None = None
+    target: PythonTarget | None = None
+    excluded_prefixes: tuple[str, ...] = ()
 
 
 @final
@@ -258,7 +306,11 @@ def fix_source(
         settings=settings,
         cache=HintCache(),
     )
-    current: str = source
+    current: str = (
+        stub_missing_docstrings(source=source)
+        if settings.stub_docstrings
+        else source
+    )
     applied: list[AppliedFix] = []
     skipped: dict[tuple[str, str, str], SkippedFix] = {}
     parse_error: str | None = None
@@ -318,6 +370,13 @@ def _options(*, job: _Job) -> CheckOptions:
         stubs_path=job.settings.stubs_path,
         hint_cache=job.cache,
         create_constants=job.settings.create_constants,
+        stub_docstrings=job.settings.stub_docstrings,
+        annotate_variables=job.settings.annotate_variables,
+        negotiate=job.settings.negotiate,
+        engine=job.settings.engine,
+        project=job.settings.project,
+        libraries=job.settings.libraries,
+        target=job.settings.target,
     )
 
 
@@ -362,6 +421,7 @@ def _eligible(
     catalog: Catalog,
     ceiling: FixSafety,
     minimum: float,
+    excluded: tuple[str, ...] = (),
 ) -> list[tuple[Finding, Fix]]:
     """Select offers within the ceiling, in application order.
 
@@ -371,6 +431,7 @@ def _eligible(
         ceiling: Highest fix safety to apply.
         minimum: Offers with less confidence than this are left out, as are
             offers below their own fix's ``min_confidence``.
+        excluded: Fix-key prefixes that are never applied.
 
     Returns:
         (finding, fix) pairs ordered by fix relations, then position.
@@ -385,6 +446,7 @@ def _eligible(
         if Constants.safety_rank[offer.safety] <= limit
         and offer.confidence
         >= max(minimum, catalog.fix(key=offer.fix_key).min_confidence)
+        and not offer.fix_key.startswith(excluded)
     ]
     pairs.sort(
         key=lambda pair: (
@@ -426,6 +488,7 @@ def _run_round(*, source: str, job: _Job) -> _Round:
         catalog=job.catalog,
         ceiling=job.settings.ceiling,
         minimum=job.settings.min_confidence,
+        excluded=job.settings.excluded_prefixes,
     )
     outcome: _Round = _degrade(source=source, pairs=pairs, job=job)
     return replace(outcome, findings=found.findings)
@@ -449,25 +512,67 @@ def _attempt(
         cannot be written back, or the external checker rejected it.
 
     """
-    module: CommentedModule = parse(source=source, filename=job.filename)
+    text_pairs: list[tuple[Finding, Fix]] = [
+        pair for pair in pairs if pair[1].key in _TEXT_FIXES
+    ]
+    ast_pairs: list[tuple[Finding, Fix]] = [
+        pair for pair in pairs if pair[1].key not in _TEXT_FIXES
+    ]
+    applied: list[AppliedFix] = []
+    skipped: list[SkippedFix] = []
+    edited: str = source
+    seen: set[str] = set()
+    for finding, fix in text_pairs:
+        if fix.key in seen:
+            continue
+        seen.add(fix.key)
+        update: Callable[[str], str] = _TEXT_FIXES[fix.key]
+        updated: str = update(edited)
+        if updated == edited:
+            skipped.append(
+                SkippedFix(
+                    fix_key=fix.key,
+                    rule_key=finding.rule_key,
+                    subject_path=finding.subject_path,
+                    reason=Constants.no_op_reason,
+                    code=SkipCode.preconditions_changed,
+                ),
+            )
+            continue
+        edited = updated
+        applied.append(
+            AppliedFix(
+                fix_key=fix.key,
+                rule_key=finding.rule_key,
+                subject_path=finding.subject_path,
+            ),
+        )
+    module: CommentedModule = parse(source=edited, filename=job.filename)
     settings: FixSettings = job.settings
     state: _Pass = _Pass(
         index=subject_index(module=module),
         facts=module_facts(
             module=module,
-            stubs_path=settings.stubs_path,
-            source=source,
-            cache=job.cache,
-            create_constants=settings.create_constants,
+            options=FactsOptions(
+                stubs_path=settings.stubs_path,
+                source=edited,
+                cache=job.cache,
+                create_constants=settings.create_constants,
+                stub_docstrings=settings.stub_docstrings,
+                annotate_variables=settings.annotate_variables,
+                negotiate=settings.negotiate,
+                engine=settings.engine,
+                project=settings.project,
+                libraries=settings.libraries,
+                target=settings.target,
+            ),
         ),
         table=Appliers.table
         if settings.appliers is None
         else settings.appliers,
         edited=set(),
     )
-    applied: list[AppliedFix] = []
-    skipped: list[SkippedFix] = []
-    for finding, fix in pairs:
+    for finding, fix in ast_pairs:
         refusal: tuple[SkipCode, str] | None = _apply_one(
             finding=finding,
             fix=fix,
@@ -654,7 +759,8 @@ def _apply_one(
     )
     if subject is None:
         return SkipCode.subject_missing, "subject not found"
-    if id(subject.node) in state.edited:
+    independent: bool = fix.key.startswith(Constants.docstring_prefix)
+    if not independent and id(subject.node) in state.edited:
         return SkipCode.conflict, "conflict"
     if not preconditions_hold(fix=fix, subject=subject, facts=state.facts):
         return SkipCode.preconditions_changed, "preconditions no longer hold"
@@ -664,5 +770,6 @@ def _apply_one(
             applier(subject, state.facts)
     except Constants.applier_errors as error:
         return SkipCode.applier_failed, f"applier failed: {error}"
-    state.edited.add(id(subject.node))
+    if not independent:
+        state.edited.add(id(subject.node))
     return None

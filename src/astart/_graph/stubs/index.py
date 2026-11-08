@@ -303,10 +303,15 @@ class LazyStubIndex:
                 source_path=str(object=module_stub),
                 found=True,
             )
-        return StubLookupResult(
+        if package_stub.exists():
+            return StubLookupResult(
+                qualified_name=qualified_name,
+                source_path=str(object=package_stub),
+                found=True,
+            )
+        return self._lookup_third_party(
+            module_name=module_name,
             qualified_name=qualified_name,
-            source_path=str(object=package_stub),
-            found=package_stub.exists(),
         )
 
     def _lookup_archive(
@@ -334,10 +339,77 @@ class LazyStubIndex:
                 source_path=module_candidate,
                 found=True,
             )
+        if package_candidate in names:
+            return StubLookupResult(
+                qualified_name=qualified_name,
+                source_path=package_candidate,
+                found=True,
+            )
+        for candidate in sorted(names):
+            if not candidate.startswith("typeshed/stubs/"):
+                continue
+            if candidate.endswith(
+                (f"/{module_name}/__init__.pyi", f"/{module_name}.pyi"),
+            ):
+                return StubLookupResult(
+                    qualified_name=qualified_name,
+                    source_path=candidate,
+                    found=True,
+                )
         return StubLookupResult(
             qualified_name=qualified_name,
             source_path=package_candidate,
-            found=package_candidate in names,
+            found=False,
+        )
+
+    def _lookup_third_party(
+        self,
+        *,
+        module_name: str,
+        qualified_name: str,
+    ) -> StubLookupResult:
+        """Look up a module inside ``stubs/<dist>/`` directories.
+
+        Args:
+            module_name: Identifier of the module being resolved.
+            qualified_name: Identifier of the qualified being resolved.
+
+        Returns:
+            StubLookupResult produced by this operation.
+
+        """
+        stubs: Path = self.root / "stubs"
+        if not stubs.is_dir():
+            return StubLookupResult(
+                qualified_name=qualified_name,
+                source_path="",
+                found=False,
+            )
+        try:
+            distributions: list[Path] = sorted(stubs.iterdir())
+        except OSError:
+            return StubLookupResult(
+                qualified_name=qualified_name,
+                source_path="",
+                found=False,
+            )
+        for distribution in distributions:
+            if not distribution.is_dir():
+                continue
+            for candidate in (
+                distribution / f"{module_name}.pyi",
+                distribution / module_name / "__init__.pyi",
+            ):
+                if candidate.is_file():
+                    return StubLookupResult(
+                        qualified_name=qualified_name,
+                        source_path=str(object=candidate),
+                        found=True,
+                    )
+        return StubLookupResult(
+            qualified_name=qualified_name,
+            source_path="",
+            found=False,
         )
 
     def _archive_name_set(self) -> frozenset[str]:

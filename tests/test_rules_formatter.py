@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from asyncio import run
+from pathlib import Path
 from typing import TYPE_CHECKING, Final, final
 
 from astart.rules import default_registries, load_default_catalog
@@ -23,8 +24,6 @@ from tests.expectations import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from astart.rules.model import Catalog
     from astart.rules.registry import Registries
 
@@ -153,6 +152,45 @@ def test_fix_and_format_output_is_stable(*, tmp_path: Path) -> None:
     )
     expect_equal(actual=second_fixed.applied, expected=())
     expect_equal(actual=second_formatted.source, expected=formatted.source)
+
+
+def test_docstring_code_is_reformatted_by_project_config(
+    *,
+    tmp_path: Path,
+) -> None:
+    """Check that ruff formats doctest code blocks via pyproject.
+
+    The stdin filename points inside the repository so ruff discovers the
+    project's ``docstring-code-format`` setting.
+
+    Args:
+        tmp_path: Working directory for the format run.
+
+    """
+    source: str = '''\
+def f():
+    """Doc.
+
+    >>> x = [1,2]
+    """
+    pass
+'''
+    registries: Registries = default_registries()
+    catalog: Catalog = load_default_catalog(registries=registries)
+    settings: FixSettings = FixSettings(ceiling=FixSafety.guarded)
+    target: FormatTarget = FormatTarget(
+        filename=str(object=Path(__file__).parent / "doctest_sample.py"),
+        cwd=tmp_path,
+    )
+    _fixed, formatted = fix_and_format(
+        source=source,
+        target=target,
+        catalog=catalog,
+        registries=registries,
+        settings=settings,
+    )
+    expect_true(condition=formatted.formatted)
+    expect_in(item=">>> x = [1, 2]", container=formatted.source)
 
 
 def test_format_source_works_inside_a_running_event_loop(

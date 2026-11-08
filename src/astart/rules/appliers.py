@@ -8,6 +8,8 @@ from ast import (
     Assign,
     AsyncFunctionDef,
     Attribute,
+    BinOp,
+    BitOr,
     Call,
     ClassDef,
     Constant,
@@ -19,7 +21,9 @@ from ast import (
     Name,
     Store,
     Subscript,
+    Tuple,
     arg,
+    copy_location,
     dump,
     expr,
     keyword,
@@ -39,8 +43,15 @@ from ast import (
 )
 from dataclasses import dataclass
 from re import sub as re_sub
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, cast, final
 
+from astart._graph.dispatch import LowercaseTransformer
+from astart.rules.docs_fixes import (
+    add_entries,
+    heal_rename,
+    remove_entries,
+    tidy,
+)
 from astart.rules.facts import (
     Constants,
     bound_call,
@@ -54,7 +65,7 @@ from astart.rules.grouping import (
     move_into,
 )
 from astart.rules.hints import Hint, HintBasis, returns_nothing
-from astart.rules.imports import ensure_names, insert_import
+from astart.rules.imports import ensure_names, insert_import, module_classes
 from astart.rules.protocols import (
     StructuralUsage,
     protocol_source,
@@ -78,9 +89,76 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from astart import BoundCall
+    from astart.project.versions import PythonTarget
     from astart.rules.facts import Applier, ModuleFacts, Subject
     from astart.rules.protocols import StructuralUsage
 type NodeAttributes = dict[str, AST | list[AST] | int | str | None]
+
+
+@final
+class _UnionRewrite(LowercaseTransformer):
+    """Rewrite ``X | Y`` union syntax as ``Union[X, Y]`` in annotations."""
+
+    def visit_binop(self, node: BinOp) -> expr:
+        """Flatten one ``|`` chain and rebuild it as ``Union[...]``.
+
+        Args:
+            node: The binary operation node.
+
+        Returns:
+            The replacement ``Union`` subscript, or the node with its
+            children rewritten for non-union operations.
+
+        """
+        if not isinstance(node.op, BitOr):
+            return cast(typ="expr", val=self.generic_visit(node=node))
+        members: list[expr] = [
+            cast(typ="expr", val=self.visit(node=member))
+            for member in _union_members(node=node)
+        ]
+        return copy_location(
+            new_node=Subscript(
+                value=Name(id="Union", ctx=Load()),
+                slice=Tuple(elts=members, ctx=Load()),
+                ctx=Load(),
+            ),
+            old_node=node,
+        )
+
+
+def _union_members(*, node: expr) -> list[expr]:
+    """Flatten a ``X | Y | Z`` chain into its members.
+
+    Args:
+        node: The expression that may head a union chain.
+
+    Returns:
+        The union's operands, or ``[node]`` itself when not a union.
+
+    """
+    if isinstance(node, BinOp) and isinstance(node.op, BitOr):
+        return [
+            *_union_members(node=node.left),
+            *_union_members(node=node.right),
+        ]
+    return [node]
+
+
+def _respell_unions(*, expression: expr, target: PythonTarget) -> expr:
+    """Rewrite ``X | Y`` unions when the target's Python cannot parse them.
+
+    Args:
+        expression: Parsed annotation expression.
+        target: Oldest Python version emitted code must run on.
+
+    Returns:
+        The expression, with unions respelled as ``Union[...]`` when
+        needed.
+
+    """
+    if target.union_syntax:
+        return expression
+    return cast(typ="expr", val=_UnionRewrite().visit(node=expression))
 
 
 def _final_reference(*, facts: ModuleFacts) -> tuple[expr, bool]:
@@ -254,7 +332,10 @@ def add_attribute_annotation(subject: Subject, facts: ModuleFacts) -> None:
         or len(statement.targets) != 1
     ):
         return
-    expression: expr = parse(source=hint.source, mode="eval").body
+    expression: expr = _respell_unions(
+        expression=parse(source=hint.source, mode="eval").body,
+        target=facts.target,
+    )
     ensure_names(
         module=facts.module,
         expression=expression,
@@ -264,6 +345,46 @@ def add_attribute_annotation(subject: Subject, facts: ModuleFacts) -> None:
     attributes["target"] = statement.targets[0]
     attributes["annotation"] = expression
     attributes["simple"] = 0
+    del attributes["targets"]
+    _ = attributes.pop("type_comment", None)
+    object.__setattr__(statement, "__class__", AnnAssign)
+
+
+def add_variable_annotation(subject: Subject, facts: ModuleFacts) -> None:
+    """Turn ``name = value`` into ``name: T = value``.
+
+    The statement keeps its identity, so comments and layout survive.
+
+    Args:
+        subject: Assignment subject.
+        facts: Resolved imports, parsed module and negotiated variables.
+
+    """
+    statement: AST | None = subject.statement
+    if (
+        facts.variables is None
+        or not isinstance(statement, Assign)
+        or len(statement.targets) != 1
+        or not isinstance(statement.targets[0], Name)
+    ):
+        return
+    hint: Hint | None = facts.variables.hint_for(node=statement)
+    if hint is None:
+        return
+    expression: expr = _respell_unions(
+        expression=parse(source=hint.source, mode="eval").body,
+        target=facts.target,
+    )
+    ensure_names(
+        module=facts.module,
+        expression=expression,
+        before=_ancestor_index(module=facts.module, node=statement),
+        skip=module_classes(module=facts.module),
+    )
+    attributes: NodeAttributes = vars(statement)
+    attributes["target"] = statement.targets[0]
+    attributes["annotation"] = expression
+    attributes["simple"] = 1
     del attributes["targets"]
     _ = attributes.pop("type_comment", None)
     object.__setattr__(statement, "__class__", AnnAssign)
@@ -306,7 +427,10 @@ def add_inferred_annotation(subject: Subject, facts: ModuleFacts) -> None:
     hint: Hint | None = facts.hints.index().hint_for(node=subject.node)
     if hint is None or hint.basis is HintBasis.proven_none:
         return
-    expression: expr = parse(source=hint.source, mode="eval").body
+    expression: expr = _respell_unions(
+        expression=parse(source=hint.source, mode="eval").body,
+        target=facts.target,
+    )
     owner: AST = (
         subject.statement if subject.kind == "Parameter" else subject.node
     ) or subject.node
@@ -314,6 +438,11 @@ def add_inferred_annotation(subject: Subject, facts: ModuleFacts) -> None:
         module=facts.module,
         expression=expression,
         before=_ancestor_index(module=facts.module, node=owner),
+        skip=(
+            module_classes(module=facts.module)
+            if hint.basis is HintBasis.negotiated
+            else frozenset()
+        ),
     )
     match subject.node:
         case arg(annotation=None) as parameter:
@@ -752,6 +881,7 @@ def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
             module=module,
             receiver=receiver,
             forbidden=_class_variables(module=module, function=function),
+            target=facts.target,
         )
         return
     request: _TypevarRequest = _TypevarRequest(
@@ -1020,6 +1150,7 @@ def _synthesize_multi(
     module: Module,
     receiver: tuple[str, bool] | None,
     forbidden: set[str],
+    target: PythonTarget,
 ) -> None:
     """Annotate several parameters sharing one container return.
 
@@ -1028,6 +1159,7 @@ def _synthesize_multi(
         module: Module to modify.
         receiver: ``(name, is_classmethod)`` when the function is a method.
         forbidden: Names the enclosing classes already use as parameters.
+        target: Oldest Python version emitted code must run on.
 
     """
     candidates: dict[str, arg] = candidate_params(
@@ -1074,8 +1206,20 @@ def _synthesize_multi(
         parameter: arg = candidates[name]
         parameter.annotation = Name(id=variables[name], ctx=Load())
     if can_fall_off(body=function.body):
-        returns_source: str = f"{returns_source} | None"
-    function.returns = parse(source=returns_source, mode="eval").body
+        returns_source: str = (
+            f"{returns_source} | None"
+            if target.union_syntax
+            else f"Optional[{returns_source}]"
+        )
+    function.returns = _respell_unions(
+        expression=parse(source=returns_source, mode="eval").body,
+        target=target,
+    )
+    ensure_names(
+        module=module,
+        expression=function.returns,
+        before=_ancestor_index(module=module, node=function),
+    )
 
 
 def synthesize_self(subject: Subject, facts: ModuleFacts) -> None:
@@ -1091,6 +1235,8 @@ def synthesize_self(subject: Subject, facts: ModuleFacts) -> None:
             pass
         case _:
             return
+    if not facts.target.self_type:
+        return
     module: Module = facts.module
     receiver: tuple[str, bool] | None = receiver_info(
         module=module,
@@ -1137,7 +1283,12 @@ class Appliers:
         "typing.add-noreturn": add_noreturn,
         "typing.add-inferred-annotation": add_inferred_annotation,
         "typing.add-attribute-annotation": add_attribute_annotation,
+        "typing.add-variable-annotation": add_variable_annotation,
         "typing.synthesize-protocol": synthesize_protocol,
         "typing.synthesize-typevar": synthesize_typevar,
         "typing.synthesize-self": synthesize_self,
+        "docs.add-parameter-entries": add_entries,
+        "docs.heal-parameter-rename": heal_rename,
+        "docs.remove-stale-entries": remove_entries,
+        "docs.tidy-docstring": tidy,
     }

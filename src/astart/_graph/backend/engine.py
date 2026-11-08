@@ -3502,6 +3502,9 @@ class StrictAstTransformer(LowercaseTransformer):
         new_keywords: list[keyword] = list(node.keywords)
         arg_node: expr
         for index, arg_node in enumerate(iterable=node.args):
+            if isinstance(arg_node, Starred):
+                new_args.extend(node.args[index:])
+                break
             if index >= len(param_names):
                 new_args.append(arg_node)
                 continue
