@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from asyncio import create_subprocess_exec, run, wait_for
-from asyncio.subprocess import PIPE
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from shutil import which
 from sys import executable
 from typing import TYPE_CHECKING, Final, final
 
+from astart.rules.process import Completed, run_command
 from astart.rules.runner import fix_source
 
 if TYPE_CHECKING:
-    from asyncio.subprocess import Process
     from pathlib import Path
 
     from astart.rules.model import Catalog
@@ -52,23 +49,6 @@ class FormatTarget:
 
 @final
 @dataclass(frozen=True, slots=True)
-class _Completed:
-    """Raw outcome of a ruff invocation.
-
-    Attributes:
-        code: Exit status.
-        stdout: Standard output text.
-        stderr: Standard error text.
-
-    """
-
-    code: int
-    stdout: str
-    stderr: str
-
-
-@final
-@dataclass(frozen=True, slots=True)
 class FormatOutcome:
     """Result of the formatter phase.
 
@@ -101,73 +81,6 @@ def _command(*, filename: str) -> tuple[str, ...]:
     return (*base, "format", "--stdin-filename", filename, "-")
 
 
-async def _spawn(
-    *,
-    arguments: tuple[str, ...],
-    source: str,
-    cwd: Path,
-) -> _Completed:
-    """Run a command with text on standard input.
-
-    Args:
-        arguments: Argument vector.
-        source: Text written to standard input.
-        cwd: Working directory.
-
-    Returns:
-        The exit status and captured output.
-
-    """
-    process: Process = await create_subprocess_exec(
-        *arguments,
-        stdin=PIPE,
-        stdout=PIPE,
-        stderr=PIPE,
-        cwd=cwd,
-    )
-    try:
-        out, err = await wait_for(
-            fut=process.communicate(input=source.encode()),
-            timeout=Constants.timeout_seconds,
-        )
-    except TimeoutError:
-        process.kill()
-        _ = await process.wait()
-        raise
-    return _Completed(
-        code=process.returncode or 0,
-        stdout=out.decode(),
-        stderr=err.decode(),
-    )
-
-
-def _execute(
-    *,
-    arguments: tuple[str, ...],
-    source: str,
-    cwd: Path,
-) -> _Completed:
-    """Run :func:`_spawn` on a private event loop in a worker thread.
-
-    A worker thread keeps this usable from code that already runs an event
-    loop.
-
-    Args:
-        arguments: Argument vector.
-        source: Text written to standard input.
-        cwd: Working directory.
-
-    Returns:
-        The exit status and captured output.
-
-    """
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(
-            run,
-            _spawn(arguments=arguments, source=source, cwd=cwd),
-        ).result()
-
-
 def format_source(
     *,
     source: str,
@@ -188,10 +101,11 @@ def format_source(
     """
     arguments: tuple[str, ...] = command or _command(filename=target.filename)
     try:
-        completed: _Completed = _execute(
+        completed: Completed = run_command(
             arguments=arguments,
-            source=source,
             cwd=target.cwd,
+            stdin=source,
+            timeout=Constants.timeout_seconds,
         )
     except FileNotFoundError:
         return FormatOutcome(

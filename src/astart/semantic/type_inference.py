@@ -53,6 +53,7 @@ from collections import deque
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Final, final
 
+from astart.semantic.parameter_kinds import ParameterKind
 from astart.semantic.type_expressions import (
     TypeExpression,
     TypeExpressionCodec,
@@ -63,6 +64,7 @@ from astart.semantic.typing_contracts import (
     BoundCall,
     CallableContract,
     ContractIndex,
+    ParameterContract,
     bind_signature,
 )
 from astart.semantic.typing_relations import specialize, subtype, unify
@@ -187,6 +189,123 @@ class CallSite:
     arguments: CallArguments
     env: dict[int, TypeShape]
     narrowing: dict[str, TypeShape] | None
+
+
+# Qualified names of imported constructors whose call arguments are typed
+# from a curated signature.  Each entry maps the qualified name to
+# ``(parameter name, kind, annotation source, optional)`` tuples; ``self``
+# and ``cls`` receivers are excluded.  The table covers the constructors
+# ``rules.imports.Constants.constructors`` recognizes plus their qualified
+# origins, and stays deliberately small: anything absent resolves to
+# ``Unknown`` rather than guessing.
+_IMPORTED_CONSTRUCTOR_PARAMS: Final[
+    dict[str, tuple[tuple[str, ParameterKind, str, bool], ...]]
+] = {
+    "datetime.date": (
+        ("year", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+        ("month", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+        ("day", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+    ),
+    "datetime.datetime": (
+        ("year", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+        ("month", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+        ("day", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+        ("hour", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+        ("minute", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+        ("second", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+        ("microsecond", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+        ("tzinfo", ParameterKind.POSITIONAL_OR_KEYWORD, "tzinfo | None", True),
+        ("fold", ParameterKind.KEYWORD_ONLY, "int", True),
+    ),
+    "datetime.time": (
+        ("hour", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+        ("minute", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+        ("second", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+        ("microsecond", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+        ("tzinfo", ParameterKind.POSITIONAL_OR_KEYWORD, "tzinfo | None", True),
+        ("fold", ParameterKind.KEYWORD_ONLY, "int", True),
+    ),
+    "datetime.timedelta": tuple(
+        (name, ParameterKind.POSITIONAL_OR_KEYWORD, "float | Decimal", True)
+        for name in (
+            "days",
+            "seconds",
+            "microseconds",
+            "milliseconds",
+            "minutes",
+            "hours",
+            "weeks",
+        )
+    ),
+    "decimal.Decimal": (
+        (
+            "value",
+            ParameterKind.POSITIONAL_OR_KEYWORD,
+            "Decimal | float | str | tuple[int, ...]",
+            True,
+        ),
+        (
+            "context",
+            ParameterKind.POSITIONAL_OR_KEYWORD,
+            "Context | None",
+            True,
+        ),
+    ),
+    "fractions.Fraction": (
+        (
+            "numerator",
+            ParameterKind.POSITIONAL_OR_KEYWORD,
+            "int | float | Decimal | Fraction",
+            True,
+        ),
+        (
+            "denominator",
+            ParameterKind.POSITIONAL_OR_KEYWORD,
+            "int | float | Decimal | Fraction | None",
+            True,
+        ),
+    ),
+    "pathlib.Path": (
+        (
+            "args",
+            ParameterKind.VAR_POSITIONAL,
+            "str | PathLike[str]",
+            False,
+        ),
+    ),
+    "pathlib.PurePath": (
+        (
+            "args",
+            ParameterKind.VAR_POSITIONAL,
+            "str | PathLike[str]",
+            False,
+        ),
+    ),
+    "uuid.UUID": (
+        ("hex", ParameterKind.POSITIONAL_OR_KEYWORD, "str | None", True),
+        ("bytes", ParameterKind.POSITIONAL_OR_KEYWORD, "bytes | None", True),
+        (
+            "bytes_le",
+            ParameterKind.POSITIONAL_OR_KEYWORD,
+            "bytes | None",
+            True,
+        ),
+        (
+            "fields",
+            ParameterKind.POSITIONAL_OR_KEYWORD,
+            "tuple[int, int, int, int, int, int] | None",
+            True,
+        ),
+        ("int", ParameterKind.POSITIONAL_OR_KEYWORD, "int | None", True),
+        ("version", ParameterKind.POSITIONAL_OR_KEYWORD, "int | None", True),
+        (
+            "is_safe",
+            ParameterKind.POSITIONAL_OR_KEYWORD,
+            "UUIDSafe | None",
+            True,
+        ),
+    ),
+}
 
 
 @final
@@ -415,6 +534,77 @@ def _receiver_update(
     return None
 
 
+def _iterated_element(*, site: CallSite) -> TypeShape:
+    """Type one element produced by iterating a constructor argument.
+
+    Iterating a ``dict`` yields its keys, a heterogeneous ``tuple`` the
+    join of its elements, ``str`` yields ``str`` and ``bytes`` yields
+    ``int``.
+
+    Args:
+        site: Call whose first positional argument is the iterable.
+
+    Returns:
+        The element type, or ``Unknown`` when indeterminate.
+
+    """
+    if len(site.arguments.positional) != 1:
+        return atomic(name="Unknown")
+    shape: TypeShape = site.arguments.positional[0]
+    if shape.name == "dict" and len(shape.arguments) == Constants.pair_size:
+        return shape.arguments[0]
+    if shape.name == "tuple" and shape.arguments:
+        element: TypeShape = shape.arguments[0]
+        for extra in shape.arguments[1:]:
+            element = join_types(left=element, right=extra)
+        return element
+    if shape.name in ("list", "set", "frozenset") and shape.arguments:
+        return shape.arguments[0]
+    if shape.name == "str":
+        return atomic(name="str")
+    return (
+        atomic(name="int") if shape.name == "bytes" else atomic(name="Unknown")
+    )
+
+
+def _builtin_call(*, name: str, site: CallSite) -> TypeShape:
+    """Type a call to an unresolved builtin name.
+
+    Container constructors derive their element type from the iterated
+    argument instead of reporting ``Unknown``; ``dict`` of a mapping
+    keeps the mapping's key and value types.
+
+    Args:
+        name: Callee identifier.
+        site: Call site with inferred argument shapes.
+
+    Returns:
+        The result shape.
+
+    """
+    base: TypeShape | None = Constants.builtin_call_results.get(name)
+    if base is None:
+        if name != "frozenset":
+            return atomic(name="Unknown")
+        base = TypeShape(
+            name="frozenset",
+            arguments=(atomic(name="Unknown"),),
+        )
+    if name in ("list", "set", "tuple", "frozenset"):
+        return TypeShape(
+            name=name,
+            arguments=(_iterated_element(site=site),),
+        )
+    if (
+        name == "dict"
+        and len(site.arguments.positional) == 1
+        and (source := site.arguments.positional[0]).name == "dict"
+        and len(source.arguments) == Constants.pair_size
+    ):
+        return source
+    return base
+
+
 @final
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TypeSolveStatistics:
@@ -529,6 +719,10 @@ class TypeConstraintSolver:
         self.stubs: StubIndex | None = stubs
         self.graph_conversion: tuple[GraphAnnotation, ...] = graph_conversion
         self.contracts: ContractIndex = ContractIndex(root=root)
+        self._imported_constructors: dict[
+            str,
+            CallableContract | None,
+        ] = {}
         self.call_bindings: dict[int, BoundCall] = {}
         self._type_variables: set[str] = set()
         self._type_variable_bounds: dict[str, tuple[TypeShape, ...]] = {}
@@ -550,10 +744,26 @@ class TypeConstraintSolver:
         self._owner: dict[int, str] = {}
         self._symbol_by_name: dict[tuple[int, str], int] = {}
         self._function_parameters: dict[tuple[str, str], int] = {}
+        self._method_receivers: dict[int, tuple[str, str, bool]] = {}
+        self._instance_attributes: dict[
+            tuple[str, str],
+            list[AST],
+        ] = {}
+        self._instance_annotations: dict[
+            tuple[str, str],
+            TypeExpression,
+        ] = {}
+        self._class_assignments: dict[
+            tuple[str, str],
+            list[AST],
+        ] = {}
+        self._self_attr_active: set[int] = set()
+        self._method_nodes: list[FunctionDef | AsyncFunctionDef] = []
         self._work: deque[str] = deque()
         self._queued: set[str] = set()
         self._build_index()
         self.statistics: TypeSolveStatistics = self._solve()
+        self._solve_methods()
         self._publish()
 
     @staticmethod
@@ -775,6 +985,10 @@ class TypeConstraintSolver:
             and len(container.arguments) == Constants.pair_size
         ):
             result = container.arguments[1]
+        elif result.name == "Unknown" and container.name == "str":
+            result = atomic(name="str")
+        elif result.name == "Unknown" and container.name == "bytes":
+            result = atomic(name="int")
         return result
 
     def infer_await(
@@ -1025,6 +1239,27 @@ class TypeConstraintSolver:
         )
         if cls is not None:
             result = self._class_attribute_type(contract=cls, node=node)
+        if result.name == "Unknown":
+            method: tuple[str, str, bool] | None = self._method_receivers.get(
+                self.identities.node_id(node=node),
+            )
+            identity: int = self.identities.node_id(node=node)
+            if (
+                method is not None
+                and isinstance(node.value, Name)
+                and node.value.id == method[1]
+                and identity not in self._self_attr_active
+            ):
+                self._self_attr_active.add(identity)
+                try:
+                    result = self._self_attribute_type(
+                        class_name=method[0],
+                        attr=node.attr,
+                        node=node,
+                        instance=not method[2],
+                    )
+                finally:
+                    self._self_attr_active.discard(identity)
         if (
             result.name == "Unknown"
             and receiver.name in ("list", "dict", "set")
@@ -1630,6 +1865,213 @@ class TypeConstraintSolver:
                         node=node,
                     )
 
+    @staticmethod
+    def _self_target(
+        *,
+        target: AST,
+        receiver: str,
+    ) -> Attribute | None:
+        """Return ``target`` when it is ``<receiver>.<attr>``.
+
+        Args:
+            receiver: Receiver supplied as str for this operation.
+            target: The target examined while return ``target`` when it is
+                ``<receiver>.<attr>``.
+
+        Returns:
+            Attribute | None produced by this operation.
+
+        """
+        if (
+            isinstance(target, Attribute)
+            and isinstance(target.value, Name)
+            and target.value.id == receiver
+        ):
+            return target
+        return None
+
+    def _index_class_assignments(self, *, _cls: ClassDef) -> None:
+        """Record class-level ``name = value`` assignments.
+
+        Args:
+            _cls: The class definition to index.
+
+        """
+        for item in _cls.body:
+            if not isinstance(item, Assign):
+                continue
+            for target in item.targets:
+                if isinstance(target, Name):
+                    self._class_assignments.setdefault(
+                        (_cls.name, target.id),
+                        [],
+                    ).append(item.value)
+
+    def _index_method(
+        self,
+        *,
+        _cls: ClassDef,
+        item: FunctionDef | AsyncFunctionDef,
+    ) -> None:
+        """Index one method's parameters and register its receiver.
+
+        Args:
+            _cls: Class definition.
+            item: Method definition.
+
+        """
+        parameters: tuple[arg, ...] = (
+            *item.args.posonlyargs,
+            *item.args.args,
+            *item.args.kwonlyargs,
+        )
+        self._method_nodes.append(item)
+        if not parameters:
+            return
+        for parameter in parameters:
+            if parameter.annotation is not None:
+                sid: int | None = self._symbol_id(node=parameter)
+                if sid is not None:
+                    self._declare(
+                        symbol_id=sid,
+                        shape=_hint(node=parameter.annotation),
+                        node=parameter,
+                    )
+        decorators: frozenset[str] = frozenset(
+            (
+                decorator.id
+                if isinstance(decorator, Name)
+                else decorator.attr
+                if isinstance(decorator, Attribute)
+                else ""
+            )
+            for decorator in item.decorator_list
+        )
+        if "staticmethod" in decorators:
+            return
+        receiver: str = parameters[0].arg
+        is_classmethod: bool = "classmethod" in decorators
+        for node in walk(node=item):
+            self._method_receivers[self.identities.node_id(node=node)] = (
+                _cls.name,
+                receiver,
+                is_classmethod,
+            )
+
+    def _index_methods(self) -> None:
+        """Index method receivers, parameter declarations and self writes."""
+        for cls in walk(node=self.root):
+            if not isinstance(cls, ClassDef):
+                continue
+            self._index_class_assignments(_cls=cls)
+            for item in cls.body:
+                if isinstance(item, (FunctionDef, AsyncFunctionDef)):
+                    self._index_method(_cls=cls, item=item)
+        self._index_self_writes()
+
+    def _index_self_writes(self) -> None:
+        """Record ``self.attr`` writes inside every indexed method."""
+        for node in walk(node=self.root):
+            context: tuple[str, str, bool] | None = self._method_receivers.get(
+                self.identities.node_id(node=node),
+            )
+            if context is not None and not context[2]:
+                self._record_self_write(node=node, context=context)
+
+    def _record_self_write(
+        self,
+        *,
+        node: AST,
+        context: tuple[str, str, bool],
+    ) -> None:
+        """Record one ``self.attr = value`` or annotated write.
+
+        Args:
+            node: Assignment statement inside a method.
+            context: ``(class name, receiver, is classmethod)`` of the
+                enclosing method.
+
+        """
+        class_name, receiver, _ = context
+        if isinstance(node, Assign):
+            for target in node.targets:
+                attribute: Attribute | None = self._self_target(
+                    target=target,
+                    receiver=receiver,
+                )
+                if attribute is not None:
+                    self._instance_attributes.setdefault(
+                        (class_name, attribute.attr),
+                        [],
+                    ).append(node.value)
+        elif isinstance(node, AnnAssign):
+            attribute = self._self_target(
+                target=node.target,
+                receiver=receiver,
+            )
+            if attribute is None:
+                return
+            self._instance_annotations[(class_name, attribute.attr)] = (
+                TypeExpressionCodec.from_ast(node=node.annotation)
+            )
+            if node.value is not None:
+                self._instance_attributes.setdefault(
+                    (class_name, attribute.attr),
+                    [],
+                ).append(node.value)
+
+    def _self_attribute_type(
+        self,
+        *,
+        class_name: str,
+        attr: str,
+        node: Attribute,
+        instance: bool,
+    ) -> TypeShape:
+        """Type of ``self.attr`` inside a method of a known class.
+
+        Args:
+            attr: Attribute supplied as str for this operation.
+            class_name: Class name supplied as str for this operation.
+            instance: Instance supplied as bool for this operation.
+            node: The node examined while type of ``self.attr`` inside a
+                method of a known class.
+
+        Returns:
+            TypeShape produced by this operation.
+
+        """
+        cls: ClassContract | None = self.contracts.classes.get(class_name)
+        if cls is not None:
+            result: TypeShape = self._class_attribute_type(
+                contract=cls,
+                node=node,
+            )
+            if result.name != "Unknown":
+                return result
+        if not instance:
+            return atomic(name="Unknown")
+        annotation: TypeExpression | None = self._instance_annotations.get(
+            (class_name, attr),
+        )
+        if annotation is not None:
+            return type_shape(expression=annotation)
+        values: list[AST] | None = self._instance_attributes.get(
+            (class_name, attr),
+        )
+        if not values:
+            values = self._class_assignments.get((class_name, attr))
+        if not values:
+            return atomic(name="Unknown")
+        result = atomic(name="Never")
+        for value in values:
+            result = join_types(
+                left=result,
+                right=self._infer(node=value, env={}, narrowing=None),
+                promote=False,
+            )
+        return result
+
     def _build_index(self) -> None:
         """Register node and symbol indexes, including callable contracts."""
         self._index_nodes()
@@ -1643,6 +2085,7 @@ class TypeConstraintSolver:
             self._index_function(function=function)
         self._index_calls()
         self._index_annotated_assignments()
+        self._index_methods()
         self._seed_graph_annotations()
         self._work = deque(iterable=["<module>", *self._definitions])
         self._queued = set(self._work)
@@ -2950,6 +3393,91 @@ class TypeConstraintSolver:
             constructor=site.name,
         )
 
+    def _imported_constructor_contract(
+        self,
+        *,
+        qualified_name: str,
+    ) -> CallableContract | None:
+        """Build the curated contract for a known imported constructor.
+
+        Args:
+            qualified_name: Qualified import origin such as
+                ``pathlib.Path``.
+
+        Returns:
+            CallableContract | None produced by this operation.
+
+        """
+        if qualified_name in self._imported_constructors:
+            return self._imported_constructors[qualified_name]
+        parameters: tuple[tuple[str, ParameterKind, str, bool], ...] = (
+            _IMPORTED_CONSTRUCTOR_PARAMS.get(qualified_name, ())
+        )
+        contract: CallableContract | None = (
+            CallableContract(
+                qualified_name=qualified_name,
+                parameters=tuple(
+                    ParameterContract(
+                        name=name,
+                        kind=kind,
+                        annotation=TypeExpressionCodec.from_source(
+                            source=annotation,
+                        ),
+                        optional=optional,
+                    )
+                    for name, kind, annotation, optional in parameters
+                ),
+                returns=TypeExpression(
+                    name=qualified_name.rsplit(sep=".", maxsplit=1)[-1],
+                ),
+            )
+            if parameters or qualified_name in _IMPORTED_CONSTRUCTOR_PARAMS
+            else None
+        )
+        self._imported_constructors[qualified_name] = contract
+        return contract
+
+    def _resolve_imported_constructor(
+        self,
+        *,
+        site: CallSite,
+    ) -> TypeShape | None:
+        """Resolve a call of an imported constructor from its signature.
+
+        Args:
+            site: Site supplied as CallSite for this operation.
+
+        Returns:
+            TypeShape | None produced by this operation.
+
+        """
+        node: Call = site.node
+        if (
+            site.name is None
+            or not isinstance(node.func, Name)
+            or not self._import_is_unmodified(
+                alias=site.name,
+                node=node.func,
+            )
+        ):
+            return None
+        qualified: str | None = self._imports.get(site.name)
+        if qualified is None:
+            return None
+        contract: CallableContract | None = (
+            self._imported_constructor_contract(
+                qualified_name=qualified,
+            )
+        )
+        if contract is None:
+            return None
+        return self._contract_call(
+            node=node,
+            variants=(contract,),
+            arguments=site.arguments,
+            constructor=qualified.rsplit(sep=".", maxsplit=1)[-1],
+        )
+
     def _resolve_method_contract(self, *, site: CallSite) -> TypeShape | None:
         """Resolve a method call on a receiver with a known class contract.
 
@@ -3095,10 +3623,7 @@ class TypeConstraintSolver:
             self.scopes.root_id,
         )
         if self.scopes.resolve(name=name, scope_id=scope_id) is None:
-            return Constants.builtin_call_results.get(
-                name,
-                atomic(name="Unknown"),
-            )
+            return _builtin_call(name=name, site=site)
         return atomic(name="Unknown")
 
     def _apply_receiver_effect(
@@ -3344,6 +3869,7 @@ class TypeConstraintSolver:
             self._resolve_callable_variable,
             self._resolve_function_contract,
             self._resolve_class_constructor,
+            self._resolve_imported_constructor,
             self._resolve_method_contract,
         ):
             resolved: TypeShape | None = resolver(site=site)
@@ -3532,6 +4058,39 @@ class TypeConstraintSolver:
                     changed = handler(statement, env, owner) or changed
                     break
         return changed
+
+    def _solve_methods(self) -> None:
+        """Propagate contracts through method bodies to a bounded fixpoint.
+
+        Method receivers and ``self.attr`` writes are indexed by
+        :meth:`_index_methods`; their bodies join the same constraint
+        system so attribute reads resolve against declared members and
+        recorded writes.
+        """
+        for _ in range(8):
+            changed: bool = False
+            for function in self._method_nodes:
+                parameters: tuple[arg, ...] = (
+                    *function.args.posonlyargs,
+                    *function.args.args,
+                    *function.args.kwonlyargs,
+                )
+                env: dict[int, TypeShape] = {
+                    sid: self.types[sid]
+                    for parameter in parameters
+                    if (sid := self._symbol_id(node=parameter)) is not None
+                    and sid in self.types
+                }
+                changed = (
+                    self._suite(
+                        statements=function.body,
+                        env=env,
+                        owner=function.name,
+                    )
+                    or changed
+                )
+            if not changed:
+                return
 
     def _solve(self) -> TypeSolveStatistics:
         """Iterate call and return constraints until stable or exhausted.

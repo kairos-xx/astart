@@ -33,6 +33,9 @@ astart = ["py.typed", "rules/catalog/*.json", "rules/schema.json"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 filterwarnings = ["error"]
+markers = [
+    "slow: replays the whole corpus; deselect with -m 'not slow' for the edit loop",
+]
 
 [tool.coverage.run]
 branch = true

@@ -89,7 +89,9 @@ Report rule violations, or fix them automatically:
 
 ```console
 astart check src/ [--format text|json] [--fail-on error|warning|info]
-astart fix src/ [--safe-only] [--diff | --check] [--no-format]
+astart fix src/ [--safe-only] [--diff | --check] [--no-format] \
+    [--checker auto|off] [--min-confidence 0.95] [--source-root DIR ...] \
+    [--create-constants-class]
 ```
 
 `astart fix` adds missing keyword arguments and type hints by default,
@@ -97,7 +99,13 @@ synthesizes `Protocol` classes and `TypeVar` declarations where a parameter's
 type is structural or generic, adds the imports they need, and then runs
 `ruff format` once. `--safe-only` limits it to provably safe fixes, `--diff`
 prints the change instead of writing, and `--check` only reports whether
-changes are pending. Exit status: `0` clean, `1` findings or changes, `2`
+changes are pending. With `--checker auto` (the default) an installed
+`basedpyright`/`pyright` must not report a new error for guarded fixes; a
+rejected fix is skipped with the code `checker-rejected`. The checker runs
+on a scratch copy in a temp directory; imports resolve as for the real file
+(its package, a `src/` layout, the project root and `PYTHONPATH` are detected,
+and `--source-root` adds more). `--min-confidence`
+drops fixes whose evidence is weaker than the given confidence. Exit status: `0` clean, `1` findings or changes, `2`
 unreadable input or a missing path.
 
 ```console

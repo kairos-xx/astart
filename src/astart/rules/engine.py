@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, final
 from astart import FormatPreservationError, parse, unparse
 from astart.rules.appliers import Appliers
 from astart.rules.catalog import CatalogError, validate_catalog
+from astart.rules.confidence import offer_confidence
 from astart.rules.facts import (
     Constants,
     Registry,
@@ -64,12 +65,15 @@ class CheckOptions:
         stubs_path: Stub directory for type hints, or ``None`` for an empty
             temporary one.
         hint_cache: Cache shared between runs on the same text, or ``None``.
+        create_constants: Whether a missing ``Constants`` class may be
+            created to hold ``Final`` module constants.
 
     """
 
     providers: Mapping[str, FactProvider] | None = None
     stubs_path: Path | None = None
     hint_cache: HintCache | None = None
+    create_constants: bool = False
 
 
 @final
@@ -136,6 +140,7 @@ def check(
                 stubs_path=chosen.stubs_path,
                 source=source,
                 cache=chosen.hint_cache,
+                create_constants=chosen.create_constants,
             ),
         )
         findings: tuple[Finding, ...] = _evaluate(
@@ -288,7 +293,15 @@ def _finding(
         provider: EvidenceProvider = Registry.evidence[slot.name]
         evidence[slot.name] = provider(subject, context.facts)
     offers: tuple[FixOffer, ...] = tuple(
-        FixOffer(fix_key=fix.key, safety=fix.safety, confidence=1.0)
+        FixOffer(
+            fix_key=fix.key,
+            safety=fix.safety,
+            confidence=offer_confidence(
+                fix=fix,
+                subject=subject,
+                facts=context.facts,
+            ),
+        )
         for fix in (context.catalog.fix(key=key) for key in rule.fixes)
         if _applicable(
             fix=fix,

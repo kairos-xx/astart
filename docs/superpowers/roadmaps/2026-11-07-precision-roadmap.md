@@ -1,7 +1,7 @@
 # astart roadmap: the most accurate static analyser and fixer for keywords and types
 
 Status: proposal for review, 2026-11-07. Nothing here is approved or built unless it says "shipped".
-Companion documents: `specs/2026-11-06-rule-ontology-design.md`, `specs/2026-11-06-fix-runner-and-type-hints-design.md` (sections 9 and 10), `plans/2026-11-07-check-fix-cli.md`.
+The 2026-11-06/07 companion specs and plans were implemented; remaining tasks live in `docs/TODO.md` (M8-31 to M8-39).
 
 ## 1. North star
 
@@ -39,7 +39,7 @@ Shipped:
 
 Known weaknesses (all observed, none hypothetical):
 - **Recall is low by design.** Refused today: `x=-1`, `x=1+2`, `try/finally` returns, f-string returns, falling-off-the-end where inference disagrees, methods' call sites.
-- **Methods are second-class.** `self.method(...)` and `Class.method(...)` call sites are not resolved, so methods get hints only from defaults and provable returns.
+- **Methods are second-class.** *(Partly resolved 2026-11-07: `self.m(...)`, `C().m(...)`, `obj.m(...)`, `Class.m(obj, ...)` and simple dataclass constructors now bind; `super()`, `cls`, static/class methods and multiple inheritance do not. `docs/TODO.md` is the live plan.)*
 - **Large files are slow and superlinear** (12,000-line file ~47 s; 2,400-line ~3 s). Cost is the semantic worklist plus repeated tree walks.
 - **Protocol members are untyped** unless call arguments are literals. Return types of members are always missing. Output therefore still triggers TYP003 on the Protocol's own methods.
 - **Single-module world.** No cross-module call sites, no imported types, no third-party signatures.

@@ -31,6 +31,7 @@ from ast import (
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Final, cast, final
 
+from astart.rules.grouping import creatable, find_group
 from astart.rules.hints import (
     HintBasis,
     HintCache,
@@ -41,10 +42,16 @@ from astart.rules.hints import (
 from astart.rules.predicate import FactValue
 from astart.rules.protocols import Constants as ProtocolConstants
 from astart.rules.protocols import parameter_has_default, structural_usage
-from astart.rules.provable import never_returns
+from astart.rules.provable import module_constants, never_returns, scope_types
 from astart.rules.registry import FactSpec, Registries
 from astart.rules.resolve import CallBindings, binding_counts
-from astart.rules.typevars import passthrough_return
+from astart.rules.typevars import (
+    TypeVarPlan,
+    candidate_params,
+    multi_return,
+    receiver_info,
+    typevar_plan,
+)
 from astart.rules.vocabulary import Cost
 from astart.semantic import ArgumentOrigin, ParameterKind
 
@@ -182,6 +189,8 @@ class ModuleFacts:
         calls: Trusted call bindings, computed in one batch on first use.
         method_owner: Class that directly defines each method, by node id.
         overloaded: Node ids of functions that belong to an overload group.
+        create_constants: Whether a missing ``Constants`` class may be
+            created for ``Final`` module constants.
         binding_counts: How many times each name is bound in the module,
             ignoring names bound directly in class bodies (they do not
             shadow module-level names).
@@ -199,6 +208,7 @@ class ModuleFacts:
         default_factory=_no_owners,
     )
     overloaded: frozenset[int] = field(default_factory=frozenset)
+    create_constants: bool = False
 
 
 @final
@@ -227,6 +237,7 @@ class Constants:
             "ClassDef",
             "Assign",
             "AnnAssign",
+            "Attribute",
             "Call",
             "Annotation",
             "Parameter",
@@ -248,12 +259,15 @@ class Constants:
     applier_keys: Final[frozenset[str]] = frozenset(
         {
             "typing.add-final",
+            "structure.group-constants",
+            "typing.add-attribute-annotation",
             "calls.add-keywords",
             "typing.add-none-return",
             "typing.add-noreturn",
             "typing.add-inferred-annotation",
             "typing.synthesize-protocol",
             "typing.synthesize-typevar",
+            "typing.synthesize-self",
         },
     )
     immutable_literals: Final[tuple[type, ...]] = (
@@ -271,6 +285,7 @@ def module_facts(
     stubs_path: Path | None = None,
     source: str | None = None,
     cache: HintCache | None = None,
+    create_constants: bool = False,
 ) -> ModuleFacts:
     """Resolve typing imports of a module.
 
@@ -279,6 +294,8 @@ def module_facts(
         stubs_path: Stub directory for type hints, or ``None``.
         source: Source text of the module, to share hints through ``cache``.
         cache: Shared hint cache, or ``None``.
+        create_constants: Whether a missing ``Constants`` class may be
+            created to hold ``Final`` module constants.
 
     Returns:
         The resolved import information.
@@ -289,8 +306,8 @@ def module_facts(
     typing_names: set[str] = set()
     for node in walk(node=module):
         match node:
-            case ImportFrom(module=source, names=aliases) if (
-                source in Constants.typing_modules
+            case ImportFrom(module=origin, names=aliases) if (
+                origin in Constants.typing_modules
             ):
                 for alias in aliases:
                     bound: str = alias.asname or alias.name
@@ -309,6 +326,7 @@ def module_facts(
     counts: dict[str, int] = binding_counts(module=module)
     owners, overloaded = _structure(module=module)
     return ModuleFacts(
+        create_constants=create_constants,
         method_owner=owners,
         overloaded=overloaded,
         module=module,
@@ -689,6 +707,14 @@ def _has_structural_protocol(
         function=function,
         parameter=parameter.arg,
         counts=facts.binding_counts,
+        env=scope_types(
+            function=function,
+            counts=facts.binding_counts,
+            constants=module_constants(
+                module=facts.module,
+                counts=facts.binding_counts,
+            ),
+        ),
     )
     if usage is None:
         return False
@@ -715,21 +741,118 @@ def _is_passthrough(subject: Subject, facts: ModuleFacts) -> FactValue:
     if plain is None:
         return False
     parameter, function = plain
+    receiver: tuple[str, bool] | None = receiver_info(
+        module=facts.module,
+        function=function,
+    )
     if not _synthesis_allowed(
         function=function,
         parameter=parameter,
         facts=facts,
     ):
         return False
-    return (
-        passthrough_return(
+    if (
+        typevar_plan(
             function=function,
             parameter=parameter.arg,
             variable="T",
             counts=facts.binding_counts,
+            receiver=receiver,
         )
         is not None
+    ):
+        return True
+    candidates: dict[str, arg] = candidate_params(
+        function=function,
+        receiver=receiver,
     )
+    if parameter.arg not in candidates:
+        return False
+    shaped: tuple[tuple[str, ...], str] | None = multi_return(
+        function=function,
+        candidates={name: name for name in candidates},
+    )
+    return shaped is not None and parameter.arg in shaped[0]
+
+
+def _self_return(subject: Subject, facts: ModuleFacts) -> FactValue:
+    """Report whether a method returns its receiver and can use ``Self``.
+
+    Args:
+        subject: Function subject.
+        facts: Resolved imports and the parsed module.
+
+    Returns:
+        ``True`` when every return hands back ``self`` or ``cls()``.
+
+    """
+    match subject.node:
+        case FunctionDef() | AsyncFunctionDef() as function:
+            pass
+        case _:
+            return False
+    if function.returns is not None:
+        return False
+    receiver: tuple[str, bool] | None = receiver_info(
+        module=facts.module,
+        function=function,
+    )
+    if receiver is None:
+        return False
+    plan: TypeVarPlan | None = typevar_plan(
+        function=function,
+        parameter=receiver[0],
+        variable="T",
+        counts=facts.binding_counts,
+        receiver=receiver,
+    )
+    return plan is not None and not plan.variable
+
+
+def _constants_wanted(_subject: Subject, facts: ModuleFacts) -> FactValue:
+    """Report whether the module follows the ``Constants`` convention.
+
+    Args:
+        _subject: Unused subject.
+        facts: Resolved imports and the parsed module.
+
+    Returns:
+        ``True`` when the module defines a ``Constants`` class, or when
+        creating one was asked for.
+
+    """
+    return facts.create_constants or any(
+        isinstance(item, ClassDef) and item.name == "Constants"
+        for item in facts.module.body
+    )
+
+
+def _groupable(subject: Subject, facts: ModuleFacts) -> FactValue:
+    """Report whether a ``Final`` constant can move into ``Constants``.
+
+    Args:
+        subject: Annotated assignment subject.
+        facts: Resolved imports and the parsed module.
+
+    Returns:
+        Whether an existing ``Constants`` class can take it safely, or one can
+        be created because the module has no binding of that name.
+
+    """
+    match subject.statement:
+        case AnnAssign(target=Name(id=name)) as statement:
+            return find_group(
+                module=facts.module,
+                statement=statement,
+                name=name,
+                counts=facts.binding_counts,
+            ) is not None or creatable(
+                module=facts.module,
+                statement=statement,
+                counts=facts.binding_counts,
+            )
+        case _:
+            return False
 
 
 def _never_returns(subject: Subject, _facts: ModuleFacts) -> FactValue:
@@ -789,6 +912,37 @@ def bound_call(subject: Subject, facts: ModuleFacts) -> BoundCall | None:
             return None
 
 
+def kept_positionals(*, bound: BoundCall) -> int:
+    """Count the leading arguments that must stay positional.
+
+    These are positional-only parameters and, for a method called through its
+    class, the explicit receiver.
+
+    Args:
+        bound: Binding of the call.
+
+    Returns:
+        How many leading arguments are not turned into keywords.
+
+    """
+    fixed: int = sum(
+        1
+        for argument in bound.arguments
+        if argument.origin is ArgumentOrigin.POSITIONAL
+        and argument.parameter.kind is ParameterKind.POSITIONAL_ONLY
+    )
+    explicit_receiver: bool = (
+        bound.signature.method_kind == "instance"
+        and bool(bound.signature.parameters)
+        and any(
+            argument.origin is ArgumentOrigin.POSITIONAL
+            and argument.parameter.name == bound.signature.parameters[0].name
+            for argument in bound.arguments
+        )
+    )
+    return max(fixed, 1) if explicit_receiver else fixed
+
+
 def keyword_candidates(subject: Subject, facts: ModuleFacts) -> list[str]:
     """List parameters passed positionally that could be keywords.
 
@@ -810,11 +964,18 @@ def keyword_candidates(subject: Subject, facts: ModuleFacts) -> list[str]:
         return []
     if any(isinstance(arg, Starred) for arg in _call_args(subject=subject)):
         return []
+    receiver: str | None = (
+        bound.signature.parameters[0].name
+        if bound.signature.method_kind == "instance"
+        and bound.signature.parameters
+        else None
+    )
     return [
         argument.parameter.name
         for argument in bound.arguments
         if argument.origin is ArgumentOrigin.POSITIONAL
         and argument.parameter.kind is ParameterKind.POSITIONAL_OR_KEYWORD
+        and argument.parameter.name != receiver
     ]
 
 
@@ -1050,6 +1211,16 @@ class Registry:
             cost=Cost.syntactic,
         ),
         FactSpec(
+            name="constants.wanted",
+            value_type="bool",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
+            name="constants.groupable",
+            value_type="bool",
+            cost=Cost.scope,
+        ),
+        FactSpec(
             name="function.never_returns",
             value_type="bool",
             cost=Cost.syntactic,
@@ -1066,6 +1237,11 @@ class Registry:
         ),
         FactSpec(
             name="parameter.is_passthrough",
+            value_type="bool",
+            cost=Cost.syntactic,
+        ),
+        FactSpec(
+            name="function.self_return",
             value_type="bool",
             cost=Cost.syntactic,
         ),
@@ -1101,10 +1277,13 @@ class Registry:
         "binding.is_type_declaration": _is_type_declaration,
         "node.annotation_missing": _annotation_missing,
         "function.returns_nothing": _returns_nothing,
+        "constants.groupable": _groupable,
+        "constants.wanted": _constants_wanted,
         "function.never_returns": _never_returns,
         "annotation.has_inferred_hint": _has_inferred_hint,
         "parameter.has_structural_protocol": _has_structural_protocol,
         "parameter.is_passthrough": _is_passthrough,
+        "function.self_return": _self_return,
         "call.positional_keyword_candidates": _candidate_count,
         "call.is_resolved_in_module": _is_resolved,
         "function.has_docstring": _has_docstring,
@@ -1185,17 +1364,7 @@ def _visit(
                 out.append(site.subject(kind=kind, node=node, name=node.name))
             inner = _Site(trail=(*site.trail, node.name), scope="class")
         case Assign():
-            if kind in kinds:
-                out.extend(
-                    site.subject(
-                        kind=kind,
-                        node=target,
-                        name=target.id,
-                        statement=node,
-                    )
-                    for target in node.targets
-                    if isinstance(target, Name)
-                )
+            _emit_assign(node=node, kinds=kinds, site=site, out=out)
         case AnnAssign():
             _emit_annotated(node=node, kinds=kinds, site=site, out=out)
         case Call() | Module():
@@ -1289,6 +1458,47 @@ def _call_name(node: AST) -> str:
             return unparse(ast_obj=func)
         case _:
             return ""
+
+
+def _emit_assign(
+    *,
+    node: Assign,
+    kinds: frozenset[str],
+    site: _Site,
+    out: list[Subject],
+) -> None:
+    """Emit name and attribute subjects for one assignment.
+
+    Args:
+        node: Assignment statement.
+        kinds: Subject kinds to enumerate.
+        site: Scope the assignment lives in.
+        out: Destination list, extended in place.
+
+    """
+    if "Assign" in kinds:
+        out.extend(
+            site.subject(
+                kind="Assign",
+                node=target,
+                name=target.id,
+                statement=node,
+            )
+            for target in node.targets
+            if isinstance(target, Name)
+        )
+    if "Attribute" not in kinds:
+        return
+    out.extend(
+        site.subject(
+            kind="Attribute",
+            node=node,
+            name=target.attr,
+            statement=node,
+        )
+        for target in node.targets
+        if isinstance(target, Attribute) and isinstance(target.value, Name)
+    )
 
 
 def _emit_function(

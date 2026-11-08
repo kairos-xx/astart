@@ -211,14 +211,14 @@ def protocol_method_docs(module: Module) -> None:
                     _add_protocol_method_doc(item=item)
 
 
-def _add_ellipsis_to_abstract_methods(cls: ClassDef) -> None:
+def _add_ellipsis_to_abstract_methods(_cls: ClassDef) -> None:
     """Add ellipsis to abstract methods that only have a docstring.
 
     Args:
-        cls: Cls supplied as ClassDef for this operation.
+        _cls: Cls supplied as ClassDef for this operation.
 
     """
-    for item in cls.body:
+    for item in _cls.body:
         if isinstance(item, FunctionDef):
             has_abstract: bool = any(
                 name_of(node=dec) == "abstractmethod"
@@ -242,8 +242,8 @@ def class_and_method_fixes(module: Module) -> None:
             class/method fixes.
 
     """
-    for cls in nodes_of_type(root=module, types=(ClassDef,)):
-        _add_ellipsis_to_abstract_methods(cls=cls)
+    for _cls in nodes_of_type(root=module, types=(ClassDef,)):
+        _add_ellipsis_to_abstract_methods(_cls=_cls)
 
 
 def function_fixes(module: Module) -> None:

@@ -75,7 +75,7 @@ def test_fix_defaults_to_automatic_keywords_and_hints(
 
     """
     path: Path = _sample(tmp_path=tmp_path)
-    _ = main(argv=["fix", "--no-format", str(object=path)])
+    _ = main(argv=["fix", "--no-format", "--checker", "off", str(object=path)])
     text: str = path.read_text(encoding="utf-8")
     expect_in(item="scale(x=2, k=3)", container=text)
     expect_in(item="k: int = 2", container=text)
@@ -90,7 +90,16 @@ def test_safe_only_limits_fixes_to_proven(*, tmp_path: Path) -> None:
 
     """
     path: Path = _sample(tmp_path=tmp_path)
-    _ = main(argv=["fix", "--safe-only", "--no-format", str(object=path)])
+    _ = main(
+        argv=[
+            "fix",
+            "--safe-only",
+            "--no-format",
+            "--checker",
+            "off",
+            str(object=path),
+        ],
+    )
     text: str = path.read_text(encoding="utf-8")
     expect_in(item="scale(2, 3)", container=text)
     expect_in(item="LIMIT: Final[int] = 3", container=text)
@@ -112,3 +121,50 @@ def test_diff_and_check_are_mutually_exclusive(*, tmp_path: Path) -> None:
 def test_no_command_prints_help_exit_zero() -> None:
     """Check that no command prints help exit zero."""
     expect_equal(actual=main(argv=[]), expected=0)
+
+
+def test_checker_flag_is_accepted_and_keeps_good_fixes(
+    *,
+    tmp_path: Path,
+) -> None:
+    """Check that checker flag is accepted and keeps good fixes.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
+    path: Path = _sample(tmp_path=tmp_path)
+    _ = main(
+        argv=["fix", "--no-format", "--checker", "auto", str(object=path)],
+    )
+    expect_in(item="k: int = 2", container=path.read_text(encoding="utf-8"))
+
+
+def test_create_constants_class_flag_groups_final_constants(
+    *,
+    tmp_path: Path,
+) -> None:
+    """Check that create constants class flag groups final constants.
+
+    Args:
+        tmp_path: Directory holding the sample file.
+
+    """
+    path: Path = tmp_path / "c.py"
+    path.write_text(
+        data="LIMIT = 3\n\n\ndef f():\n    return LIMIT\n",
+        encoding="utf-8",
+    )
+    _ = main(
+        argv=[
+            "fix",
+            "--no-format",
+            "--checker",
+            "off",
+            "--create-constants-class",
+            str(object=path),
+        ],
+    )
+    text: str = path.read_text(encoding="utf-8")
+    expect_in(item="class Constants", container=text)
+    expect_in(item="return Constants.LIMIT", container=text)

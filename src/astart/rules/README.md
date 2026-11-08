@@ -4,7 +4,7 @@ A rule ontology: rules, fixes, profiles and relations as typed, serializable
 data, plus a small reference engine that evaluates the catalog against Python
 source parsed once with astart.
 
-Design: `docs/superpowers/specs/2026-11-06-rule-ontology-design.md`.
+Design: `docs/TODO.md` §11 (M8); the ontology spec was merged there and retired.
 
 ## Layers
 

@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING, NoReturn
 
 if TYPE_CHECKING:
     from collections.abc import Container, Hashable
+__tracebackhide__: bool = True
 
 
 def _fail(*, message: str, detail: str) -> NoReturn:

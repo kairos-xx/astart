@@ -37,15 +37,42 @@ from ast import (
 from ast import (
     TypeVarTuple as AstTypeVarTuple,
 )
+from dataclasses import dataclass
+from re import sub as re_sub
 from typing import TYPE_CHECKING, Final, final
 
-from astart.rules.facts import Constants, bound_call, keyword_candidates
+from astart.rules.facts import (
+    Constants,
+    bound_call,
+    kept_positionals,
+    keyword_candidates,
+)
+from astart.rules.grouping import (
+    creatable,
+    create_group,
+    find_group,
+    move_into,
+)
 from astart.rules.hints import Hint, HintBasis, returns_nothing
 from astart.rules.imports import ensure_names, insert_import
-from astart.rules.protocols import protocol_source, structural_usage
-from astart.rules.provable import never_returns
-from astart.rules.typevars import passthrough_return
-from astart.semantic import ArgumentOrigin, ParameterKind
+from astart.rules.protocols import (
+    StructuralUsage,
+    protocol_source,
+    structural_usage,
+)
+from astart.rules.provable import (
+    can_fall_off,
+    module_constants,
+    never_returns,
+    scope_types,
+)
+from astart.rules.typevars import (
+    TypeVarPlan,
+    candidate_params,
+    multi_return,
+    receiver_info,
+    typevar_plan,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -124,6 +151,44 @@ def add_final(subject: Subject, facts: ModuleFacts) -> None:
     object.__setattr__(statement, "__class__", AnnAssign)
 
 
+def group_constant(subject: Subject, facts: ModuleFacts) -> None:
+    """Move a ``Final`` module constant into the ``Constants`` class.
+
+    The class is created, after the leading imports, when the module has no
+    binding of that name at all.
+
+    Args:
+        subject: Annotated assignment subject.
+        facts: Resolved imports and the parsed module.
+
+    """
+    statement: AST | None = subject.statement
+    match statement:
+        case AnnAssign(target=Name(id=name)):
+            pass
+        case _:
+            return
+    group: ClassDef | None = find_group(
+        module=facts.module,
+        statement=statement,
+        name=name,
+        counts=facts.binding_counts,
+    )
+    if group is None and creatable(
+        module=facts.module,
+        statement=statement,
+        counts=facts.binding_counts,
+    ):
+        group = create_group(module=facts.module)
+    if group is not None:
+        move_into(
+            module=facts.module,
+            cls=group,
+            statement=statement,
+            name=name,
+        )
+
+
 def add_keywords(subject: Subject, facts: ModuleFacts) -> None:
     """Pass keyword-capable positional arguments by name.
 
@@ -137,12 +202,7 @@ def add_keywords(subject: Subject, facts: ModuleFacts) -> None:
     names: list[str] = keyword_candidates(subject=subject, facts=facts)
     if not isinstance(call, Call) or bound is None or not names:
         return
-    positional_only: int = sum(
-        1
-        for argument in bound.arguments
-        if argument.origin is ArgumentOrigin.POSITIONAL
-        and argument.parameter.kind is ParameterKind.POSITIONAL_ONLY
-    )
+    positional_only: int = kept_positionals(bound=bound)
     movable: list[expr] = call.args[positional_only:]
     if len(movable) != len(names):
         return
@@ -172,6 +232,41 @@ def add_none_return(subject: Subject, _facts: ModuleFacts) -> None:
             function.returns = Constant(value=None)
         case _:
             return
+
+
+def add_attribute_annotation(subject: Subject, facts: ModuleFacts) -> None:
+    """Turn ``self.x = value`` into ``self.x: T = value``.
+
+    The statement keeps its identity, so comments and layout survive.
+
+    Args:
+        subject: Attribute assignment subject.
+        facts: Resolved imports, parsed module and lazily computed hints.
+
+    """
+    statement: AST | None = subject.statement
+    if facts.hints is None or not isinstance(statement, Assign):
+        return
+    hint: Hint | None = facts.hints.index().hint_for(node=statement)
+    if (
+        hint is None
+        or hint.basis is not HintBasis.attribute_assignments
+        or len(statement.targets) != 1
+    ):
+        return
+    expression: expr = parse(source=hint.source, mode="eval").body
+    ensure_names(
+        module=facts.module,
+        expression=expression,
+        before=_ancestor_index(module=facts.module, node=statement),
+    )
+    attributes: NodeAttributes = vars(statement)
+    attributes["target"] = statement.targets[0]
+    attributes["annotation"] = expression
+    attributes["simple"] = 0
+    del attributes["targets"]
+    _ = attributes.pop("type_comment", None)
+    object.__setattr__(statement, "__class__", AnnAssign)
 
 
 def add_noreturn(subject: Subject, facts: ModuleFacts) -> None:
@@ -346,6 +441,14 @@ def synthesize_protocol(subject: Subject, facts: ModuleFacts) -> None:
         function=function,
         parameter=parameter.arg,
         counts=facts.binding_counts,
+        env=scope_types(
+            function=function,
+            counts=facts.binding_counts,
+            constants=module_constants(
+                module=facts.module,
+                counts=facts.binding_counts,
+            ),
+        ),
     )
     if usage is None:
         return
@@ -499,11 +602,124 @@ def _typevar_name(
         suffix += 1
 
 
-def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
-    """Make a pass-through parameter and its return share a type variable.
+def _fresh_typevar_name(
+    *,
+    module: Module,
+    before: int,
+    forbidden: set[str],
+) -> str:
+    """Choose an undeclared type variable name.
 
-    The declaration ``T = TypeVar("T")`` is inserted before the top-level
-    statement that contains the function.
+    Unlike :func:`_typevar_name` this never reuses an existing plain
+    ``TypeVar`` declaration, so constrained and bound shapes always get a
+    fresh name.
+
+    Args:
+        module: Module to search.
+        before: Unused; kept for signature symmetry.
+        forbidden: Names the enclosing classes already use as parameters.
+
+    Returns:
+        The first free ``T``, ``T2``, ... name.
+
+    """
+    del before
+    taken: set[str] = _module_names(module=module)
+    suffix: int = 1
+    while True:
+        name: str = "T" if suffix == 1 else f"T{suffix}"
+        if name in forbidden or name in taken:
+            suffix += 1
+            continue
+        return name
+
+
+def _localize(*, source: str, names: Mapping[str, str]) -> str:
+    """Substitute imported local names into an annotation source.
+
+    Args:
+        source: Annotation source spelling canonical import names.
+        names: Canonical name to local (possibly aliased) name.
+
+    Returns:
+        The source with aliases applied.
+
+    """
+    for canonical, local in names.items():
+        if canonical != local:
+            source = re_sub(
+                pattern=rf"\b{canonical}\b",
+                repl=local,
+                string=source,
+            )
+    return source
+
+
+def _insert_bound_protocol(
+    *,
+    module: Module,
+    function: FunctionDef | AsyncFunctionDef,
+    parameter: str,
+    usage: StructuralUsage,
+) -> str | None:
+    """Insert the protocol class a bound TypeVar refers to.
+
+    Args:
+        module: Module to modify.
+        function: Function the bound was derived from.
+        parameter: Parameter name.
+        usage: Required members.
+
+    Returns:
+        The protocol class name (existing or new), or ``None``.
+
+    """
+    taken: set[str] = _module_names(module=module)
+    base: str = (
+        f"{_pascal(text=function.name)}{_pascal(text=parameter)}Protocol"
+    )
+    name: str = base
+    suffix: int = 2
+    while name in taken:
+        name = f"{base}{suffix}"
+        suffix += 1
+    match parse(
+        source=protocol_source(
+            name=name,
+            function=function.name,
+            parameter=parameter,
+            usage=usage,
+        ),
+    ).body:
+        case [ClassDef() as candidate]:
+            pass
+        case _:
+            return None
+    reused: str | None = _existing_protocol(module=module, candidate=candidate)
+    if reused is not None:
+        return reused
+    local: str = insert_import(
+        module=module,
+        source="typing",
+        name="Protocol",
+        before=_ancestor_index(module=module, node=function),
+    )
+    candidate.bases = [Name(id=local, ctx=Load())]
+    _strip_locations(node=candidate)
+    module.body.insert(
+        _ancestor_index(module=module, node=function),
+        candidate,
+    )
+    return name
+
+
+def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
+    """Annotate a pass-through parameter and its return with a type variable.
+
+    Depending on how the parameter is used this emits a plain ``TypeVar``,
+    a constrained one, a ``bound=`` protocol TypeVar, element pass-through
+    container annotations, or ``Self`` for receiver returns. Declarations
+    are inserted before the top-level statement that contains the function.
 
     Args:
         subject: Parameter subject.
@@ -519,28 +735,274 @@ def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
         case _:
             return
     module: Module = facts.module
-    index: int = _ancestor_index(module=module, node=function)
-    name, declare = _typevar_name(
+    receiver: tuple[str, bool] | None = receiver_info(
         module=module,
-        before=index,
-        forbidden=_class_variables(module=module, function=function),
+        function=function,
     )
-    returns: str | None = passthrough_return(
+    probe: TypeVarPlan | None = typevar_plan(
         function=function,
         parameter=parameter.arg,
-        variable=name,
+        variable="T",
+        counts=facts.binding_counts,
+        receiver=receiver,
+    )
+    if probe is None:
+        _synthesize_multi(
+            function=function,
+            module=module,
+            receiver=receiver,
+            forbidden=_class_variables(module=module, function=function),
+        )
+        return
+    request: _TypevarRequest = _TypevarRequest(
+        module=module,
+        function=function,
+        parameter=parameter,
+        receiver=receiver,
         counts=facts.binding_counts,
     )
-    if returns is None:
+    resolved: tuple[str, bool, TypeVarPlan, int] | None = _resolve_typevar(
+        request=request,
+        probe=probe,
+    )
+    if resolved is None:
         return
-    if declare:
-        factory: str = insert_import(
+    name, declare, plan, index = resolved
+    if not _commit_typevar_plan(
+        request=request,
+        name=name,
+        declare=declare,
+        plan=plan,
+        index=index,
+    ):
+        return
+
+
+@dataclass(frozen=True, slots=True)
+class _TypevarRequest:
+    """Shared context for resolving and committing a type variable plan.
+
+    Attributes:
+        module: Module to modify.
+        function: Function that owns the parameter.
+        parameter: Parameter node.
+        receiver: ``(name, is_classmethod)`` when the function is a method.
+        counts: Module binding counts.
+
+    """
+
+    module: Module
+    function: FunctionDef | AsyncFunctionDef
+    parameter: arg
+    receiver: tuple[str, bool] | None
+    counts: Mapping[str, int]
+
+
+def _resolve_typevar(
+    *,
+    request: _TypevarRequest,
+    probe: TypeVarPlan,
+) -> tuple[str, bool, TypeVarPlan, int] | None:
+    """Pick the type variable name and re-probe the plan with it.
+
+    Args:
+        request: Module, function, parameter and binding context.
+        probe: Initial plan probed with the placeholder name.
+
+    Returns:
+        ``(name, declare, plan, insertion index)`` or ``None``.
+
+    """
+    module: Module = request.module
+    function: FunctionDef | AsyncFunctionDef = request.function
+    index: int = _ancestor_index(module=module, node=function)
+    forbidden: set[str] = _class_variables(module=module, function=function)
+    if not probe.variable:
+        name: str = ""
+        declare: bool = False
+    elif probe.constraints or probe.bound is not None:
+        name = _fresh_typevar_name(
             module=module,
-            source="typing",
-            name="TypeVar",
+            before=index,
+            forbidden=forbidden,
+        )
+        declare = True
+    else:
+        name, declare = _typevar_name(
+            module=module,
+            before=index,
+            forbidden=forbidden,
+        )
+    plan: TypeVarPlan | None = probe
+    if probe.variable and name != "T":
+        plan = typevar_plan(
+            function=function,
+            parameter=request.parameter.arg,
+            variable=name,
+            counts=request.counts,
+            receiver=request.receiver,
+        )
+    if plan is None:
+        return None
+    return name, declare, plan, index
+
+
+def _declare_typevar(
+    *,
+    request: _TypevarRequest,
+    name: str,
+    plan: TypeVarPlan,
+    protocol: str | None,
+    local: Mapping[str, str],
+) -> bool:
+    """Insert the ``name = TypeVar(...)`` declaration before the function.
+
+    Args:
+        request: Module and function context.
+        name: Type variable name.
+        plan: Resolved plan (constraints and bound).
+        protocol: Bound protocol name, if any.
+        local: Canonical to local import names.
+
+    Returns:
+        ``False`` when the declaration source did not parse as expected.
+
+    """
+    module: Module = request.module
+    function: FunctionDef | AsyncFunctionDef = request.function
+    arguments: str = f'"{name}"'
+    if plan.constraints:
+        arguments += "".join(f", {item}" for item in plan.constraints)
+    if protocol is not None:
+        arguments += f", bound={protocol}"
+    match parse(source=f"{name} = {local['TypeVar']}({arguments})").body:
+        case [Assign() as declaration]:
+            _strip_locations(node=declaration)
+            module.body.insert(
+                _ancestor_index(module=module, node=function),
+                declaration,
+            )
+            return True
+        case _:
+            return False
+
+
+def _commit_typevar_plan(
+    *,
+    request: _TypevarRequest,
+    name: str,
+    declare: bool,
+    plan: TypeVarPlan,
+    index: int,
+) -> bool:
+    """Apply a resolved type variable plan to the module.
+
+    Args:
+        request: Module, function, parameter and binding context.
+        name: Type variable name (empty for nameless plans).
+        declare: Whether a new ``TypeVar`` declaration is required.
+        plan: Resolved plan.
+        index: Insertion index for imports and declarations.
+
+    Returns:
+        ``False`` when a required step failed.
+
+    """
+    module: Module = request.module
+    function: FunctionDef | AsyncFunctionDef = request.function
+    needed: list[tuple[str, str]] = [*plan.imports]
+    if plan.variable:
+        needed.append(("typing", "TypeVar"))
+    local: dict[str, str] = {}
+    for source_name, import_name in needed:
+        local[import_name] = insert_import(
+            module=module,
+            source=source_name,
+            name=import_name,
             before=index,
         )
-        match parse(source=f'{name} = {factory}("{name}")').body:
+    protocol: str | None = None
+    if plan.bound is not None:
+        protocol = _insert_bound_protocol(
+            module=module,
+            function=function,
+            parameter=request.parameter.arg,
+            usage=plan.bound,
+        )
+        if protocol is None:
+            return False
+    if (
+        plan.variable
+        and declare
+        and not _declare_typevar(
+            request=request,
+            name=name,
+            plan=plan,
+            protocol=protocol,
+            local=local,
+        )
+    ):
+        return False
+    if plan.annotate and plan.param is not None:
+        request.parameter.annotation = parse(
+            source=_localize(source=plan.param, names=local),
+            mode="eval",
+        ).body
+    function.returns = parse(
+        source=_localize(source=plan.returns, names=local),
+        mode="eval",
+    ).body
+    return True
+
+
+def _allocate_typevars(
+    *,
+    involved: tuple[str, ...],
+    taken: set[str],
+) -> list[str]:
+    """Allocate fresh ``T``, ``T2``, ... names for involved parameters.
+
+    Args:
+        involved: Parameter names needing a type variable.
+        taken: Names already unavailable.
+
+    Returns:
+        One fresh name per involved parameter, in order.
+
+    """
+    names: list[str] = []
+    suffix: int = 1
+    for _name in involved:
+        while True:
+            candidate: str = "T" if suffix == 1 else f"T{suffix}"
+            suffix += 1
+            if candidate not in taken and candidate not in names:
+                names.append(candidate)
+                break
+    return names
+
+
+def _declare_typevars(
+    *,
+    module: Module,
+    function: FunctionDef | AsyncFunctionDef,
+    names: list[str],
+    factory: str,
+) -> bool:
+    """Insert ``name = TypeVar("name")`` declarations before the function.
+
+    Args:
+        module: Module to modify.
+        function: Function the declarations precede.
+        names: Type variable names to declare.
+        factory: Local name of ``TypeVar``.
+
+    Returns:
+        ``False`` when a declaration source did not parse as expected.
+
+    """
+    for variable in names:
+        match parse(source=f'{variable} = {factory}("{variable}")').body:
             case [Assign() as declaration]:
                 _strip_locations(node=declaration)
                 module.body.insert(
@@ -548,9 +1010,114 @@ def synthesize_typevar(subject: Subject, facts: ModuleFacts) -> None:
                     declaration,
                 )
             case _:
-                return
-    parameter.annotation = Name(id=name, ctx=Load())
-    function.returns = parse(source=returns, mode="eval").body
+                return False
+    return True
+
+
+def _synthesize_multi(
+    *,
+    function: FunctionDef | AsyncFunctionDef,
+    module: Module,
+    receiver: tuple[str, bool] | None,
+    forbidden: set[str],
+) -> None:
+    """Annotate several parameters sharing one container return.
+
+    Args:
+        function: Function that owns the parameters.
+        module: Module to modify.
+        receiver: ``(name, is_classmethod)`` when the function is a method.
+        forbidden: Names the enclosing classes already use as parameters.
+
+    """
+    candidates: dict[str, arg] = candidate_params(
+        function=function,
+        receiver=receiver,
+    )
+    if len(candidates) <= 1:
+        return
+    shaped: tuple[tuple[str, ...], str] | None = multi_return(
+        function=function,
+        candidates={name: name for name in candidates},
+    )
+    if shaped is None:
+        return
+    involved: tuple[str, ...] = shaped[0]
+    taken: set[str] = _module_names(module=module) | forbidden
+    names: list[str] = _allocate_typevars(involved=involved, taken=taken)
+    variables: dict[str, str] = dict(zip(involved, names, strict=True))
+    final: tuple[tuple[str, ...], str] | None = multi_return(
+        function=function,
+        candidates={
+            **{name: name for name in candidates},
+            **variables,
+        },
+    )
+    if final is None:
+        return
+    involved, returns_source = final
+    index: int = _ancestor_index(module=module, node=function)
+    factory: str = insert_import(
+        module=module,
+        source="typing",
+        name="TypeVar",
+        before=index,
+    )
+    if not _declare_typevars(
+        module=module,
+        function=function,
+        names=names,
+        factory=factory,
+    ):
+        return
+    for name in involved:
+        parameter: arg = candidates[name]
+        parameter.annotation = Name(id=variables[name], ctx=Load())
+    if can_fall_off(body=function.body):
+        returns_source: str = f"{returns_source} | None"
+    function.returns = parse(source=returns_source, mode="eval").body
+
+
+def synthesize_self(subject: Subject, facts: ModuleFacts) -> None:
+    """Annotate a receiver-returning method with ``Self``.
+
+    Args:
+        subject: Function subject.
+        facts: Resolved imports and the parsed module.
+
+    """
+    match subject.node:
+        case FunctionDef() | AsyncFunctionDef() as function:
+            pass
+        case _:
+            return
+    module: Module = facts.module
+    receiver: tuple[str, bool] | None = receiver_info(
+        module=module,
+        function=function,
+    )
+    if receiver is None:
+        return
+    plan: TypeVarPlan | None = typevar_plan(
+        function=function,
+        parameter=receiver[0],
+        variable="T",
+        counts=facts.binding_counts,
+        receiver=receiver,
+    )
+    if plan is None or plan.variable:
+        return
+    index: int = _ancestor_index(module=module, node=function)
+    local: str = insert_import(
+        module=module,
+        source="typing",
+        name="Self",
+        before=index,
+    )
+    function.returns = parse(
+        source=_localize(source=plan.returns, names={"Self": local}),
+        mode="eval",
+    ).body
 
 
 @final
@@ -564,10 +1131,13 @@ class Appliers:
 
     table: Final[Mapping[str, Applier]] = {
         "typing.add-final": add_final,
+        "structure.group-constants": group_constant,
         "calls.add-keywords": add_keywords,
         "typing.add-none-return": add_none_return,
         "typing.add-noreturn": add_noreturn,
         "typing.add-inferred-annotation": add_inferred_annotation,
+        "typing.add-attribute-annotation": add_attribute_annotation,
         "typing.synthesize-protocol": synthesize_protocol,
         "typing.synthesize-typevar": synthesize_typevar,
+        "typing.synthesize-self": synthesize_self,
     }

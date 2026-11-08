@@ -41,6 +41,7 @@ from ast import (
     Mod,
     Module,
     Mult,
+    Name,
     Not,
     NotEq,
     NotIn,
@@ -54,6 +55,7 @@ from ast import (
     alias,
     arg,
     arguments,
+    expr,
     fix_missing_locations,
     iter_fields,
     stmt,
@@ -1992,6 +1994,13 @@ class FormatPreserver:
                     replacements=replacements,
                 )
             ]
+        replaced: list[Patch] | None = self._atom_replacements(
+            nodes=nodes,
+            old=old,
+            replacements=replacements,
+        )
+        if replaced is not None:
+            return replaced
         if name == "ops" and isinstance(node, Compare):
             return self._compare_patches(node=node, old=old)
         if name in ("body", "orelse", "finalbody") and all(
@@ -2024,6 +2033,60 @@ class FormatPreserver:
         msg = f"Changing {type(node).__name__}.{name} "
         "requires syntax regeneration."
         raise FormatPreservationError(msg)
+
+    def _atom_replacements(
+        self,
+        *,
+        nodes: list[AST],
+        old: _Field,
+        replacements: list[Patch],
+    ) -> list[Patch] | None:
+        """Patch a same-length expression list where atoms replace elements.
+
+        Only ``Name``, ``Attribute`` and ``Constant`` replacements qualify:
+        they never need parentheses, so the new text can be spliced over the
+        old element's source range.
+
+        Args:
+            nodes: The edited list.
+            old: Captured identities of the original list.
+            replacements: Current source-comment text replacements.
+
+        Returns:
+            The patches, or ``None`` when the edit is not of this kind.
+
+        """
+        if len(nodes) != len(old.ids) or not all(
+            isinstance(child, expr) for child in nodes
+        ):
+            return None
+        patches: list[Patch] = []
+        for child, original in zip(nodes, old.ids, strict=True):
+            if id(child) == original:
+                patches.extend(
+                    self._changed(node=child, replacements=replacements),
+                )
+                continue
+            state: _Node | None = self.nodes.get(original)
+            if (
+                state is None
+                or state.start is None
+                or state.end is None
+                or not isinstance(child, (Name, Attribute, Constant))
+            ):
+                return None
+            text: str = (
+                self._render_constant(
+                    value=child.value,
+                    original=self.source[state.start : state.end],
+                )
+                if isinstance(child, Constant)
+                else unparse(
+                    ast_obj=fix_missing_locations(node=deepcopy(x=child)),
+                )
+            )
+            patches.append(Patch(start=state.start, end=state.end, text=text))
+        return patches
 
     def _has_inner_comments(self, *, start: int, end: int) -> bool:
         """Check whether a regeneration could discard lexical comments.

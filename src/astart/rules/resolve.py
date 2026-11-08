@@ -28,6 +28,7 @@ from ast import (
 from typing import TYPE_CHECKING, final
 
 from astart.rules.imports import Constants as ImportConstants
+from astart.rules.methods import MethodIndex, dataclass_init_names
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -255,10 +256,15 @@ class CallBindings:
                 for node in walk(node=self._module)
                 if isinstance(node, Call)
             ]
+            methods: MethodIndex = MethodIndex(
+                module=self._module,
+                counts=self._counts,
+            )
             self._cache = {
-                id(item): trusted_binding(
+                id(item): _vet(
+                    item=item,
                     bound=bound,
-                    call=item,
+                    methods=methods,
                     counts=self._counts,
                 )
                 for item, bound in zip(
@@ -268,6 +274,94 @@ class CallBindings:
                 )
             }
         return self._cache.get(id(call))
+
+
+def _is_plain_dataclass_call(
+    *,
+    item: Call,
+    bound: BoundCall | None,
+    counts: Mapping[str, int],
+) -> bool:
+    """Tell whether a call builds a simple dataclass the analyzer bound.
+
+    Args:
+        item: Call expression.
+        bound: Binding reported by the analyzer, if any.
+        counts: Binding counts from :func:`binding_counts`.
+
+    Returns:
+        ``True`` when the callee is a module-level name bound once to a
+        dataclass whose generated parameters match the analyzer's.
+
+    """
+    if (
+        bound is None
+        or bound.signature.source_path is not None
+        or not isinstance(item.func, Name)
+        or counts.get(item.func.id) != 1
+    ):
+        return False
+    declaration: AST | None = bound.signature.declaration
+    if not isinstance(declaration, ClassDef):
+        return False
+    expected: list[str] | None = dataclass_init_names(cls=declaration)
+    return expected is not None and expected == [
+        parameter.name for parameter in bound.signature.parameters
+    ]
+
+
+def _vet(
+    *,
+    item: Call,
+    bound: BoundCall | None,
+    methods: MethodIndex,
+    counts: Mapping[str, int],
+) -> BoundCall | None:
+    """Decide which binding of one call to trust.
+
+    Args:
+        item: Call expression.
+        bound: Binding reported by the analyzer, if any.
+        methods: Method facts of the module.
+        counts: Binding counts from :func:`binding_counts`.
+
+    Returns:
+        The trusted binding, or ``None``.
+
+    """
+    if not methods.callee_allowed(call=item):
+        return None
+    trusted: BoundCall | None = trusted_binding(
+        bound=bound,
+        call=item,
+        counts=counts,
+    )
+    if trusted is None and _is_plain_dataclass_call(
+        item=item,
+        bound=bound,
+        counts=counts,
+    ):
+        return bound
+    if not isinstance(item.func, Attribute):
+        return trusted
+    if (
+        trusted is None
+        and bound is not None
+        and bound.signature.source_path is None
+        and bound.signature.declaration is not None
+        and methods.constructed_receiver(call=item)
+        and definition_is_plain(declaration=bound.signature.declaration)
+    ):
+        trusted = bound
+    if trusted is not None:
+        declaration: AST | None = trusted.signature.declaration
+        if declaration is not None and not methods.is_safe(
+            call=item,
+            declaration=declaration,
+        ):
+            return None
+        return trusted
+    return methods.bind_self_call(call=item)
 
 
 def resolved_call(

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from ast import (
     ClassDef,
-    FunctionDef,
     parse,
 )
 from textwrap import dedent
@@ -21,7 +20,6 @@ from tests.expectations import (
     expect_equal,
     expect_function_node,
     expect_in,
-    expect_instance,
     expect_not_none,
     expect_true,
 )
@@ -38,9 +36,8 @@ def _usage(*, source: str, parameter: str) -> StructuralUsage | None:
         The structural usage, or ``None``.
 
     """
-    function: FunctionDef = expect_instance(
+    function: FunctionStatement = expect_function_node(
         value=parse(source=dedent(text=source)).body[0],
-        kind=FunctionDef,
     )
     return structural_usage(function=function, parameter=parameter, counts={})
 
@@ -153,9 +150,10 @@ def f(p):
     p.m(1)
     p.m(1, 2)
 """,
-        "awaited": """\
+        "mixed awaited call": """\
 async def f(p):
-    return await p.m()
+    await p.m()
+    p.m()
 """,
         "unused": """\
 def f(p):
@@ -190,6 +188,156 @@ def f(p):
             expected=None,
             message=label,
         )
+
+
+def test_member_returns_come_from_return_use() -> None:
+    """Check that a member returned everywhere takes the function's return."""
+    usage: StructuralUsage | None = _usage(
+        source="""
+        def load(src) -> bytes:
+            return src.read()
+        """,
+        parameter="src",
+    )
+    expect_equal(
+        actual=expect_not_none(value=usage).members,
+        expected=(
+            Member(
+                name="read",
+                is_method=True,
+                positional=(),
+                keywords=(),
+                returns="bytes",
+            ),
+        ),
+    )
+
+
+def test_member_returns_need_every_result_returned() -> None:
+    """Check that mixed result uses leave the return unannotated."""
+    usage: StructuralUsage | None = _usage(
+        source="""
+        def load(src) -> bytes:
+            src.read()
+            return src.read()
+        """,
+        parameter="src",
+    )
+    expect_equal(
+        actual=expect_not_none(value=usage).members[0].returns,
+        expected=None,
+    )
+
+
+def test_property_returns_come_from_return_use() -> None:
+    """Check that a returned-everywhere property takes the return type."""
+    usage: StructuralUsage | None = _usage(
+        source="""
+        def size(box) -> int:
+            return box.count
+        """,
+        parameter="box",
+    )
+    expect_equal(
+        actual=expect_not_none(value=usage).members,
+        expected=(
+            Member(
+                name="count",
+                is_method=False,
+                positional=(),
+                keywords=(),
+                returns="int",
+            ),
+        ),
+    )
+
+
+def test_awaited_member_becomes_async() -> None:
+    """Check that an awaited member renders as ``async def``."""
+    usage: StructuralUsage | None = _usage(
+        source="""
+        async def fetch(client) -> bytes:
+            return await client.get()
+        """,
+        parameter="client",
+    )
+    expect_equal(
+        actual=expect_not_none(value=usage).members,
+        expected=(
+            Member(
+                name="get",
+                is_method=True,
+                positional=(),
+                keywords=(),
+                returns="bytes",
+                is_async=True,
+            ),
+        ),
+    )
+    text: str = protocol_source(
+        name="FetchClientProtocol",
+        function="fetch",
+        parameter="client",
+        usage=expect_not_none(value=usage),
+    )
+    expect_in(item="async def get(self) -> bytes: ...", container=text)
+
+
+def test_flow_typed_arguments_come_from_env() -> None:
+    """Check that env types type member call arguments."""
+    function: FunctionStatement = expect_function_node(
+        value=parse(
+            source=dedent(
+                text="""
+                def send(sink, payload):
+                    sink.write(payload)
+                """,
+            ),
+        ).body[0],
+    )
+    usage: StructuralUsage | None = structural_usage(
+        function=function,
+        parameter="sink",
+        counts={},
+        env={"payload": "str"},
+    )
+    expect_equal(
+        actual=expect_not_none(value=usage).members[0].positional,
+        expected=("str",),
+    )
+
+
+def test_direct_call_becomes_call_member() -> None:
+    """Check that calling the parameter yields a ``__call__`` member."""
+    usage: StructuralUsage | None = _usage(
+        source="""
+        def run(task) -> int:
+            return task(1, mode="w")
+        """,
+        parameter="task",
+    )
+    expect_equal(
+        actual=expect_not_none(value=usage).members,
+        expected=(
+            Member(
+                name="__call__",
+                is_method=True,
+                positional=("int",),
+                keywords=(("mode", "str"),),
+                returns="int",
+            ),
+        ),
+    )
+    text: str = protocol_source(
+        name="RunTaskProtocol",
+        function="run",
+        parameter="task",
+        usage=expect_not_none(value=usage),
+    )
+    expect_in(
+        item="def __call__(self, arg0: int, /, *, mode: str) -> int: ...",
+        container=text,
+    )
 
 
 def test_protocol_source_renders_members() -> None:

@@ -106,7 +106,15 @@ def test_default_catalog_loads_and_validates() -> None:
     catalog: Catalog = _catalog()
     expect_equal(
         actual=sorted(rule.code for rule in catalog.rules),
-        expected=["CAL001", "DOC002", "TYP001", "TYP003", "TYP004"],
+        expected=[
+            "CAL001",
+            "DOC002",
+            "STR001",
+            "TYP001",
+            "TYP003",
+            "TYP004",
+            "TYP005",
+        ],
     )
     verify_catalog(catalog=catalog, registries=default_registries())
 
@@ -195,7 +203,9 @@ def test_aliases_map_back_to_exactus_ids() -> None:
     """Keep the Exactus ids reachable for report comparison."""
     expect_equal(
         actual={
-            rule.code: rule.aliases["exactus"] for rule in _catalog().rules
+            rule.code: rule.aliases["exactus"]
+            for rule in _catalog().rules
+            if "exactus" in rule.aliases
         },
         expected={
             "TYP001": "CMP002",
@@ -203,6 +213,7 @@ def test_aliases_map_back_to_exactus_ids() -> None:
             "CAL001": "KWARGS:missing-kwargs",
             "DOC002": "DOC002",
             "TYP003": "KWARGS:missing-hint",
+            "STR001": "group_final",
         },
     )
 

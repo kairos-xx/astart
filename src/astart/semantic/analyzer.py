@@ -21,12 +21,11 @@ from ast import (
 )
 from dataclasses import dataclass
 from keyword import iskeyword
-from typing import TYPE_CHECKING, Literal, final
+from typing import TYPE_CHECKING, Literal, cast, final
 
 from astart.delta import moved_identities, node_paths
 from astart.node_attributes import (
     clear_attribute,
-    list_items,
     write_attribute,
 )
 from astart.semantic.control_flow import ControlFlowGraph, ReachingDefinition
@@ -64,10 +63,14 @@ from astart.semantic.values import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
     from pathlib import Path
 
-    from astart._graph.graph.document import AstDocument
+    from astart._graph.graph.document import (
+        AstDocument,
+        AstListItem,
+        AstScalar,
+    )
     from astart.delta import NodePath
     from astart.docstrings import DocstringNode
     from astart.semantic.typing_contracts import (
@@ -84,6 +87,22 @@ type MutationKind = Literal[
     "NODE_RENAMED",
     "NODE_REPARENTED",
     "NODE_CONTENT_CHANGED",
+]
+
+
+type FingerprintField = (
+    tuple[str, int, tuple[AstScalar, ...]] | tuple[str, AstScalar]
+)
+type FingerprintEntry = tuple[
+    int,
+    int | None,
+    str,
+    tuple[FingerprintField, ...],
+]
+type FingerprintRecord = tuple[
+    int | None,
+    str,
+    tuple[FingerprintField, ...],
 ]
 
 
@@ -134,7 +153,7 @@ class SemanticAnalyzer:
             root=root,
             identities=self.identities,
         )
-        self._fingerprint: tuple[tuple[int, int | None, str, str], ...] = (
+        self._fingerprint: tuple[FingerprintEntry, ...] = (
             self._fingerprint_tree()
         )
         self._link_documentation()
@@ -217,7 +236,7 @@ class SemanticAnalyzer:
             tuple[ContractDiagnostic, ...] produced by this operation.
 
         """
-        return self.types.contracts.diagnostics
+        return self._solver().contracts.diagnostics
 
     @property
     def types(self) -> TypeConstraintSolver:
@@ -228,6 +247,20 @@ class SemanticAnalyzer:
 
         """
         self.refresh()
+        return self._solver()
+
+    def _solver(self) -> TypeConstraintSolver:
+        """Return the solver, building it lazily without reconciling.
+
+        Callers that reach the analyzer through ``module.semantic`` have
+        already reconciled, so per-query refresh calls would make every
+        lookup pay a whole-tree fingerprint. This mirrors
+        :meth:`bind_calls`: reconcile once, then query many.
+
+        Returns:
+            TypeConstraintSolver produced by this operation.
+
+        """
         if self._type_solver is None:
             if (
                 self._graph_auto_path is not None
@@ -261,16 +294,14 @@ class SemanticAnalyzer:
             Pure source-coordinate shifts do not affect this fingerprint.
 
         """
-        current: tuple[tuple[int, int | None, str, str], ...] = (
-            self._fingerprint_tree()
-        )
+        current: tuple[FingerprintEntry, ...] = self._fingerprint_tree()
         if current == self._fingerprint:
             return ()
-        old: dict[int, tuple[int | None, str, str]] = {
+        old: dict[int, FingerprintRecord] = {
             identity: (parent, kind, fields)
             for identity, parent, kind, fields in self._fingerprint
         }
-        new: dict[int, tuple[int | None, str, str]] = {
+        new: dict[int, FingerprintRecord] = {
             identity: (parent, kind, fields)
             for identity, parent, kind, fields in current
         }
@@ -464,7 +495,7 @@ class SemanticAnalyzer:
             tuple[CallableContract, ...] produced by this operation.
 
         """
-        return self.types.contracts.variants(qualified_name=name)
+        return self._solver().contracts.variants(qualified_name=name)
 
     def bind_call(self, *, node: Call) -> BoundCall | None:
         """Return a complete effective argument binding for a source call.
@@ -477,7 +508,7 @@ class SemanticAnalyzer:
             BoundCall | None produced by this operation.
 
         """
-        solver: TypeConstraintSolver = self.types
+        solver: TypeConstraintSolver = self._solver()
         return solver.call_bindings.get(self.identities.node_id(node=node))
 
     def bind_calls(self, *, nodes: Iterable[Call]) -> list[BoundCall | None]:
@@ -494,7 +525,7 @@ class SemanticAnalyzer:
             One binding, or ``None``, per call.
 
         """
-        bindings: Mapping[int, BoundCall] = self.types.call_bindings
+        bindings: Mapping[int, BoundCall] = self._solver().call_bindings
         return [
             bindings.get(self.identities.node_id(node=node)) for node in nodes
         ]
@@ -513,9 +544,9 @@ class SemanticAnalyzer:
         if isinstance(node, str):
             symbol: Symbol | None = self.resolve(name=node)
             if symbol is not None:
-                return self.types.infer_symbol(symbol_id=symbol.id)
+                return self._solver().infer_symbol(symbol_id=symbol.id)
             return TypeInference(inferred=TypeShape(name="Unknown"))
-        return self.types.infer_node(node=node)
+        return self._solver().infer_node(node=node)
 
     def symbol(self, *, node: AST) -> Symbol | None:
         """Resolve the symbol associated with a specific name occurrence.
@@ -1188,8 +1219,8 @@ class SemanticAnalyzer:
     @staticmethod
     def _mutation_events(
         *,
-        old: dict[int, tuple[int | None, str, str]],
-        new: dict[int, tuple[int | None, str, str]],
+        old: dict[int, FingerprintRecord],
+        new: dict[int, FingerprintRecord],
         moved: set[int],
         previous: ScopeGraph,
         updated: ScopeGraph,
@@ -1209,8 +1240,8 @@ class SemanticAnalyzer:
         """
         events: list[MutationEvent] = []
         for identity in sorted(old.keys() | new.keys()):
-            before: tuple[int | None, str, str] | None = old.get(identity)
-            after: tuple[int | None, str, str] | None = new.get(identity)
+            before: FingerprintRecord | None = old.get(identity)
+            after: FingerprintRecord | None = new.get(identity)
             if before == after and identity not in moved:
                 continue
             kind: MutationKind = (
@@ -1463,8 +1494,8 @@ class SemanticAnalyzer:
     def _revision_diff(
         self,
         *,
-        old: dict[int, tuple[int | None, str, str]],
-        new: dict[int, tuple[int | None, str, str]],
+        old: dict[int, FingerprintRecord],
+        new: dict[int, FingerprintRecord],
         relocated: set[int],
     ) -> RevisionDiff:
         """Summarize fingerprint changes for incremental reindexing.
@@ -1486,10 +1517,10 @@ class SemanticAnalyzer:
         changed: set[int] = set()
         structural: set[int] = set()
         for identity in old.keys() | new.keys():
-            before_entry: tuple[int | None, str, str] | None = old.get(
+            before_entry: FingerprintRecord | None = old.get(
                 identity,
             )
-            after_entry: tuple[int | None, str, str] | None = new.get(
+            after_entry: FingerprintRecord | None = new.get(
                 identity,
             )
             if before_entry == after_entry and identity not in moved_nodes:
@@ -1791,55 +1822,50 @@ class SemanticAnalyzer:
 
     def _fingerprint_tree(
         self,
-    ) -> tuple[tuple[int, int | None, str, str], ...]:
+    ) -> tuple[FingerprintEntry, ...]:
         """Build an identity-preserving structural signature.
 
         Returns:
-            tuple[tuple[int, int | None, str, str], ...] produced by this
-            operation.
+            tuple[FingerprintEntry, ...] produced by this operation.
 
         """
-        result: list[tuple[int, int | None, str, str]] = []
+        result: list[FingerprintEntry] = []
         pending: list[tuple[AST, int | None]] = [(self.root, None)]
         visited: set[int] = set()
+        node_id: Callable[..., int] = self.identities.node_id
         while pending:
             node, parent = pending.pop()
-            identity: int = self.identities.node_id(node=node)
+            identity: int = node_id(node=node)
             if identity in visited:
                 continue
             visited.add(identity)
-            values: list[str] = []
+            values: list[FingerprintField] = []
             children: list[AST] = []
             for field in node._fields:
-                value: (
-                    AST
-                    | list[AST]
-                    | list[str]
-                    | str
-                    | int
-                    | float
-                    | complex
-                    | bytes
-                    | bool
-                    | None
-                ) = getattr(node, field, None)
-                items: list[object] = list_items(value=value)
+                value: object = getattr(node, field, None)
                 if isinstance(value, AST):
                     children.append(value)
                 elif isinstance(value, list):
-                    children.extend(
-                        item for item in items if isinstance(item, AST)
+                    items: list[AstListItem] = cast(
+                        typ="list[AstListItem]",
+                        val=value,
                     )
-                    values.append(f"{field}:len={len(items)}")
-                    values.extend(
-                        f"{field}:{item!r}"
-                        for item in items
-                        if not isinstance(item, AST)
-                    )
+                    scalars: list[AstScalar] = []
+                    for item in items:
+                        if isinstance(item, AST):
+                            children.append(item)
+                        else:
+                            scalars.append(item)
+                    values.append((field, len(items), tuple(scalars)))
+                elif isinstance(
+                    value,
+                    (str, bytes, int, float, complex, bool, type(None)),
+                ):
+                    values.append((field, value))
                 else:
-                    values.append(f"{field}:{value!r}")
+                    values.append((field, repr(value)))
             result.append(
-                (identity, parent, type(node).__name__, "|".join(values)),
+                (identity, parent, type(node).__name__, tuple(values)),
             )
             pending.extend((child, identity) for child in reversed(children))
         return tuple(result)

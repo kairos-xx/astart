@@ -1390,23 +1390,26 @@ class ContractIndex:
         """
         diagnostics: list[ContractDiagnostic] = []
         for cls in self.classes.values():
-            diagnostics.extend(self._final_base_diagnostics(cls=cls))
-            diagnostics.extend(self._method_diagnostics(cls=cls))
+            diagnostics.extend(self._final_base_diagnostics(_cls=cls))
+            diagnostics.extend(self._method_diagnostics(_cls=cls))
         return tuple(diagnostics)
 
     def _final_base_diagnostics(
         self,
         *,
-        cls: ClassContract,
+        _cls: ClassContract,
     ) -> tuple[ContractDiagnostic, ...]:
         """Flag inheritance from a source class marked as final.
+
+        Args:
+            _cls: The class contract to check.
 
         Returns:
             tuple[ContractDiagnostic, ...] produced by this operation.
 
         """
         diagnostics: list[ContractDiagnostic] = []
-        for base in cls.bases:
+        for base in _cls.bases:
             parent_class: ClassContract | None = self.classes.get(base)
             if parent_class is not None and any(
                 _decorator_name(node=d).split(sep=".")[-1] == "final"
@@ -1416,9 +1419,9 @@ class ContractIndex:
                     ContractDiagnostic(
                         code="final_class_inherited",
                         description=(
-                            f"{cls.name} cannot subclass final class {base}"
+                            f"{_cls.name} cannot subclass final class {base}"
                         ),
-                        node=cls.node,
+                        node=_cls.node,
                     ),
                 )
         return tuple(diagnostics)
@@ -1426,16 +1429,19 @@ class ContractIndex:
     def _method_diagnostics(
         self,
         *,
-        cls: ClassContract,
+        _cls: ClassContract,
     ) -> tuple[ContractDiagnostic, ...]:
         """Check one class's methods against inherited contracts.
+
+        Args:
+            _cls: The class contract to check.
 
         Returns:
             tuple[ContractDiagnostic, ...] produced by this operation.
 
         """
         diagnostics: list[ContractDiagnostic] = []
-        for method in cls.methods:
+        for method in _cls.methods:
             source: AST | None = method.declaration
             if not isinstance(source, (FunctionDef, AsyncFunctionDef)):
                 continue
@@ -1445,11 +1451,11 @@ class ContractIndex:
             )
             marked: bool = "override" in decorators
             parent: CallableContract | None = self.inherited_method(
-                owner=cls.name,
+                owner=_cls.name,
                 method=source.name,
             )
             if parent is None:
-                if marked and all(base in self.classes for base in cls.bases):
+                if marked and all(base in self.classes for base in _cls.bases):
                     diagnostics.append(
                         ContractDiagnostic(
                             code="override_missing",

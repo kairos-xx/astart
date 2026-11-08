@@ -16,6 +16,7 @@ from astart.rules.engine import (
 )
 from astart.rules.facts import module_facts
 from astart.rules.hints import HintCache
+from astart.rules.reasons import SkipCode
 from astart.rules.vocabulary import FixSafety
 
 if TYPE_CHECKING:
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from astart import CommentedModule
+    from astart.rules.checker import Checker
     from astart.rules.engine import CheckResult
     from astart.rules.facts import Applier, ModuleFacts, Subject
     from astart.rules.model import Catalog, Finding, Fix
@@ -37,6 +39,7 @@ class Constants:
         safety_rank: Grouped module constant.
         allowed_ceilings: Grouped module constant.
         applier_errors: Grouped module constant.
+        checker_reason: Why the external checker rejected a fix.
         write_back_reason: Grouped module constant.
 
     """
@@ -58,6 +61,7 @@ class Constants:
         TypeError,
         ValueError,
     )
+    checker_reason: Final[str] = "the type checker reported a new error"
     write_back_reason: Final[str] = (
         "cannot write back without changing formatting"
     )
@@ -89,7 +93,8 @@ class SkippedFix:
         fix_key: Fix that was skipped.
         rule_key: Rule whose finding it would have resolved.
         subject_path: Path of the subject.
-        reason: Why it was skipped.
+        reason: Why it was skipped, with detail.
+        code: Closed classification of the reason.
 
     """
 
@@ -97,6 +102,7 @@ class SkippedFix:
     rule_key: str
     subject_path: str
     reason: str
+    code: SkipCode
 
 
 @final
@@ -109,6 +115,12 @@ class FixSettings:
         stubs_path: Stub directory for type hints, or ``None``.
         max_rounds: Upper bound on repeat passes.
         appliers: Applier functions; ``None`` selects the built-in ones.
+        create_constants: Whether a missing ``Constants`` class may be
+            created to hold ``Final`` module constants.
+        min_confidence: Offers below this confidence are not applied, on top
+            of each fix's own minimum.
+        checker: External type checker that must not object to guarded
+            fixes, or ``None`` to apply them on astart's evidence alone.
 
     """
 
@@ -116,6 +128,9 @@ class FixSettings:
     stubs_path: Path | None = None
     max_rounds: int = 3
     appliers: Mapping[str, Applier] | None = None
+    create_constants: bool = False
+    min_confidence: float = 0.0
+    checker: Checker | None = None
 
 
 @final
@@ -129,6 +144,8 @@ class FixResult:
         skipped: Fixes that were selected but not applied.
         remaining: Findings still present in the final source.
         parse_error: Why the source could not be analysed, if it could not.
+        rounds: How many passes ran, including the final one that found
+            nothing left to do.
 
     """
 
@@ -137,6 +154,7 @@ class FixResult:
     skipped: tuple[SkippedFix, ...]
     remaining: tuple[Finding, ...]
     parse_error: str | None
+    rounds: int = 0
 
 
 @final
@@ -245,7 +263,9 @@ def fix_source(
     skipped: dict[tuple[str, str, str], SkippedFix] = {}
     parse_error: str | None = None
     settled: tuple[Finding, ...] | None = None
+    rounds: int = 0
     for _round in range(settings.max_rounds):
+        rounds += 1
         outcome: _Round = _run_round(source=current, job=job)
         if outcome.parse_error is not None:
             parse_error = outcome.parse_error
@@ -280,6 +300,7 @@ def fix_source(
         skipped=tuple(skipped.values()),
         remaining=settled,
         parse_error=parse_error,
+        rounds=rounds,
     )
 
 
@@ -296,6 +317,7 @@ def _options(*, job: _Job) -> CheckOptions:
     return CheckOptions(
         stubs_path=job.settings.stubs_path,
         hint_cache=job.cache,
+        create_constants=job.settings.create_constants,
     )
 
 
@@ -339,6 +361,7 @@ def _eligible(
     findings: tuple[Finding, ...],
     catalog: Catalog,
     ceiling: FixSafety,
+    minimum: float,
 ) -> list[tuple[Finding, Fix]]:
     """Select offers within the ceiling, in application order.
 
@@ -346,6 +369,8 @@ def _eligible(
         findings: Findings of the current source.
         catalog: Rules and fixes.
         ceiling: Highest fix safety to apply.
+        minimum: Offers with less confidence than this are left out, as are
+            offers below their own fix's ``min_confidence``.
 
     Returns:
         (finding, fix) pairs ordered by fix relations, then position.
@@ -358,6 +383,8 @@ def _eligible(
         for finding in findings
         for offer in finding.fix_offers
         if Constants.safety_rank[offer.safety] <= limit
+        and offer.confidence
+        >= max(minimum, catalog.fix(key=offer.fix_key).min_confidence)
     ]
     pairs.sort(
         key=lambda pair: (
@@ -398,6 +425,7 @@ def _run_round(*, source: str, job: _Job) -> _Round:
         findings=found.findings,
         catalog=job.catalog,
         ceiling=job.settings.ceiling,
+        minimum=job.settings.min_confidence,
     )
     outcome: _Round = _degrade(source=source, pairs=pairs, job=job)
     return replace(outcome, findings=found.findings)
@@ -408,7 +436,7 @@ def _attempt(
     source: str,
     pairs: list[tuple[Finding, Fix]],
     job: _Job,
-) -> _Round | None:
+) -> _Round | SkipCode:
     """Apply fixes to one fresh tree and write it back once.
 
     Args:
@@ -417,7 +445,8 @@ def _attempt(
         job: Fixed parameters of the run.
 
     Returns:
-        The outcome, or ``None`` when the tree cannot be written back.
+        The outcome, or the code saying why the tree was not accepted: it
+        cannot be written back, or the external checker rejected it.
 
     """
     module: CommentedModule = parse(source=source, filename=job.filename)
@@ -429,6 +458,7 @@ def _attempt(
             stubs_path=settings.stubs_path,
             source=source,
             cache=job.cache,
+            create_constants=settings.create_constants,
         ),
         table=Appliers.table
         if settings.appliers is None
@@ -438,8 +468,12 @@ def _attempt(
     applied: list[AppliedFix] = []
     skipped: list[SkippedFix] = []
     for finding, fix in pairs:
-        reason: str | None = _apply_one(finding=finding, fix=fix, state=state)
-        if reason is None:
+        refusal: tuple[SkipCode, str] | None = _apply_one(
+            finding=finding,
+            fix=fix,
+            state=state,
+        )
+        if refusal is None:
             applied.append(
                 AppliedFix(
                     fix_key=fix.key,
@@ -453,7 +487,8 @@ def _attempt(
                     fix_key=fix.key,
                     rule_key=finding.rule_key,
                     subject_path=finding.subject_path,
-                    reason=reason,
+                    reason=refusal[1],
+                    code=refusal[0],
                 ),
             )
     if not applied:
@@ -467,7 +502,22 @@ def _attempt(
         text: str = unparse(tree=module, preserve_formatting=True)
         _ = ast_parse(source=text)
     except (FormatPreservationError, SyntaxError):
-        return None
+        return SkipCode.write_back
+    checker: Checker | None = settings.checker
+    guarded: bool = any(
+        job.catalog.fix(key=item.fix_key).safety is FixSafety.guarded
+        for item in applied
+    )
+    if (
+        checker is not None
+        and guarded
+        and checker.regresses(
+            filename=job.filename,
+            before=source,
+            after=text,
+        )
+    ):
+        return SkipCode.checker_rejected
     return _Round(
         source=text,
         applied=tuple(applied),
@@ -500,8 +550,8 @@ def _degrade(
     """
     if not pairs:
         return _Round(source=source, applied=(), skipped=(), parse_error=None)
-    attempt: _Round | None = _attempt(source=source, pairs=pairs, job=job)
-    if attempt is not None:
+    attempt: _Round | SkipCode = _attempt(source=source, pairs=pairs, job=job)
+    if isinstance(attempt, _Round):
         return attempt
     if len(pairs) == 1:
         finding, fix = pairs[0]
@@ -513,7 +563,10 @@ def _degrade(
                     fix_key=fix.key,
                     rule_key=finding.rule_key,
                     subject_path=finding.subject_path,
-                    reason=Constants.write_back_reason,
+                    reason=Constants.checker_reason
+                    if attempt is SkipCode.checker_rejected
+                    else Constants.write_back_reason,
+                    code=attempt,
                 ),
             ),
             parse_error=None,
@@ -575,7 +628,12 @@ def _rematch(
     return carried
 
 
-def _apply_one(*, finding: Finding, fix: Fix, state: _Pass) -> str | None:
+def _apply_one(
+    *,
+    finding: Finding,
+    fix: Fix,
+    state: _Pass,
+) -> tuple[SkipCode, str] | None:
     """Apply one fix to one finding's subject.
 
     Args:
@@ -595,16 +653,16 @@ def _apply_one(*, finding: Finding, fix: Fix, state: _Pass) -> str | None:
         ),
     )
     if subject is None:
-        return "subject not found"
+        return SkipCode.subject_missing, "subject not found"
     if id(subject.node) in state.edited:
-        return "conflict"
+        return SkipCode.conflict, "conflict"
     if not preconditions_hold(fix=fix, subject=subject, facts=state.facts):
-        return "preconditions no longer hold"
+        return SkipCode.preconditions_changed, "preconditions no longer hold"
     try:
         for key in fix.edits:
             applier: Applier = state.table[key]
             applier(subject, state.facts)
     except Constants.applier_errors as error:
-        return f"applier failed: {error}"
+        return SkipCode.applier_failed, f"applier failed: {error}"
     state.edited.add(id(subject.node))
     return None

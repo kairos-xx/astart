@@ -1,13 +1,13 @@
 # `roadmaps/`
 
-Status: proposal for review, 2026-11-07. Nothing here is approved or built unless it says "shipped". Companion documents: `specs/2026-11-06-rule-ontology-design.md`, `specs/2026-11-06-fix-runner-and-type-hints-design.md` (sections 9 and 10), `plans/2026-11-07-check-fix-cli.md`.
+Status: proposal for review, 2026-11-07. Nothing here is approved or built unless it says "shipped". The 2026-11-06/07 companion specs and plans were implemented; remaining tasks live in `docs/TODO.md` (M8-31 to M8-39).
 
 <!-- exactus:inventory:start -->
 ## Directory contents
 
 ### Files
 
-- [`2026-11-07-precision-roadmap.md`](2026-11-07-precision-roadmap.md) — Status: proposal for review, 2026-11-07. Nothing here is approved or built unless it says "shipped". Companion documents: `specs/2026-11-06-rule-ontology-design.md`, `specs/2026-11-06-fix-runner-and-type-hints-design.md` (sections 9 and 10), `plans/2026-11-07-check-fix-cli.md`.
+- [`2026-11-07-precision-roadmap.md`](2026-11-07-precision-roadmap.md) — Status: proposal for review, 2026-11-07. Nothing here is approved or built unless it says "shipped". The 2026-11-06/07 companion specs and plans were implemented; remaining tasks live in `docs/TODO.md` (M8-31 to M8-39).
 
 ### Subdirectories
 

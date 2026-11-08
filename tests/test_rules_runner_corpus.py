@@ -175,12 +175,12 @@ def greet(name):
 """,
             {"greet": None, "greet.name": None},
         ),
-        "len-only guess is refused": (
+        "len result is guaranteed but the argument guess is refused": (
             """\
 def count(items):
     return len(items)
 """,
-            {"count": None, "count.items": None},
+            {"count": "int", "count.items": None},
         ),
         "index-only guess is refused": (
             """\
@@ -301,7 +301,7 @@ f(3)
 """,
             {"f": "int", "f.x": "int"},
         ),
-        "method call sites are not resolved": (
+        "method call on a constructed instance is resolved": (
             """\
 class K:
     def m(self, a):
@@ -310,7 +310,23 @@ class K:
 
 K().m(1)
 """,
-            {"m": None, "m.a": None},
+            {"m": "int", "m.a": "int"},
+        ),
+        "overridden method gives no call-site evidence": (
+            """\
+class K:
+    def m(self, a):
+        return a
+
+
+class L(K):
+    def m(self, b):
+        return b
+
+
+K().m(1)
+""",
+            {"m": None, "m.a": None, "m.b": None},
         ),
         "variadics are never hinted": (
             """\

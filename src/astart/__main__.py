@@ -43,6 +43,11 @@ class _Arguments(Protocol):
         diff: Whether to print a diff without writing.
         check: Whether to report pending fixes without writing.
         no_format: Whether to skip the final formatting pass.
+        checker: ``auto`` lets an installed pyright veto guarded fixes.
+        min_confidence: Least confidence a fix needs to be applied.
+        create_constants_class: Whether to create a missing ``Constants``
+            class for ``Final`` module constants.
+        source_root: Extra import roots for the type checker.
 
     """
 
@@ -61,6 +66,10 @@ class _Arguments(Protocol):
     diff: bool
     check: bool
     no_format: bool
+    checker: str
+    min_confidence: float
+    create_constants_class: bool
+    source_root: list[str] | None
 
 
 @final
@@ -160,7 +169,24 @@ def _configure_fix(*, command: ArgumentParser) -> None:
     group.add_argument("--diff", action="store_true")
     group.add_argument("--check", action="store_true")
     command.add_argument("--no-format", action="store_true")
+    command.add_argument(
+        "--checker",
+        choices=("auto", "off"),
+        default="auto",
+        help="Let an installed pyright veto guarded fixes (default: auto)",
+    )
     command.add_argument("--stubs", dest="stubs_dir")
+    command.add_argument("--min-confidence", type=float, default=0.0)
+    command.add_argument(
+        "--create-constants-class",
+        action="store_true",
+        help="Create a Constants class when a module has none",
+    )
+    command.add_argument(
+        "--source-root",
+        action="append",
+        help="Directory the type checker resolves imports from (repeatable)",
+    )
 
 
 def main(*, argv: list[str] | None = None) -> int:
@@ -229,6 +255,12 @@ def main(*, argv: list[str] | None = None) -> int:
                 stubs_path=_stubs(args=args),
                 mode=_mode(args=args),
                 run_formatter=not args.no_format,
+                use_checker=args.checker == "auto",
+                min_confidence=args.min_confidence,
+                create_constants=args.create_constants_class,
+                source_roots=tuple(
+                    Path(item) for item in args.source_root or ()
+                ),
             ),
             out=stdout,
         )

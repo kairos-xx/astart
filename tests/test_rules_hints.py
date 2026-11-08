@@ -203,7 +203,7 @@ def test_shadowed_callee_calls_are_ignored() -> None:
     )
 
 
-def test_self_cls_varargs_and_none_default_are_never_hinted() -> None:
+def test_self_cls_and_varargs_are_never_hinted() -> None:
     """Skip parameters that cannot or should not be annotated."""
     index, functions = _index(
         source="""\
@@ -217,11 +217,16 @@ def test_self_cls_varargs_and_none_default_are_never_hinted() -> None:
     )
     function: FunctionDef | AsyncFunctionDef = functions[0]
     nodes: list[AST] = [
-        *function.args.args,
+        function.args.args[0],
         *[a for a in (function.args.vararg, function.args.kwarg) if a],
     ]
     for node in nodes:
         expect_is(actual=index.hint_for(node=node), expected=None)
+    # A ``None`` default is hinted ``T | None`` once call sites prove ``T``.
+    expect_equal(
+        actual=index.hint_for(node=function.args.args[1]),
+        expected=Hint(source="int | None", basis=HintBasis.optional_default),
+    )
 
 
 def test_is_allowed_source_accepts_builtins_and_imported_names() -> None:
@@ -468,7 +473,7 @@ def one():
     )
     expect_equal(
         actual=hint,
-        expected=Hint(source="int", basis=HintBasis.derived_return),
+        expected=Hint(source="int", basis=HintBasis.syntax_proven),
     )
 
 
@@ -616,9 +621,10 @@ def f(a: int):
         actual=None if hint is None else hint.source,
         expected="int | None",
     )
-    # The syntax proves ``int | None`` here, but the inference says ``int``;
-    # the two must agree, so the hint is refused.
-    hint, reason = _return_hint(
+    # The syntax proves ``int | None`` (the path that falls off returns
+    # ``None``) even though the inference says ``int``; the language guarantees
+    # it, so the hint is accepted.
+    hint, _ = _return_hint(
         source="""\
 def f(a: int):
     if a:
@@ -626,8 +632,10 @@ def f(a: int):
 """,
         name="f",
     )
-    expect_is(actual=hint, expected=None)
-    expect_equal(actual=reason, expected="engine disagrees")
+    expect_equal(
+        actual=hint,
+        expected=Hint(source="int | None", basis=HintBasis.syntax_proven),
+    )
     hint, _ = _return_hint(
         source="""\
 def f(a: int):

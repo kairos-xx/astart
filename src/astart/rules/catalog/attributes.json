@@ -1,0 +1,75 @@
+{
+  "fixes": [
+    {
+      "after": [],
+      "before": [],
+      "edits": [
+        "typing.add-attribute-annotation"
+      ],
+      "idempotent": true,
+      "key": "typing.add-attribute-annotation",
+      "min_confidence": 0.9,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "annotation.has_inferred_hint",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "typing.missing-attribute-annotation"
+      ],
+      "safety": "guarded"
+    }
+  ],
+  "profiles": [],
+  "relations": [],
+  "rules": [
+    {
+      "aliases": {},
+      "code": "TYP005",
+      "domain": "typing",
+      "evidence": [
+        {
+          "name": "name",
+          "type": "str"
+        }
+      ],
+      "examples": [
+        {
+          "note": "",
+          "source": "class Box:\n    def __init__(self) -> None:\n        self.size = 3\n",
+          "triggers": true
+        },
+        {
+          "note": "",
+          "source": "class Box:\n    def __init__(self) -> None:\n        self.size: int = 3\n",
+          "triggers": false
+        }
+      ],
+      "fixes": [
+        "typing.add-attribute-annotation"
+      ],
+      "key": "typing.missing-attribute-annotation",
+      "maturity": "stable",
+      "message": "`{name}` is assigned without a type annotation.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "An annotation on the first write documents the attribute and pins its type for every method.",
+      "requires": [
+        "annotation.has_inferred_hint"
+      ],
+      "severity": "info",
+      "subject": [
+        "Attribute"
+      ],
+      "title": "Instance attribute without annotation",
+      "when": {
+        "cmp": "eq",
+        "fact": "annotation.has_inferred_hint",
+        "op": "compare",
+        "value": true
+      }
+    }
+  ]
+}

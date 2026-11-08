@@ -53,6 +53,23 @@ if TYPE_CHECKING:
     from astart._graph.conversion.interfaces import ConversionBackend
 
 
+def _character_column(*, line: str, byte_offset: int) -> int:
+    """Convert an AST column (a UTF-8 byte offset) to a character index.
+
+    ``ast`` reports columns in bytes while ``tokenize`` and string indexing use
+    characters, so the two only agree on pure-ASCII text.
+
+    Args:
+        line: Source line.
+        byte_offset: Column as reported by ``ast``.
+
+    Returns:
+        The index of the same position in ``line``.
+
+    """
+    return len(line.encode()[:byte_offset].decode(errors="ignore"))
+
+
 class _ParenthesisMarker(NodeTransformer):
     """Wraps parenthesized expressions in Parenthesized nodes."""
 
@@ -171,7 +188,8 @@ class _ParenthesisMarker(NodeTransformer):
             if 0 <= lineno - 1 < len(self.source_lines)
             else ""
         )
-        for i in range(col_offset - 1, -1, -1):
+        column: int = _character_column(line=line, byte_offset=col_offset)
+        for i in range(column - 1, -1, -1):
             if line[i] in {" ", "\t"}:
                 continue
             return (
@@ -212,7 +230,8 @@ class _ParenthesisMarker(NodeTransformer):
             if 0 <= end_lineno - 1 < len(self.source_lines)
             else ""
         )
-        for i in range(end_col_offset, len(line)):
+        start: int = _character_column(line=line, byte_offset=end_col_offset)
+        for i in range(start, len(line)):
             if line[i] in {" ", "\t"}:
                 continue
             return (

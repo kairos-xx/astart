@@ -104,6 +104,28 @@
     },
     {
       "after": [],
+      "before": [
+        "typing.add-inferred-annotation"
+      ],
+      "edits": [
+        "typing.synthesize-self"
+      ],
+      "idempotent": true,
+      "key": "typing.synthesize-self",
+      "min_confidence": 0.9,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "function.self_return",
+        "op": "compare",
+        "value": true
+      },
+      "rules": [
+        "typing.missing-annotation"
+      ],
+      "safety": "guarded"
+    },
+    {
+      "after": [],
       "before": [],
       "edits": [
         "typing.add-final"
@@ -224,7 +246,8 @@
         "typing.add-noreturn",
         "typing.add-inferred-annotation",
         "typing.synthesize-protocol",
-        "typing.synthesize-typevar"
+        "typing.synthesize-typevar",
+        "typing.synthesize-self"
       ],
       "key": "typing.missing-annotation",
       "maturity": "stable",

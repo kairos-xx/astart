@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from difflib import unified_diff
 from enum import StrEnum
 from io import BytesIO
 from os import fsync
+from pathlib import Path
 from shutil import copymode
 from tokenize import detect_encoding
 from typing import TYPE_CHECKING, Final, final
@@ -25,12 +26,13 @@ from astart.rules import (
     fix_source,
     load_default_catalog,
 )
+from astart.rules.checker import build_checker
 from astart.rules.vocabulary import FixSafety, Severity
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from typing import TextIO
 
+    from astart.rules.checker import Checker
     from astart.rules.model import Catalog
     from astart.rules.registry import Registries
 
@@ -44,6 +46,7 @@ class Constants:
         usage_error: Grouped module constant.
         findings: Grouped module constant.
         text_format: Grouped module constant.
+        no_checker_floor: Precision floor when no checker runs.
 
     """
 
@@ -55,6 +58,7 @@ class Constants:
     usage_error: Final[int] = 2
     findings: Final[int] = 1
     text_format: Final[str] = "text"
+    no_checker_floor: Final[float] = 0.95
 
 
 @final
@@ -103,6 +107,12 @@ class FixCommandSettings:
         stubs_path: Stub directory for type hints, or ``None``.
         mode: Write, diff or check.
         run_formatter: Whether ruff formats the result.
+        use_checker: Whether an installed pyright must accept guarded fixes.
+        min_confidence: Fixes with less confidence than this are skipped.
+        create_constants: Whether a missing ``Constants`` class may be
+            created to hold ``Final`` module constants.
+        source_roots: Extra directories the type checker resolves absolute
+            imports from.
 
     """
 
@@ -111,6 +121,10 @@ class FixCommandSettings:
     stubs_path: Path | None
     mode: FixMode
     run_formatter: bool
+    use_checker: bool = False
+    min_confidence: float = 0.0
+    create_constants: bool = False
+    source_roots: tuple[Path, ...] = ()
 
 
 @final
@@ -311,11 +325,30 @@ def _write_atomic(*, path: Path, text: str, encoding: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _make_checker(*, settings: FixCommandSettings) -> Checker | None:
+    """Build the external type-checker gate when it is wanted and installed.
+
+    Args:
+        settings: Command options.
+
+    Returns:
+        A checker, or ``None`` when disabled or no checker is installed.
+
+    """
+    if not settings.use_checker:
+        return None
+    return build_checker(
+        root=Path.cwd(),
+        source_roots=settings.source_roots,
+    )
+
+
 def _fix_file(
     *,
     path: Path,
     settings: FixCommandSettings,
     catalog: Catalog,
+    checker: Checker | None,
 ) -> FixOutcome:
     """Fix one file in memory.
 
@@ -323,6 +356,7 @@ def _fix_file(
         path: File to fix.
         settings: Command options.
         catalog: Rules and fixes.
+        checker: External type-checker gate, or ``None``.
 
     Returns:
         What happened; failures are reported, never raised.
@@ -343,6 +377,9 @@ def _fix_file(
     fix_settings: FixSettings = FixSettings(
         ceiling=settings.ceiling,
         stubs_path=settings.stubs_path,
+        min_confidence=settings.min_confidence,
+        create_constants=settings.create_constants,
+        checker=checker,
     )
     registries: Registries = default_registries()
     note: str = ""
@@ -427,6 +464,19 @@ def run_fix(*, settings: FixCommandSettings, out: TextIO) -> int:
     found: DiscoveryResult = discover_files(paths=settings.paths)
     catalog: Catalog = load_default_catalog(registries=default_registries())
     failed: bool = bool(found.missing)
+    checker: Checker | None = _make_checker(settings=settings)
+    if settings.use_checker and checker is None:
+        settings = replace(
+            settings,
+            min_confidence=max(
+                settings.min_confidence,
+                Constants.no_checker_floor,
+            ),
+        )
+        _ = out.write(f"""\
+note: no type checker found; guarded fixes need confidence >= \
+{Constants.no_checker_floor}
+""")
     for path in found.missing:
         _ = out.write(f"""\
 {path}: error: no such file or directory
@@ -439,6 +489,7 @@ def run_fix(*, settings: FixCommandSettings, out: TextIO) -> int:
             path=path,
             settings=settings,
             catalog=catalog,
+            checker=checker,
         )
         if outcome.error is not None:
             failed = True

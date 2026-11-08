@@ -238,7 +238,7 @@ j(1)
 
 
 def test_unary_operators_on_bool_give_int() -> None:
-    """Only ``not`` yields bool."""
+    """Only ``not`` yields bool; ``-True`` and ``~True`` are ``int``."""
     for source in (
         """\
 def a():
@@ -248,16 +248,22 @@ def a():
 def a():
     return ~True
 """,
-        """\
+    ):
+        expect_equal(
+            actual=_returns(source=source, function="a"),
+            expected="int",
+            message=source,
+        )
+    expect_is(
+        actual=_returns(
+            source="""\
 def a(x: bool):
     return -x
 """,
-    ):
-        expect_is(
-            actual=_returns(source=source, function="a"),
-            expected=None,
-            message=source,
-        )
+            function="a",
+        ),
+        expected=None,
+    )
     expect_equal(
         actual=_returns(
             source="""\

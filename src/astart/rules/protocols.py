@@ -14,34 +14,26 @@ from ast import (
     Attribute,
     Await,
     Call,
-    ClassDef,
-    Del,
-    ExceptHandler,
+    Expr,
     FunctionDef,
-    Global,
     Load,
-    MatchAs,
-    MatchMapping,
-    MatchStar,
     Name,
-    Nonlocal,
+    Return,
     Starred,
-    Store,
-    alias,
     arg,
     arguments,
     iter_child_nodes,
+    unparse,
     walk,
 )
 from dataclasses import dataclass
-from re import Pattern
-from re import compile as compile_pattern
 from typing import TYPE_CHECKING, Final, final
 
 from astart.rules.provable import expression_type
+from astart.rules.scopes import names_bound_by
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Iterator, Mapping, Sequence
 
     type Function = FunctionDef | AsyncFunctionDef
 
@@ -53,16 +45,16 @@ class Constants:
     Attributes:
         indent: Grouped module constant.
         private_prefix: Grouped module constant.
-        generated_name: Grouped module constant.
         receiver: Grouped module constant.
         docstring_marker: Grouped module constant.
+        callable_member: Attribute name marking a callback protocol.
 
     """
 
     indent: Final[str] = "    "
     private_prefix: Final[str] = "__"
-    generated_name: Final[Pattern[str]] = compile_pattern(pattern="arg\\d+")
     receiver: Final[str] = "self"
+    callable_member: Final[str] = "__call__"
     docstring_marker: Final[str] = "Structural type of ``"
 
 
@@ -77,6 +69,9 @@ class Member:
         positional: Annotation source per positional argument, or ``None``
             where the argument type is not provable.
         keywords: ``(name, annotation)`` pairs, sorted by name.
+        returns: Return annotation proven from how every result is used, or
+            ``None`` when it is not provable.
+        is_async: ``True`` when every call is awaited.
 
     """
 
@@ -84,6 +79,8 @@ class Member:
     is_method: bool
     positional: tuple[str | None, ...]
     keywords: tuple[tuple[str, str | None], ...]
+    returns: str | None = None
+    is_async: bool = False
 
 
 @final
@@ -100,18 +97,38 @@ class StructuralUsage:
 
 
 @final
+@dataclass(frozen=True, slots=True)
+class _Call:
+    """One call of a member and how its result is used.
+
+    Attributes:
+        positional: Annotation source per positional argument.
+        keywords: ``(name, annotation)`` pairs, sorted by name.
+        awaited: ``True`` when the call is directly awaited.
+        result: ``"returned"``, ``"unused"`` or ``"other"`` for how the
+            (awaited) result flows.
+
+    """
+
+    positional: tuple[str | None, ...]
+    keywords: tuple[tuple[str, str | None], ...]
+    awaited: bool
+    result: str
+
+
+@final
 @dataclass(slots=True)
 class _Draft:
     """Accumulate the uses of one attribute.
 
     Attributes:
-        calls: Call shapes seen: positional types and keyword types.
+        calls: Call shapes seen.
+        reads: Result uses of non-call attribute reads.
 
     """
 
-    calls: list[
-        tuple[tuple[str | None, ...], tuple[tuple[str, str | None], ...]]
-    ]
+    calls: list[_Call]
+    reads: list[str]
 
 
 def parameter_has_default(*, function: Function, parameter: arg) -> bool:
@@ -150,49 +167,19 @@ def _walk(*, function: Function) -> Iterator[AST]:
         yield from walk(node=statement)
 
 
-def names_bound_by(*, node: AST) -> tuple[str, ...]:
-    """List the names a node binds, rebinds or deletes.
-
-    Args:
-        node: Node to inspect.
-
-    Returns:
-        The names it introduces, possibly none.
-
-    """
-    names: tuple[str, ...] = ()
-    match node:
-        case Name(id=found, ctx=Store() | Del()) | arg(arg=found):
-            names = (found,)
-        case Global(names=listed) | Nonlocal(names=listed):
-            names = tuple(listed)
-        case alias(name=found, asname=asname):
-            names = (asname or found.split(sep=".")[0],)
-        case (
-            ExceptHandler(name=found)
-            | FunctionDef(name=found)
-            | AsyncFunctionDef(name=found)
-            | ClassDef(name=found)
-            | MatchAs(name=found)
-            | MatchStar(name=found)
-            | MatchMapping(rest=found)
-        ) if found is not None:
-            names = (found,)
-        case _:
-            pass
-    return names
-
-
 def _call_shape(
     *,
     call: Call,
     counts: Mapping[str, int],
+    env: Mapping[str, str] | None,
 ) -> tuple[tuple[str | None, ...], tuple[tuple[str, str | None], ...]] | None:
     """Describe the arguments of a call to a member.
 
     Args:
         call: Call expression.
         counts: Module binding counts, for typing arguments.
+        env: Types of names visible at the call sites,
+            for flow-typed arguments.
 
     Returns:
         Positional and keyword types, or ``None`` for star arguments.
@@ -202,18 +189,18 @@ def _call_shape(
         return None
     if any(item.arg is None for item in call.keywords):
         return None
-    if any(
-        item.arg == Constants.receiver
-        or Constants.generated_name.fullmatch(string=item.arg or "")
-        for item in call.keywords
-    ):
+    if any(item.arg == Constants.receiver for item in call.keywords):
         return None
     positional: tuple[str | None, ...] = tuple(
-        expression_type(node=item, counts=counts) for item in call.args
+        expression_type(node=item, counts=counts, env=env)
+        for item in call.args
     )
     keywords: tuple[tuple[str, str | None], ...] = tuple(
         sorted(
-            (item.arg, expression_type(node=item.value, counts=counts))
+            (
+                item.arg,
+                expression_type(node=item.value, counts=counts, env=env),
+            )
             for item in call.keywords
             if item.arg is not None
         ),
@@ -221,7 +208,7 @@ def _call_shape(
     return (positional, keywords)
 
 
-def _same(*, values: list[str | None]) -> bool:
+def _same(*, values: Sequence[str | None]) -> bool:
     """Tell whether every value equals the first.
 
     Args:
@@ -234,30 +221,75 @@ def _same(*, values: list[str | None]) -> bool:
     return all(value == values[0] for value in values)
 
 
-def _merge(*, name: str, draft: _Draft) -> Member | None:
+def _result_kind(*, node: AST, parents: Mapping[AST, AST]) -> str:
+    """Classify how a member result flows.
+
+    Args:
+        node: Call or attribute node whose result is classified.
+        parents: Parent of every node.
+
+    Returns:
+        ``"returned"``, ``"unused"`` or ``"other"``.
+
+    """
+    parent: AST | None = parents.get(node)
+    if isinstance(parent, Return):
+        return "returned"
+    if isinstance(parent, Expr):
+        return "unused"
+    return "other"
+
+
+def _merge(
+    *,
+    name: str,
+    draft: _Draft,
+    function_returns: str | None,
+) -> Member | None:
     """Combine every call of one attribute into a member.
 
     Args:
         name: Attribute name.
-        draft: Calls seen for the attribute.
+        draft: Calls and reads seen for the attribute.
+        function_returns: Annotation source of the owning function's return,
+            or ``None``.
 
     Returns:
         The member, or ``None`` when the calls disagree on their shape.
 
     """
     if not draft.calls:
-        return Member(name=name, is_method=False, positional=(), keywords=())
-    first_positional, first_keywords = draft.calls[0]
+        returns: str | None = (
+            function_returns
+            if draft.reads
+            and _same(values=[*draft.reads])
+            and draft.reads[0] == "returned"
+            else None
+        )
+        return Member(
+            name=name,
+            is_method=False,
+            positional=(),
+            keywords=(),
+            returns=returns,
+        )
+    awaited: set[bool] = {call.awaited for call in draft.calls}
+    if len(awaited) > 1:
+        return None
+    first_positional, first_keywords = (
+        draft.calls[0].positional,
+        draft.calls[0].keywords,
+    )
     shape: tuple[int, list[str]] = (
         len(first_positional),
         [key for key, _ in first_keywords],
     )
-    for positional, keywords in draft.calls:
-        if (len(positional), [key for key, _ in keywords]) != shape:
+    for call in draft.calls:
+        if (len(call.positional), [key for key, _ in call.keywords]) != shape:
             return None
     merged_positional: tuple[str | None, ...] = tuple(
         first_positional[index]
-        if _same(values=[call[0][index] for call in draft.calls])
+        if _same(values=[call.positional[index] for call in draft.calls])
         else None
         for index in range(len(first_positional))
     )
@@ -266,18 +298,77 @@ def _merge(*, name: str, draft: _Draft) -> Member | None:
             (
                 key,
                 first_keywords[index][1]
-                if _same(values=[call[1][index][1] for call in draft.calls])
+                if _same(
+                    values=[call.keywords[index][1] for call in draft.calls],
+                )
                 else None,
             )
             for index, (key, _) in enumerate(iterable=first_keywords)
         ),
+    )
+    returns = (
+        function_returns
+        if function_returns is not None
+        and all(call.result == "returned" for call in draft.calls)
+        else None
     )
     return Member(
         name=name,
         is_method=True,
         positional=merged_positional,
         keywords=merged_keywords,
+        returns=returns,
+        is_async=awaited.pop(),
     )
+
+
+def _record_call(
+    *,
+    draft: _Draft,
+    call: Call,
+    parents: Mapping[AST, AST],
+    counts: Mapping[str, int],
+    env: Mapping[str, str] | None,
+) -> bool:
+    """Record one member call on a draft.
+
+    Args:
+        draft: Draft to append to.
+        call: Call expression.
+        parents: Parent of every node.
+        counts: Module binding counts.
+        env: Types of names visible at the call site.
+
+    Returns:
+        ``False`` when the call shape is not provable.
+
+    """
+    shape: (
+        tuple[tuple[str | None, ...], tuple[tuple[str, str | None], ...]]
+        | None
+    ) = _call_shape(call=call, counts=counts, env=env)
+    if shape is None:
+        return False
+    awaited_by: AST | None = parents.get(call)
+    if isinstance(awaited_by, Await):
+        draft.calls.append(
+            _Call(
+                positional=shape[0],
+                keywords=shape[1],
+                awaited=True,
+                result=_result_kind(node=awaited_by, parents=parents),
+            ),
+        )
+    else:
+        draft.calls.append(
+            _Call(
+                positional=shape[0],
+                keywords=shape[1],
+                awaited=False,
+                result=_result_kind(node=call, parents=parents),
+            ),
+        )
+    return True
 
 
 def _collect(
@@ -286,6 +377,7 @@ def _collect(
     parents: Mapping[AST, AST],
     parameter: str,
     counts: Mapping[str, int],
+    env: Mapping[str, str] | None,
 ) -> dict[str, _Draft] | None:
     """Gather the attribute uses of a parameter.
 
@@ -294,6 +386,7 @@ def _collect(
         parents: Parent of every node.
         parameter: Parameter name.
         counts: Module binding counts.
+        env: Types of names visible at the call sites.
 
     Returns:
         Uses per attribute, or ``None`` when any use is not structural.
@@ -303,29 +396,51 @@ def _collect(
     for node in nodes:
         if not (isinstance(node, Name) and node.id == parameter):
             continue
-        attribute: AST | None = parents.get(node)
+        parent: AST | None = parents.get(node)
+        if isinstance(parent, Call) and parent.func is node:
+            draft: _Draft = drafts.setdefault(
+                Constants.callable_member,
+                _Draft(calls=[], reads=[]),
+            )
+            if not _record_call(
+                draft=draft,
+                call=parent,
+                parents=parents,
+                counts=counts,
+                env=env,
+            ):
+                return None
+            continue
         if not (
-            isinstance(attribute, Attribute)
-            and attribute.value is node
-            and isinstance(attribute.ctx, Load)
-            and (not attribute.attr.startswith(Constants.private_prefix))
+            isinstance(parent, Attribute)
+            and parent.value is node
+            and isinstance(parent.ctx, Load)
+            and (not parent.attr.startswith(Constants.private_prefix))
         ):
             return None
-        draft: _Draft = drafts.setdefault(attribute.attr, _Draft(calls=[]))
-        parent: AST | None = parents.get(attribute)
-        if isinstance(parent, Await):
+        attribute: Attribute = parent
+        draft = drafts.setdefault(
+            attribute.attr,
+            _Draft(calls=[], reads=[]),
+        )
+        attribute_parent: AST | None = parents.get(attribute)
+        if isinstance(attribute_parent, Await):
             return None
-        if isinstance(parent, Call) and parent.func is attribute:
-            shape: (
-                tuple[
-                    tuple[str | None, ...],
-                    tuple[tuple[str, str | None], ...],
-                ]
-                | None
-            ) = _call_shape(call=parent, counts=counts)
-            if shape is None or isinstance(parents.get(parent), Await):
+        if isinstance(attribute_parent, Call) and (
+            attribute_parent.func is attribute
+        ):
+            if not _record_call(
+                draft=draft,
+                call=attribute_parent,
+                parents=parents,
+                counts=counts,
+                env=env,
+            ):
                 return None
-            draft.calls.append(shape)
+        else:
+            draft.reads.append(
+                _result_kind(node=attribute, parents=parents),
+            )
     return drafts
 
 
@@ -334,6 +449,7 @@ def structural_usage(
     function: Function,
     parameter: str,
     counts: Mapping[str, int],
+    env: Mapping[str, str] | None = None,
 ) -> StructuralUsage | None:
     """Prove that a parameter is only used through its attributes.
 
@@ -341,6 +457,8 @@ def structural_usage(
         function: Function that owns the parameter.
         parameter: Parameter name.
         counts: Module binding counts, for typing call arguments.
+        env: Types of names visible at the call sites, for flow-typed
+            arguments.
 
     Returns:
         The required members, or ``None`` when the parameter is rebound, used
@@ -360,12 +478,22 @@ def structural_usage(
         parents=parents,
         parameter=parameter,
         counts=counts,
+        env=env,
     )
     if drafts is None:
         return None
+    function_returns: str | None = (
+        unparse(ast_obj=function.returns)
+        if function.returns is not None
+        else None
+    )
     members: list[Member] = []
     for name in sorted(drafts):
-        member: Member | None = _merge(name=name, draft=drafts[name])
+        member: Member | None = _merge(
+            name=name,
+            draft=drafts[name],
+            function_returns=function_returns,
+        )
         if member is None:
             return None
         members.append(member)
@@ -397,16 +525,36 @@ def _member_source(*, member: Member) -> str:
 
     """
     pad: str = Constants.indent
+    returns: str = (
+        f" -> {member.returns}" if member.returns is not None else ""
+    )
     if not member.is_method:
         return f"""\
 {pad}@property
-{pad}def {member.name}(self): ...
+{pad}def {member.name}(self){returns}: ...
 """
+    taken: set[str] = {
+        Constants.receiver,
+        *(key for key, _ in member.keywords),
+    }
+    positional_names: list[str] = []
+    for index in range(len(member.positional)):
+        candidate: str = f"arg{index}"
+        bump: int = 0
+        while candidate in taken:
+            bump += 1
+            candidate = f"arg{index}_{bump}"
+        taken.add(candidate)
+        positional_names.append(candidate)
     parameters: list[str] = ["self"]
     parameters.extend(
         (
-            _annotated(name=(f"arg{index}"), annotation=annotation)
-            for index, annotation in enumerate(iterable=member.positional)
+            _annotated(name=name, annotation=annotation)
+            for name, annotation in zip(
+                positional_names,
+                member.positional,
+                strict=True,
+            )
         ),
     )
     if member.positional:
@@ -419,8 +567,9 @@ def _member_source(*, member: Member) -> str:
                 for key, annotation in member.keywords
             ),
         )
+    prefix: str = "async " if member.is_async else ""
     return f"""\
-{pad}def {member.name}({", ".join(parameters)}): ...
+{pad}{prefix}def {member.name}({", ".join(parameters)}){returns}: ...
 """
 
 

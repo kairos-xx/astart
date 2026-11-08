@@ -61,17 +61,29 @@ def _runs(*, source: str) -> None:
     )()
 
 
-def test_c1_keyword_colliding_with_generated_names_gets_no_protocol() -> None:
-    """Check that keyword colliding with generated names gets no protocol."""
-    for call in ("x.a(1, arg0=2)", "x.a(self=2)"):
-        result: FixResult = _fix(
-            source=f"""\
+def test_c1_keyword_named_self_gets_no_protocol() -> None:
+    """Check that a ``self`` keyword is unrepresentable, so no protocol."""
+    result: FixResult = _fix(
+        source="""\
 def f(x):
-    return {call}
+    return x.a(self=2)
 """,
-        )
-        compile(source=result.source, filename="m.py", mode="exec")
-        expect_not_in(item="Protocol", container=result.source, message=call)
+    )
+    compile(source=result.source, filename="m.py", mode="exec")
+    expect_not_in(item="Protocol", container=result.source)
+
+
+def test_c1_keyword_colliding_with_positional_gets_safe_names() -> None:
+    """Check that a colliding keyword gets a renamed positional slot."""
+    result: FixResult = _fix(
+        source="""\
+def f(x):
+    return x.a(1, arg0=2)
+""",
+    )
+    compile(source=result.source, filename="m.py", mode="exec")
+    expect_in(item="Protocol", container=result.source)
+    expect_in(item="arg0_1", container=result.source)
 
 
 def test_c2_imports_stay_runtime_correct() -> None:

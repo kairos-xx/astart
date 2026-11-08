@@ -222,3 +222,250 @@ def identity(x):
         ceiling=FixSafety.proven,
     )
     expect_not_in(item="TypeVar", container=result.source)
+
+
+def test_boolop_with_shared_type_still_passes_through() -> None:
+    """Check that ``x or x`` keeps the passthrough type variable."""
+    result: FixResult = _fix(
+        source="""\
+def either(x):
+    return x or x
+""",
+    )
+    expect_in(item="TypeVar", container=result.source)
+    expect_in(item="-> T", container=result.source)
+
+
+def test_boolop_with_mixed_types_stays_refused() -> None:
+    """Check that ``x or 0`` gets no type variable (no shared ``T``)."""
+    result: FixResult = _fix(
+        source="""\
+def either(x):
+    return x or 0
+""",
+    )
+    expect_not_in(item="TypeVar", container=result.source)
+
+
+def test_bound_typevar_for_member_use_and_return() -> None:
+    """Check that ``x.close(); return x`` gets a bound TypeVar."""
+    result: FixResult = _fix(
+        source="""\
+def release(x):
+    x.close()
+    return x
+""",
+    )
+    parse(source=result.source)
+    expect_in(item="bound=", container=result.source)
+    expect_in(item="def release(x: T) -> T:", container=result.source)
+    expect_in(
+        item="class ReleaseXProtocol(Protocol):",
+        container=result.source,
+    )
+
+
+def test_bound_typevar_refuses_ambiguous_member_arity() -> None:
+    """Check that mixed call arities get no bound TypeVar."""
+    result: FixResult = _fix(
+        source="""\
+def write(x, flag):
+    x.write(1)
+    if flag:
+        x.write(1, 2)
+    return x
+""",
+    )
+    expect_not_in(item="bound=", container=result.source)
+
+
+def test_constrained_typevar_for_isinstance_branches() -> None:
+    """Check that isinstance-guarded returns get a constrained TypeVar."""
+    result: FixResult = _fix(
+        source="""\
+def convert(x):
+    if isinstance(x, int):
+        return x
+    if isinstance(x, str):
+        return x
+    raise ValueError
+""",
+    )
+    parse(source=result.source)
+    expect_in(
+        item='TypeVar("T", int, str)',
+        container=result.source.replace("'", '"'),
+    )
+    expect_in(item="def convert(x: T) -> T:", container=result.source)
+
+
+def test_constrained_typevar_refuses_unguarded_return() -> None:
+    """Check that an isinstance ``else`` return gets no constraint."""
+    result: FixResult = _fix(
+        source="""\
+def convert(x):
+    if isinstance(x, int):
+        return x
+    else:
+        return x
+    raise ValueError
+""",
+    )
+    expect_not_in(item="TypeVar(", container=result.source)
+
+
+def test_constrained_typevar_refuses_bare_fallthrough_none() -> None:
+    """Check that fallthrough still annotates ``T | None``."""
+    result: FixResult = _fix(
+        source="""\
+def convert(x):
+    if isinstance(x, int):
+        return x
+    if isinstance(x, str):
+        return x
+""",
+    )
+    parse(source=result.source)
+    expect_in(item="-> T | None:", container=result.source)
+
+
+def test_element_subscript_gets_sequence_parameter() -> None:
+    """Check that ``items[0]`` gets ``Sequence[T]`` and ``-> T``."""
+    result: FixResult = _fix(
+        source="""\
+def first(items):
+    return items[0]
+""",
+    )
+    parse(source=result.source)
+    expect_in(
+        item="from collections.abc import Sequence",
+        container=result.source,
+    )
+    expect_in(
+        item="def first(items: Sequence[T]) -> T:",
+        container=result.source,
+    )
+
+
+def test_element_constructor_gets_iterable_parameter() -> None:
+    """Check that ``list(it)`` gets ``Iterable[T]`` and ``-> list[T]``."""
+    result: FixResult = _fix(
+        source="""\
+def snapshot(it):
+    return list(it)
+""",
+    )
+    parse(source=result.source)
+    expect_in(
+        item="from collections.abc import Iterable",
+        container=result.source,
+    )
+    expect_in(
+        item="def snapshot(it: Iterable[T]) -> list[T]:",
+        container=result.source,
+    )
+
+
+def test_element_constructor_tuple_is_variadic() -> None:
+    """Check that ``tuple(it)`` spells ``tuple[T, ...]``."""
+    result: FixResult = _fix(
+        source="""\
+def snapshot(it):
+    return tuple(it)
+""",
+    )
+    expect_in(item="-> tuple[T, ...]:", container=result.source)
+
+
+def test_element_refuses_string_subscript() -> None:
+    """Check that ``items['k']`` gets no element annotation."""
+    result: FixResult = _fix(
+        source="""\
+def lookup(items):
+    return items["k"]
+""",
+    )
+    expect_not_in(item="Sequence", container=result.source)
+
+
+def test_self_return_gets_self_annotation() -> None:
+    """Check that ``return self`` gets ``-> Self``."""
+    result: FixResult = _fix(
+        source="""\
+class Box:
+    def copy(self):
+        return self
+""",
+    )
+    parse(source=result.source)
+    expect_in(item="from typing import Self", container=result.source)
+    expect_in(item="def copy(self) -> Self:", container=result.source)
+
+
+def test_classmethod_constructor_gets_self_annotation() -> None:
+    """Check that ``return cls()`` gets ``-> Self``."""
+    result: FixResult = _fix(
+        source="""\
+class Box:
+    @classmethod
+    def create(cls):
+        return cls()
+""",
+    )
+    parse(source=result.source)
+    expect_in(item="def create(cls) -> Self:", container=result.source)
+
+
+def test_self_refuses_other_receiver_uses() -> None:
+    """Check that ``self.x = 1; return self`` gets no ``Self``."""
+    result: FixResult = _fix(
+        source="""\
+class Box:
+    def fill(self):
+        self.value = 1
+        return self
+""",
+    )
+    expect_not_in(item="-> Self", container=result.source)
+
+
+def test_multi_parameter_list_gets_union_return() -> None:
+    """Check that ``[a, b]`` gets two TypeVars and ``list[T | T2]``."""
+    result: FixResult = _fix(
+        source="""\
+def pair(a, b):
+    return [a, b]
+""",
+    )
+    parse(source=result.source)
+    expect_in(
+        item="def pair(a: T, b: T2) -> list[T | T2]:",
+        container=result.source,
+    )
+
+
+def test_multi_parameter_dict_gets_key_value_variables() -> None:
+    """Check that ``{k: v}`` gets ``dict[T, T2]``."""
+    result: FixResult = _fix(
+        source="""\
+def make(k, v):
+    return {k: v}
+""",
+    )
+    parse(source=result.source)
+    expect_in(
+        item="def make(k: T, v: T2) -> dict[T, T2]:",
+        container=result.source,
+    )
+
+
+def test_multi_parameter_refuses_nested_containers() -> None:
+    """Check that ``[[a], b]`` gets no multi-variable annotation."""
+    result: FixResult = _fix(
+        source="""\
+def nested(a, b):
+    return [[a], b]
+""",
+    )
+    expect_not_in(item="TypeVar", container=result.source)

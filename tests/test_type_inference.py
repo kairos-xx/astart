@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ast import Name, arg, walk
+from ast import Attribute, Call, Load, Name, arg, walk
 from typing import TYPE_CHECKING, Final, final
 
 import pytest
@@ -111,7 +111,14 @@ a = 1.0""",
         ("a = {'a': 2}", "a", "dict[str, int]"),
         ("a = True if flag else 2", "a", "int"),
         ("a = (1, 'a')", "a", "tuple[int | str]"),
-        ("a = set([1])", "a", "set[Unknown]"),
+        ("a = set([1])", "a", "set[int]"),
+        ("d = {'a': 1}\na = list(d)", "a", "list[str]"),
+        ("d = {'a': 1}\na = set(d)", "a", "set[str]"),
+        ("d = {'a': 1}\na = dict(d)", "a", "dict[str, int]"),
+        ("a = list('ab')", "a", "list[str]"),
+        ("a = list(b'ab')", "a", "list[int]"),
+        ("a = 'abc'\nb = a[0]", "b", "str"),
+        ("a = b'ab'\nb = a[0]", "b", "int"),
     ],
 )
 def test_inferred_type_examples(
@@ -505,3 +512,115 @@ a = 'old'
             "str" not in item.description for item in current.evidence
         ),
     )
+
+
+def test_imported_constructor_types_call_and_arguments() -> None:
+    """Imported constructors type their result and their arguments.
+
+    ``Path(p)`` and ``UUID(hex=u)`` resolve through curated signatures, so
+    the call yields the constructor type and each argument picks up the
+    declared parameter type as backward evidence.
+    """
+    tree: CommentedModule = CommentedModule.parse(
+        source="""\
+from pathlib import Path
+from uuid import UUID
+
+def f(p, u):
+    q = Path(p)
+    r = UUID(hex=u)
+    return q, r
+""",
+    )
+    parameters: dict[str, arg] = {
+        node.arg: node for node in walk(node=tree) if isinstance(node, arg)
+    }
+    calls: dict[str, Call] = {}
+    for node in walk(node=tree):
+        if isinstance(node, Call) and isinstance(node.func, Name):
+            calls[node.func.id] = node
+    expect_equal(
+        actual=str(object=tree.infer_type(node=calls["Path"]).inferred),
+        expected="Path",
+    )
+    expect_equal(
+        actual=str(object=tree.infer_type(node=calls["UUID"]).inferred),
+        expected="UUID",
+    )
+    expect_equal(
+        actual=str(object=tree.infer_type(node=parameters["p"]).inferred),
+        expected="PathLike[str] | str",
+    )
+    expect_equal(
+        actual=str(object=tree.infer_type(node=parameters["u"]).inferred),
+        expected="str | None",
+    )
+
+
+def test_imported_constructor_rebound_name_stays_unknown() -> None:
+    """A rebound import loses its constructor contract."""
+    tree: CommentedModule = CommentedModule.parse(
+        source="""\
+from pathlib import Path
+Path = str
+
+x = Path("a")
+""",
+    )
+    expect_equal(
+        actual=str(object=tree.infer_type(node="x").inferred),
+        expected="Unknown",
+    )
+
+
+def test_imported_constructor_local_shadow_wins() -> None:
+    """A local callable with the same name keeps its own contract."""
+    tree: CommentedModule = CommentedModule.parse(
+        source="""\
+def Path(x):
+    return x
+
+y = Path(1)
+""",
+    )
+    expect_equal(
+        actual=str(object=tree.infer_type(node="y").inferred),
+        expected="int",
+    )
+
+
+def test_self_attribute_reads_resolve_members_and_writes() -> None:
+    """``self.attr`` reads see class members and recorded ``self`` writes."""
+    tree: CommentedModule = CommentedModule.parse(
+        source="""\
+class C:
+    count: int = 0
+    name = "x"
+
+    def __init__(self, v: int):
+        self.total = v
+        self.label: str = "t"
+
+    def get(self):
+        return self.count, self.name, self.total, self.label, self.missing
+""",
+    )
+    reads: dict[str, Attribute] = {
+        node.attr: node
+        for node in walk(node=tree)
+        if isinstance(node, Attribute)
+        and isinstance(node.value, Name)
+        and node.value.id == "self"
+        and isinstance(node.ctx, Load)
+    }
+    for attr, expected in (
+        ("count", "int"),
+        ("name", "str"),
+        ("total", "int"),
+        ("label", "str"),
+        ("missing", "Unknown"),
+    ):
+        expect_equal(
+            actual=str(object=tree.infer_type(node=reads[attr]).inferred),
+            expected=expected,
+        )

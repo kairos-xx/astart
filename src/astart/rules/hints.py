@@ -49,20 +49,32 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Final, Self, final
 
+from astart.rules.attributes import (
+    Attributes,
+    Scope,
+    attribute_annotations,
+    receiver_of,
+)
 from astart.rules.imports import Constants as ImportConstants
 from astart.rules.imports import bound_names
+from astart.rules.methods import MethodIndex
 from astart.rules.provable import (
     expression_type,
+    module_constants,
     never_returns,
-    provable_return,
+    own_calls,
+    provable_return_detail,
+    scope_types,
 )
+from astart.rules.reasons import Rejection
 from astart.rules.resolve import CallBindings, binding_counts
 from astart.semantic import ArgumentOrigin
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterator, Mapping
 
     from astart import BoundArgument, BoundCall, CommentedModule
+    from astart.semantic.graph_conversion import GraphAnnotation
 type Function = FunctionDef | AsyncFunctionDef
 
 
@@ -74,6 +86,14 @@ class HintBasis(StrEnum):
         default_literal: The default value's literal type agrees.
         call_sites: Every in-module call site agrees.
         derived_return: The return type depends only on typed names.
+        syntax_proven: The return type is guaranteed by the language itself,
+            whatever the types of the parameters.
+        optional_default: The parameter defaults to ``None`` and every call
+            site that passes a value proves the same type.
+        attribute_assignments: Every write to an instance attribute proves
+            the same type.
+        protocol_result: A protocol dunder (``__exit__``, ``__len__``, …)
+            whose body is consistent with the type the protocol declares.
 
     """
 
@@ -81,6 +101,10 @@ class HintBasis(StrEnum):
     default_literal = "default_literal"
     call_sites = "call_sites"
     derived_return = "derived_return"
+    syntax_proven = "syntax_proven"
+    optional_default = "optional_default"
+    protocol_result = "protocol_result"
+    attribute_assignments = "attribute_assignments"
 
 
 @final
@@ -103,6 +127,14 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
+        protocol_results: Result type each protocol dunder must declare.
+        variadic_origins: Origins of arguments bound to ``*args``/``**kwargs``.
+        propagation_passes: Most times accepted parameter hints are fed back
+            into call-site evidence before the index is final.
+        shape_specific: Prefix of types that describe one literal's exact
+            shape (a tuple's length), which says nothing about other callers.
+        inference_errors: Failures of the inference layer that are contained:
+            the module simply gets no inferred candidates.
         builtin_names: Grouped module constant.
         banned_names: Grouped module constant.
         scalar_types: Grouped module constant.
@@ -114,6 +146,33 @@ class Constants:
 
     """
 
+    protocol_results: Final[dict[str, str]] = {
+        "__aexit__": "bool | None",
+        "__bool__": "bool",
+        "__contains__": "bool",
+        "__exit__": "bool | None",
+        "__float__": "float",
+        "__format__": "str",
+        "__hash__": "int",
+        "__index__": "int",
+        "__int__": "int",
+        "__len__": "int",
+        "__repr__": "str",
+        "__str__": "str",
+    }
+    variadic_origins: Final[frozenset[ArgumentOrigin]] = frozenset(
+        {ArgumentOrigin.VAR_POSITIONAL, ArgumentOrigin.VAR_KEYWORD},
+    )
+    propagation_passes: Final[int] = 12
+    shape_specific: Final[str] = "tuple["
+    inference_errors: Final[tuple[type[Exception], ...]] = (
+        AttributeError,
+        IndexError,
+        KeyError,
+        RecursionError,
+        TypeError,
+        ValueError,
+    )
     builtin_names: Final[frozenset[str]] = frozenset(
         {
             "bool",
@@ -388,7 +447,10 @@ def _is_generator(*, function: Function) -> bool:
 
 
 def returns_nothing(*, function: Function) -> bool:
-    """Prove that a function always returns ``None``.
+    """Prove that a function always returns ``None``, as its own contract.
+
+    Protocol dunders such as ``__exit__`` are excluded: their declared result
+    is wider than what their body returns (``bool | None``).
 
     Args:
         function: Function definition.
@@ -396,6 +458,22 @@ def returns_nothing(*, function: Function) -> bool:
     Returns:
         Whether it has no returned value, does not yield, and is not a
         declaration (overload, abstract method or stub body).
+
+    """
+    return function.name not in Constants.protocol_results and (
+        _body_returns_nothing(function=function)
+    )
+
+
+def _body_returns_nothing(*, function: Function) -> bool:
+    """Prove that a function body returns nothing.
+
+    Args:
+        function: Function definition.
+
+    Returns:
+        Whether it has no returned value, does not yield, never only raises,
+        and is not a declaration.
 
     """
     return not (
@@ -540,6 +618,27 @@ def tainted_names(
 
 @final
 @dataclass(frozen=True, slots=True)
+class _Judging:
+    """What a parameter-judging pass needs besides the call sites.
+
+    Attributes:
+        candidates: Proposed annotation sources by node identity.
+        known: Names a new annotation may use.
+        escaped: Names of functions used as values.
+        counts: Module binding counts.
+        constants: Types of the module's constants, for typing defaults.
+
+    """
+
+    candidates: dict[Key, str]
+    known: frozenset[str]
+    escaped: frozenset[str]
+    counts: dict[str, int]
+    constants: dict[str, str]
+
+
+@final
+@dataclass(frozen=True, slots=True)
 class _Site:
     """What one direct call shows about one parameter.
 
@@ -566,11 +665,14 @@ class _Evidence:
             definite, and its rendered spellings.
         escaped: Whether the function is also used as a value (aliased,
             passed as a callback, stored), so its callers cannot be known.
+        default_type: Scalar type the syntax of a non-literal default proves
+            (``-1``, a constant's name), else ``None``.
 
     """
 
     sites: list[_Site]
     escaped: bool
+    default_type: str | None = None
 
 
 def _escaped_names(*, module: Module) -> frozenset[str]:
@@ -616,6 +718,8 @@ class HintIndex:
         """
         self._hints: dict[Key, Hint] = hints
         self._rejections: dict[Key, str] = rejections
+        self._accepted: dict[int, dict[str, str]] = {}
+        self._attribute_types: dict[int, dict[str, str]] = {}
 
     @classmethod
     def create(
@@ -644,6 +748,7 @@ class HintIndex:
             candidates = _candidates(module=module, stubs_path=stubs_path)
         index: Self = cls(hints={}, rejections={})
         index.judge_parameters(module=module, candidates=candidates)
+        index.judge_attributes(module=module)
         index.judge_returns(
             module=module,
             candidates=candidates,
@@ -693,6 +798,13 @@ class HintIndex:
         known: frozenset[str] = _imported_names(module=module) | _importable(
             module=module,
         )
+        owners: dict[int, ClassDef] = {
+            id(item): cls
+            for cls in walk(node=module)
+            if isinstance(cls, ClassDef)
+            for item in cls.body
+            if isinstance(item, (FunctionDef, AsyncFunctionDef))
+        }
         for function in walk(node=module):
             if (
                 not isinstance(
@@ -703,6 +815,13 @@ class HintIndex:
             ):
                 continue
             key: Key = _key(node=function)
+            if function.name in Constants.protocol_results:
+                self._judge_protocol_result(
+                    function=function,
+                    counts=counts,
+                    key=key,
+                )
+                continue
             if returns_nothing(function=function):
                 self._hints[key] = Hint(
                     source="None",
@@ -710,15 +829,89 @@ class HintIndex:
                 )
                 continue
             if is_declaration(function=function):
-                self._rejections[key] = "declaration body"
+                self._rejections[key] = Rejection.declaration_body
             elif _is_generator(function=function):
-                self._rejections[key] = "generator"
+                self._rejections[key] = Rejection.generator
             else:
                 self._judge_derived(
                     function=function,
                     candidate=candidates.get(key),
                     known=known,
                     counts=counts,
+                    owner=owners.get(id(function)),
+                )
+
+    def _judge_protocol_result(
+        self,
+        *,
+        function: Function,
+        counts: dict[str, int],
+        key: Key,
+    ) -> None:
+        """Give a protocol dunder its declared result when the body fits.
+
+        Args:
+            function: A dunder listed in ``Constants.protocol_results``.
+            counts: Module binding counts.
+            key: Function node key.
+
+        """
+        declared: str = Constants.protocol_results[function.name]
+        allowed: set[str] = set(declared.split(sep=" | "))
+        if is_declaration(function=function) or _is_generator(
+            function=function,
+        ):
+            self._rejections[key] = Rejection.declaration_body
+            return
+        if "None" in allowed and _body_returns_nothing(function=function):
+            fits: bool = True
+        else:
+            proved: str | None = provable_return_detail(
+                function=function,
+                known_types={},
+                counts=counts,
+            )[0]
+            fits = (
+                proved is not None and set(proved.split(sep=" | ")) <= allowed
+            )
+        if fits:
+            self._hints[key] = Hint(
+                source=declared,
+                basis=HintBasis.protocol_result,
+            )
+        else:
+            self._rejections[key] = Rejection.protocol_mismatch
+
+    def judge_attributes(self, *, module: CommentedModule) -> None:
+        """Accept an annotation for each instance attribute whose writes agree.
+
+        Args:
+            module: Parsed module.
+
+        """
+        counts: dict[str, int] = binding_counts(module=module)
+        found: Attributes = attribute_annotations(
+            scope=Scope(
+                module=module,
+                counts=counts,
+                constants=module_constants(module=module, counts=counts),
+                accepted=self._accepted,
+                index=MethodIndex(module=module, counts=counts),
+            ),
+        )
+        known: frozenset[str] = _imported_names(module=module) | _importable(
+            module=module,
+        )
+        self._attribute_types = found.types
+        for node in walk(node=module):
+            source: str | None = found.annotations.get(id(node))
+            if source is not None and is_allowed_source(
+                source=source,
+                known_names=known,
+            ):
+                self._hints[_key(node=node)] = Hint(
+                    source=source,
+                    basis=HintBasis.attribute_assignments,
                 )
 
     def judge_parameters(
@@ -737,8 +930,57 @@ class HintIndex:
         known: frozenset[str] = _imported_names(module=module) | _importable(
             module=module,
         )
-        sites: dict[tuple[int, str], list[_Site]] = _call_sites(module=module)
+        counts: dict[str, int] = binding_counts(module=module)
+        bindings: CallBindings = CallBindings(module=module, counts=counts)
         escaped: frozenset[str] = _escaped_names(module=module)
+        constants: dict[str, str] = module_constants(
+            module=module,
+            counts=counts,
+        )
+        accepted: dict[int, dict[str, str]] = self._accepted
+        for _pass in range(Constants.propagation_passes):
+            sites: dict[tuple[int, str], list[_Site]] = _call_sites(
+                module=module,
+                counts=counts,
+                bindings=bindings,
+                accepted=accepted,
+            )
+            if not self._judge_pass(
+                module=module,
+                context=_Judging(
+                    candidates=candidates,
+                    known=known,
+                    escaped=escaped,
+                    counts=counts,
+                    constants=constants,
+                ),
+                sites=sites,
+                accepted=accepted,
+            ):
+                break
+
+    def _judge_pass(
+        self,
+        *,
+        module: CommentedModule,
+        context: _Judging,
+        sites: dict[tuple[int, str], list[_Site]],
+        accepted: dict[int, dict[str, str]],
+    ) -> bool:
+        """Judge every parameter not yet hinted, once.
+
+        Args:
+            module: Parsed module.
+            context: Candidates, importable names and escaped functions.
+            sites: Call-site evidence by function identity and parameter.
+            accepted: Accepted hint sources by function identity and
+                parameter name, extended in place.
+
+        Returns:
+            Whether any parameter gained a hint in this pass.
+
+        """
+        gained: bool = False
         for function in walk(node=module):
             if not isinstance(
                 function,
@@ -748,20 +990,71 @@ class HintIndex:
             for position, (parameter, default) in enumerate(
                 iterable=_parameters(function=function),
             ):
-                if parameter.annotation is not None:
+                key: Key = _key(node=parameter)
+                if parameter.annotation is not None or key in self._hints:
                     continue
                 if position == 0 and parameter.arg in Constants.skipped_names:
                     continue
                 self._judge(
                     parameter=parameter,
                     default=default,
-                    candidate=candidates.get(_key(node=parameter)),
+                    candidate=context.candidates.get(key),
                     evidence=_Evidence(
                         sites=sites.get((id(function), parameter.arg), []),
-                        escaped=function.name in escaped,
+                        escaped=function.name in context.escaped,
+                        default_type=_default_type(
+                            default=default,
+                            context=context,
+                        ),
                     ),
-                    known=known,
+                    known=context.known,
                 )
+                hint: Hint | None = self._hints.get(key)
+                if hint is not None:
+                    accepted.setdefault(id(function), {})[parameter.arg] = (
+                        hint.source
+                    )
+                    gained = True
+            self._judge_variadics(
+                function=function,
+                context=context,
+                sites=sites,
+            )
+        return gained
+
+    def _judge_variadics(
+        self,
+        *,
+        function: Function,
+        context: _Judging,
+        sites: dict[tuple[int, str], list[_Site]],
+    ) -> None:
+        """Judge ``*args`` and ``**kwargs`` from what callers pass.
+
+        Only call-site evidence is used: an inferred candidate describes the
+        tuple or dict the name is bound to, not the element type annotated.
+        The hint is not fed back as the name's type for the same reason.
+
+        Args:
+            function: Function definition.
+            context: Importable names and escaped functions.
+            sites: Call-site evidence by function identity and parameter.
+
+        """
+        for parameter in _variadics(function=function):
+            key: Key = _key(node=parameter)
+            if parameter.annotation is not None or key in self._hints:
+                continue
+            self._judge(
+                parameter=parameter,
+                default=None,
+                candidate=None,
+                evidence=_Evidence(
+                    sites=sites.get((id(function), parameter.arg), []),
+                    escaped=function.name in context.escaped,
+                ),
+                known=context.known,
+            )
 
     def _accepted_parameters(self, *, function: Function) -> frozenset[str]:
         """List the parameters of a function that have an accepted hint.
@@ -780,6 +1073,36 @@ class HintIndex:
                 if self.hint_for(node=parameter) is not None
             ),
         )
+
+    def _trusted_receiver(
+        self,
+        *,
+        function: Function,
+        owner: ClassDef | None,
+    ) -> str | None:
+        """Name the receiver whose attribute reads the class table types.
+
+        The receiver is trusted only while nothing in the method rebinds it.
+
+        Args:
+            function: Method definition.
+            owner: Class the method belongs to, if any.
+
+        Returns:
+            The receiver name, or ``None`` when the table does not apply.
+
+        """
+        if owner is None or id(owner) not in self._attribute_types:
+            return None
+        receiver: str | None = receiver_of(function=function)
+        if receiver is None or any(
+            isinstance(node, Name)
+            and node.id == receiver
+            and not isinstance(node.ctx, Load)
+            for node in own_nodes(function=function)
+        ):
+            return None
+        return receiver
 
     def _known_types(self, *, function: Function) -> dict[str, str]:
         """Collect the types of a function's parameters.
@@ -810,6 +1133,7 @@ class HintIndex:
         candidate: str | None,
         known: frozenset[str],
         counts: dict[str, int],
+        owner: ClassDef | None,
     ) -> None:
         """Decide a derived return hint.
 
@@ -818,34 +1142,68 @@ class HintIndex:
             candidate: Proposed annotation source, if any.
             known: Names a new annotation may use.
             counts: Module binding counts.
+            owner: Class the function is a method of, if any.
 
         """
         key: Key = _key(node=function)
-        origins: dict[str, str] = _taint_origins(
+        types: dict[str, str] = self._known_types(function=function)
+        accepted: frozenset[str] = self._accepted_parameters(function=function)
+        receiver: str | None = self._trusted_receiver(
             function=function,
-            accepted=self._accepted_parameters(function=function),
+            owner=owner,
         )
-        for value in _value_returns(function=function):
-            origin: str | None = _mentions(node=value, names=origins)
-            if origin is not None:
-                self._rejections[key] = f"tainted by parameter {origin}"
-                return
-        proved: str | None = provable_return(
+        if receiver is not None and owner is not None:
+            types.update(
+                {
+                    f"{receiver}.{name}": kind
+                    for name, kind in self._attribute_types[id(owner)].items()
+                },
+            )
+            accepted = accepted | {receiver}
+        proved, guaranteed = provable_return_detail(
             function=function,
-            known_types=self._known_types(function=function),
+            known_types=types,
             counts=counts,
         )
+        origins: dict[str, str] = _taint_origins(
+            function=function,
+            accepted=accepted,
+        )
+        tainted: str | None = next(
+            (
+                found
+                for value in _value_returns(function=function)
+                if (found := _mentions(node=value, names=origins)) is not None
+            ),
+            None,
+        )
         if proved is None:
-            self._rejections[key] = "return type not provable"
+            self._rejections[key] = (
+                Rejection.not_provable
+                if tainted is None
+                else f"{Rejection.tainted} {tainted}"
+            )
             return
         if not is_allowed_source(source=proved, known_names=known):
-            self._rejections[key] = "needs import or unknown name"
+            self._rejections[key] = Rejection.needs_import
+            return
+        if guaranteed:
+            self._hints[key] = Hint(
+                source=proved,
+                basis=HintBasis.syntax_proven,
+            )
+            return
+        if tainted is not None:
+            self._rejections[key] = f"{Rejection.tainted} {tainted}"
             return
         if candidate is None:
-            self._rejections[key] = "no candidate"
+            self._rejections[key] = Rejection.no_candidate
             return
-        if candidate != proved:
-            self._rejections[key] = "engine disagrees"
+        if candidate != proved and not (
+            receiver is not None
+            and _drops_none(candidate=candidate, proved=proved)
+        ):
+            self._rejections[key] = Rejection.engine_disagrees
             return
         self._hints[key] = Hint(source=proved, basis=HintBasis.derived_return)
 
@@ -864,24 +1222,25 @@ class HintIndex:
             parameter: Parameter node.
             default: Default value expression, if any.
             candidate: Proposed annotation source, if any.
+
             evidence: What the module shows about the parameter's callers.
             known: Names a new annotation may use.
 
         """
         key: Key = _key(node=parameter)
         if isinstance(default, Constant) and default.value is None:
-            self._rejections[key] = "None default"
+            self._judge_optional(key=key, evidence=evidence, known=known)
             return
         if candidate is None:
             candidate = _proven_site_type(evidence=evidence)
         if candidate is None:
-            self._rejections[key] = "no candidate"
+            self._rejections[key] = Rejection.no_candidate
             return
         if not is_allowed_source(source=candidate, known_names=known):
             reason: str = (
-                "contains object"
+                Rejection.contains_object
                 if any(name in candidate for name in Constants.banned_names)
-                else "needs import or unknown name"
+                else Rejection.needs_import
             )
             self._rejections[key] = reason
             return
@@ -889,7 +1248,7 @@ class HintIndex:
             type(default.value).__name__
             if isinstance(default, Constant)
             and type(default.value).__name__ in Constants.scalar_types
-            else None
+            else evidence.default_type
         )
         if literal is not None:
             if literal == candidate:
@@ -898,9 +1257,53 @@ class HintIndex:
                     basis=HintBasis.default_literal,
                 )
             else:
-                self._rejections[key] = "default disagrees"
+                self._rejections[key] = Rejection.default_disagrees
             return
         self._judge_call_sites(key=key, candidate=candidate, evidence=evidence)
+
+    def _judge_optional(
+        self,
+        *,
+        key: Key,
+        evidence: _Evidence,
+        known: frozenset[str],
+    ) -> None:
+        """Decide a parameter whose default is ``None``.
+
+        The type is ``T | None`` when every call site that passes a value
+        proves the same ``T`` from the syntax of its argument, and at least
+        one site passes a value. Sites that pass ``None`` add nothing.
+
+        Args:
+            key: Parameter node key.
+            evidence: What the module shows about the parameter's callers.
+            known: Names a new annotation may use.
+
+        """
+        if evidence.escaped:
+            self._rejections[key] = Rejection.escapes
+            return
+        passed: set[str] = set()
+        for site in evidence.sites:
+            if not (site.proven and len(site.types) == 1):
+                self._rejections[key] = Rejection.call_sites_unknown
+                return
+            if site.types[0] != "None":
+                passed.add(site.types[0])
+        if not passed:
+            self._rejections[key] = Rejection.none_default
+            return
+        if len(passed) != 1:
+            self._rejections[key] = Rejection.call_sites_disagree
+            return
+        source: str = f"{next(iter(passed))} | None"
+        if not is_allowed_source(source=source, known_names=known):
+            self._rejections[key] = Rejection.needs_import
+            return
+        self._hints[key] = Hint(
+            source=source,
+            basis=HintBasis.optional_default,
+        )
 
     def _judge_call_sites(
         self,
@@ -918,16 +1321,16 @@ class HintIndex:
 
         """
         if evidence.escaped:
-            self._rejections[key] = "escapes as a value"
+            self._rejections[key] = Rejection.escapes
             return
         if not evidence.sites:
-            self._rejections[key] = "uncorroborated"
+            self._rejections[key] = Rejection.uncorroborated
             return
         if any(
             (not site.definite or len(site.types) != 1)
             for site in evidence.sites
         ):
-            self._rejections[key] = "call sites unknown"
+            self._rejections[key] = Rejection.call_sites_unknown
             return
         seen: set[str] = {site.types[0] for site in evidence.sites}
         if seen == {candidate}:
@@ -936,7 +1339,7 @@ class HintIndex:
                 basis=HintBasis.call_sites,
             )
         else:
-            self._rejections[key] = "call sites disagree"
+            self._rejections[key] = Rejection.call_sites_disagree
 
 
 def _candidates(
@@ -954,12 +1357,16 @@ def _candidates(
         Proposed annotation sources by target node position.
 
     """
-    return {
-        _key(node=proposal.target): proposal.source
-        for proposal in module.convert(
+    try:
+        proposals: tuple[GraphAnnotation, ...] = module.convert(
             stubs_path=stubs_path,
             apply=False,
         ).proposals
+    except Constants.inference_errors:
+        return {}
+    return {
+        _key(node=proposal.target): proposal.source
+        for proposal in proposals
         if proposal.role in Constants.proposal_roles
     }
 
@@ -988,47 +1395,136 @@ def _argument_evidence(
     *,
     argument: BoundArgument,
     counts: dict[str, int],
+    env: Mapping[str, str],
 ) -> _Site:
     """Turn one bound argument into call-site evidence.
 
-    The analyzer's type is cross-checked against what the argument
-    expression's syntax proves; a disagreement makes the evidence unknown.
-    When the analyzer cannot type the argument but the syntax can, the
-    syntax-proven type is evidence on its own.
+    Only what the argument expression's syntax proves counts. The analyzer's
+    own type for the argument is not independent evidence (it comes from the
+    same inference that proposes the candidates, and is wrong in cases like
+    ``True + True``), so it is not consulted.
 
     Args:
         argument: Bound argument of a direct call.
         counts: Module binding counts.
+        env: Types of the names visible at the call, from its scope.
 
     Returns:
         The site's trust, rendered spellings, and whether syntax proves them.
 
     """
     proofs: set[str | None] = {
-        expression_type(node=value, counts=counts) for value in argument.values
+        expression_type(node=value, counts=counts, env=env)
+        for value in argument.values
     }
     syntax: str | None = (
         next(iter(proofs))
         if argument.values and len(proofs) == 1 and None not in proofs
         else None
     )
-    types: tuple[str, ...] = tuple(str(object=t) for t in argument.types)
-    if not argument.definite or any("Unknown" in spelled for spelled in types):
-        if syntax is None:
-            return _Site(definite=False, types=())
-        return _Site(definite=True, types=(syntax,), proven=True)
-    if len(types) == 1 and syntax is not None and syntax != types[0]:
+    if syntax is None or syntax.startswith(Constants.shape_specific):
         return _Site(definite=False, types=())
-    return _Site(
-        definite=True,
-        types=types,
-        proven=syntax is not None and types == (syntax,),
+    return _Site(definite=True, types=(syntax,), proven=True)
+
+
+def _drops_none(*, candidate: str, proved: str) -> bool:
+    """Tell whether the inference candidate is the proof minus ``None``.
+
+    The inference layer reports the non-``None`` part of an attribute that
+    starts out ``None``; the class's own writes show the ``None`` too.
+
+    Args:
+        candidate: Inference candidate source.
+        proved: Syntax-proven source.
+
+    Returns:
+        ``True`` when both name the same types apart from ``None``.
+
+    """
+    kept: set[str] = set(proved.split(sep=" | ")) - {"None"}
+    return kept == set(candidate.split(sep=" | ")) and kept != set()
+
+
+def _default_type(*, default: expr | None, context: _Judging) -> str | None:
+    """Prove the scalar type of a non-literal default expression.
+
+    Args:
+        default: Default value expression, if any.
+        context: Binding counts and module constants.
+
+    Returns:
+        ``int``, ``str``, ``float``, ``bool`` or ``bytes`` when the syntax
+        guarantees it, else ``None``.
+
+    """
+    if default is None or isinstance(default, Constant):
+        return None
+    proven: str | None = expression_type(
+        node=default,
+        counts=context.counts,
+        env=context.constants,
     )
+    return proven if proven in Constants.scalar_types else None
+
+
+def _variadics(*, function: Function) -> list[arg]:
+    """List a function's ``*args`` and ``**kwargs`` parameters.
+
+    Args:
+        function: Function definition.
+
+    Returns:
+        The variadic parameters that exist, positional one first.
+
+    """
+    arguments: arguments = function.args
+    return [
+        item
+        for item in (arguments.vararg, arguments.kwarg)
+        if item is not None
+    ]
+
+
+def _bound_evidence(
+    *,
+    argument: BoundArgument,
+    counts: dict[str, int],
+    env: Mapping[str, str],
+) -> _Site | None:
+    """Turn one bound argument into evidence for its parameter, if any.
+
+    An argument that the binder could not resolve (``f(*xs)``) is unknown
+    evidence, never absence. A variadic parameter that received nothing
+    carries no evidence either way.
+
+    Args:
+        argument: Bound argument of a direct call.
+        counts: Module binding counts.
+        env: Types of the names visible at the call, from its scope.
+
+    Returns:
+        The site, or ``None`` when the argument says nothing.
+
+    """
+    origin: ArgumentOrigin = argument.origin
+    if origin in Constants.variadic_origins:
+        if not argument.definite:
+            return _Site(definite=False, types=())
+        if not argument.values:
+            return None
+    elif origin is ArgumentOrigin.EXPANSION_UNKNOWN:
+        return _Site(definite=False, types=())
+    elif origin not in (ArgumentOrigin.POSITIONAL, ArgumentOrigin.KEYWORD):
+        return None
+    return _argument_evidence(argument=argument, counts=counts, env=env)
 
 
 def _call_sites(
     *,
     module: CommentedModule,
+    counts: dict[str, int],
+    bindings: CallBindings,
+    accepted: Mapping[int, Mapping[str, str]],
 ) -> dict[tuple[int, str], list[_Site]]:
     """Index argument types by callee definition and parameter name.
 
@@ -1038,14 +1534,16 @@ def _call_sites(
 
     Args:
         module: Parsed module.
+        counts: Module binding counts.
+        bindings: Trusted call bindings of the module.
+        accepted: Hints already accepted for parameters, by function identity
+            and parameter name; they type the names callers pass on.
 
     Returns:
         For each (definition identity, parameter name), one entry per call
         site: whether the type is trustworthy and its rendered spellings.
 
     """
-    counts: dict[str, int] = binding_counts(module=module)
-    bindings: CallBindings = CallBindings(module=module, counts=counts)
     functions: dict[str, Function] = {
         node.name: node
         for node in walk(node=module)
@@ -1053,23 +1551,44 @@ def _call_sites(
         and counts.get(node.name, 0) == 1
     }
     index: dict[tuple[int, str], list[_Site]] = {}
+    constants: dict[str, str] = module_constants(module=module, counts=counts)
+    scopes: dict[int, Function] = {
+        id(inner): function
+        for function in walk(node=module)
+        if isinstance(function, (FunctionDef, AsyncFunctionDef))
+        for inner in own_calls(function=function)
+    }
+    envs: dict[int, dict[str, str]] = {}
     for call in walk(node=module):
         if not isinstance(call, Call):
             continue
+        scope: Function | None = scopes.get(id(call))
+        if scope is None:
+            env: dict[str, str] = constants
+        else:
+            env = envs.setdefault(
+                id(scope),
+                scope_types(
+                    function=scope,
+                    counts=counts,
+                    constants=constants,
+                    declared=accepted.get(id(scope)),
+                ),
+            )
         bound: BoundCall | None = bindings.get(call=call)
         if bound is not None and bound.signature.declaration is not None:
             owner: int = id(bound.signature.declaration)
             for argument in bound.arguments:
-                if argument.origin in (
-                    ArgumentOrigin.POSITIONAL,
-                    ArgumentOrigin.KEYWORD,
-                ):
+                site: _Site | None = _bound_evidence(
+                    argument=argument,
+                    counts=counts,
+                    env=env,
+                )
+                if site is not None:
                     index.setdefault(
                         (owner, argument.parameter.name),
                         [],
-                    ).append(
-                        _argument_evidence(argument=argument, counts=counts),
-                    )
+                    ).append(site)
             continue
         target: Function | None = (
             functions.get(call.func.id)
@@ -1077,7 +1596,10 @@ def _call_sites(
             else None
         )
         if target is not None:
-            for parameter, _default in _parameters(function=target):
+            for parameter in (
+                *(item for item, _default in _parameters(function=target)),
+                *_variadics(function=target),
+            ):
                 index.setdefault((id(target), parameter.arg), []).append(
                     _Site(definite=False, types=()),
                 )

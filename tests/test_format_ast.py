@@ -576,6 +576,24 @@ def test_unsupported_expression_list_uses_localized_canonical_printing() -> (
     """Expression fallback may reformat locally; outer trivia is kept."""
     tree: CommentedModule = CommentedModule.parse(
         source="""\
+call(  a, b + 1, )  # note
+""",
+    )
+    expect_call_expr(
+        value=expression_of_stmt(value=tree.body[0]),
+    ).args.reverse()
+    expect_equal(
+        actual=tree.unparse(preserve_formatting=True),
+        expected="""\
+call(b + 1, a)  # note
+""",
+    )
+
+
+def test_swapped_atoms_keep_the_original_spacing() -> None:
+    """Names and constants are spliced in place, keeping layout."""
+    tree: CommentedModule = CommentedModule.parse(
+        source="""\
 call(  1, 2, )  # note
 """,
     )
@@ -585,7 +603,7 @@ call(  1, 2, )  # note
     expect_equal(
         actual=tree.unparse(preserve_formatting=True),
         expected="""\
-call(2, 1)  # note
+call(  2, 1, )  # note
 """,
     )
 

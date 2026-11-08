@@ -203,7 +203,7 @@ def runtime_bindings(
     return out
 
 
-def _header_end(*, module: Module) -> int:
+def header_end(*, module: Module) -> int:
     """Find where a new top-level import belongs.
 
     Args:
@@ -265,7 +265,7 @@ def insert_import(
         while alias_name in bound:
             alias_name = f"_{alias_name}"
         module.body.insert(
-            _header_end(module=module),
+            header_end(module=module),
             ImportFrom(
                 module=source,
                 names=[alias(name=name, asname=alias_name)],
@@ -283,7 +283,7 @@ def insert_import(
             statement.names.append(alias(name=name))
             return name
     module.body.insert(
-        _header_end(module=module),
+        header_end(module=module),
         ImportFrom(module=source, names=[alias(name=name)], level=0),
     )
     return name
