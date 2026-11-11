@@ -1,0 +1,18 @@
+from typing import Final
+
+from .html5parser import HTMLParser as HTMLParser
+from .html5parser import parse as parse
+from .html5parser import parseFragment as parseFragment
+from .serializer import serialize as serialize
+from .treebuilders import getTreeBuilder as getTreeBuilder
+from .treewalkers import getTreeWalker as getTreeWalker
+
+__all__ = [
+    "HTMLParser",
+    "getTreeBuilder",
+    "getTreeWalker",
+    "parse",
+    "parseFragment",
+    "serialize",
+]
+__version__: Final[str]

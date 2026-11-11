@@ -5,6 +5,7 @@ symbol table and call graph need: top-level names, every import binding
 (absolute, relative and conditional), the literal ``__all__`` when one is
 declared, and the parsed tree so later stages can build contracts and
 bind call arguments without reparsing.
+
 """
 
 from __future__ import annotations
@@ -47,9 +48,10 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        all_name: Attribute listing a module's public exports.
-        list_methods: ``__all__`` mutation methods understood literally.
-        init_stem: File stem marking a package initializer.
+        all_name (Final[str]): Attribute listing a module's public exports.
+        list_methods (Final[frozenset[str]]): ``__all__`` mutation methods
+            understood literally.
+        init_stem (Final[str]): File stem marking a package initializer.
 
     """
 
@@ -81,17 +83,17 @@ class ImportRecord:
     """One name bound by an import statement.
 
     Attributes:
-        local: Name usable in the importing module (the ``as`` name when
+        local (str): Name usable in the importing module (the ``as`` name when
             given).
-        module: Absolute module the binding comes from; relative imports
+        module (str): Absolute module the binding comes from; relative imports
             are already resolved against the importing package.
-        symbol: Member name inside ``module`` for from-imports, or ``None``
-            when a module object itself is bound.
-        kind: Which statement shape produced the binding.
-        conditional: Whether the import sits inside a conditional suite
+        symbol (str | None): Member name inside ``module`` for from-imports,
+            or ``None`` when a module object itself is bound.
+        kind (ImportKind): Which statement shape produced the binding.
+        conditional (bool): Whether the import sits inside a conditional suite
             (``if``, ``try``, ``match``…) or a nested scope, so it might
             not run.
-        lineno: Line of the import, for diagnostics.
+        lineno (int): Line of the import, for diagnostics.
 
     """
 
@@ -109,22 +111,26 @@ class ModuleScan:
     """One file's facts within a project.
 
     Attributes:
-        name: Dotted module name.
-        path: Source file.
-        content_hash: SHA-256 of the source text; equal hashes mean equal
+        name (str): Dotted module name.
+        path (Path): Source file.
+        content_hash (str): SHA-256 of the source text; equal hashes mean equal
             facts, so unchanged files need no rescan.
-        tree: Parsed module, retained for contracts and call binding.
-        is_package: Whether the file is an ``__init__``.
-        functions: Top-level function names.
-        classes: Top-level class names.
-        assignments: Other names bound at top level.
-        imports: Every import binding, in document order.
-        all_names: Literal ``__all__`` contents, ``None`` when ``__all__``
-            is absent or not statically literal.
-        all_declared: Whether ``__all__`` is assigned at all; when true but
+        tree (Module): Parsed module, retained for contracts and call binding.
+        is_package (bool): Whether the file is an ``__init__``.
+        functions (tuple[str, ...]): Top-level function names.
+        classes (tuple[str, ...]): Top-level class names.
+        assignments (tuple[str, ...]): Other names bound at top level.
+        imports (tuple[ImportRecord, ...]): Every import binding, in document
+            order.
+        all_names (tuple[str, ...] | None): Literal ``__all__`` contents,
+            ``None`` when
+            ``__all__`` is absent or not statically literal.
+        all_declared (bool): Whether ``__all__`` is assigned at all; when true
+            but
             ``all_names`` is ``None`` the export list is unknown.
-        star_modules: Modules star-imported here; their public names count
-            as bound once resolved by the symbol table.
+        star_modules (tuple[str, ...]): Modules star-imported here; their
+            public names
+            count as bound once resolved by the symbol table.
 
     """
 
@@ -146,7 +152,7 @@ class ModuleScan:
         """Every name the module defines itself.
 
         Returns:
-            Functions, classes and assignments in one set.
+            frozenset[str]: Functions, classes and assignments in one set.
 
         """
         return frozenset(
@@ -158,7 +164,8 @@ class ModuleScan:
         """Every local name, defined or imported.
 
         Returns:
-            The names a statement in this module may legally read.
+            frozenset[str]: The names a statement in this module may legally
+                read.
 
         """
         return self.defined_names | frozenset(
@@ -174,12 +181,12 @@ def _absolute(
     """Resolve a from-import's module to its absolute dotted name.
 
     Args:
-        node: The ``from`` statement.
-        package: Package the importing module belongs to.
+        node (ImportFrom): The ``from`` statement.
+        package (str): Package the importing module belongs to.
 
     Returns:
-        The absolute module name, or empty when the import climbs above
-        the top-level package.
+        str: The absolute module name, or empty when the import climbs above
+            the top-level package.
 
     """
     if node.level == 0:
@@ -204,12 +211,12 @@ def _import_records(
     ``try: import real / except: import fallback`` semantics.
 
     Args:
-        module: Parsed module.
-        package: Package the importing module's relative imports resolve
+        module (Module): Parsed module.
+        package (str): Package the importing module's relative imports resolve
             against.
 
     Returns:
-        One record per bound name, in document order.
+        tuple[ImportRecord, ...]: One record per bound name, in document order.
 
     """
     top_level: frozenset[int] = frozenset(
@@ -273,11 +280,12 @@ def _literal_strings(*, node: Assign | AnnAssign | AugAssign) -> list[str]:
     """Read literal strings out of a ``__all__`` assignment value.
 
     Args:
-        node: Assignment or augmented assignment to ``__all__``.
+        node (Assign | AnnAssign | AugAssign): Assignment or augmented
+            assignment to ``__all__``.
 
     Returns:
-        The strings when the value is a literal list, tuple or set;
-        otherwise an empty list meaning "not statically literal".
+        list[str]: The strings when the value is a literal list, tuple or set;
+            otherwise an empty list meaning "not statically literal".
 
     """
     value: expr | None = node.value
@@ -294,12 +302,13 @@ def _all_names(*, module: Module) -> tuple[tuple[str, ...] | None, bool]:
     """Extract a statically literal ``__all__``.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        ``(names, declared)``: the declared names when every statement
-        touching ``__all__`` is literal; ``None`` when it is absent or
-        computed dynamically.
+        tuple[tuple[str, ...] | None, bool]: ``(names, declared)`` : the
+            declared names when
+            every statement touching ``__all__`` is literal;
+            ``None`` when it is absent or computed dynamically.
 
     """
     names: list[str] = []
@@ -368,11 +377,12 @@ def _top_level(
     """Collect names bound directly by module-level statements.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Function names, class names, and other bound names, each in
-        document order.
+        tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]: Function
+            names, class names, and other
+            bound names, each in document order.
 
     """
     functions: list[str] = []
@@ -404,13 +414,13 @@ def scan_module(
     """Parse and index one source file.
 
     Args:
-        source: Python source text.
-        name: Dotted module name from
+        source (str): Python source text.
+        name (str): Dotted module name from
             :func:`astart.project.naming.module_name`.
-        path: File the text came from.
+        path (Path): File the text came from.
 
     Returns:
-        The module's scan record.
+        ModuleScan: The module's scan record.
 
     """
     tree: Module = parse(source=source, filename=str(object=path))

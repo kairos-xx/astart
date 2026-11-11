@@ -2,6 +2,7 @@
 
 This index accepts a path to a folder containing ``stdlib/`` or a ZIP whose
 members include ``typeshed/stdlib/``. It never imports target modules.
+
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        max_stub_bytes: Grouped module constant.
+        max_stub_bytes (Final[int]): Grouped module constant.
 
     """
 
@@ -54,11 +55,12 @@ class StubSignature:
     """An imported declaration with a structured return annotation.
 
     Attributes:
-        contract: Contract retained as CallableContract | None by this
+        contract (CallableContract | None): Contract retained as
+            CallableContract | None by this instance.
+        qualified_name (str): Identifier used to refer to the qualified.
+        returns (TypeExpression): Returns retained as TypeExpression by this
             instance.
-        qualified_name: Identifier used to refer to the qualified.
-        returns: Returns retained as TypeExpression by this instance.
-        source_path: Path to the source used by this instance.
+        source_path (str): Path to the source used by this instance.
 
     """
 
@@ -76,7 +78,7 @@ class StubIndex:
         """Construct an optional stub index rooted at a trusted path.
 
         Args:
-            root: Filesystem path identifying the root.
+            root (Path): Filesystem path identifying the root.
 
         """
         self.root: Path = root
@@ -87,10 +89,11 @@ class StubIndex:
         """Resolve a dotted import against at most one relevant stub file.
 
         Args:
-            qualified_name: Identifier of the qualified being resolved.
+            qualified_name (str): Identifier of the qualified being resolved.
 
         Returns:
-            tuple[StubSignature, ...] produced by this operation.
+            tuple[StubSignature, ...]: tuple[StubSignature, ...] produced by
+                this operation.
 
         """
         pieces: tuple[str, ...] = tuple(qualified_name.split(sep="."))
@@ -115,10 +118,12 @@ class StubIndex:
         """Read the first acceptable stub below a directory root.
 
         Args:
-            names: Names supplied as tuple[str, ...] for this operation.
+            names (tuple[str, ...]): Names supplied as tuple[str, ...] for this
+                operation.
 
         Returns:
-            tuple[bytes, str] | None produced by this operation.
+            tuple[bytes, str] | None:
+                tuple[bytes, str] | None produced by this operation.
 
         """
         for candidate in names:
@@ -140,10 +145,12 @@ class StubIndex:
         """Read the first acceptable stub from a zip archive root.
 
         Args:
-            names: Names supplied as tuple[str, ...] for this operation.
+            names (tuple[str, ...]): Names supplied as tuple[str, ...] for this
+                operation.
 
         Returns:
-            tuple[bytes, str] | None produced by this operation.
+            tuple[bytes, str] | None:
+                tuple[bytes, str] | None produced by this operation.
 
         """
         with ZipFile(file=self.root) as archive:
@@ -163,10 +170,11 @@ class StubIndex:
         """Read a bounded `.pyi` file and extract declared return shapes.
 
         Args:
-            module_name: Identifier of the module being resolved.
+            module_name (str): Identifier of the module being resolved.
 
         Returns:
-            tuple[StubSignature, ...] produced by this operation.
+            tuple[StubSignature, ...]: tuple[StubSignature, ...] produced by
+                this operation.
 
         """
         relative: str = module_name.replace(".", "/")
@@ -200,11 +208,11 @@ def _type_parameter_names(*, module: Module) -> tuple[str, ...]:
     """Names bound to ``TypeVar``, ``ParamSpec`` or ``TypeVarTuple``.
 
     Args:
-        module: The module examined while names bound to ``TypeVar``,
+        module (Module): The module examined while names bound to ``TypeVar``,
             ``ParamSpec`` or ``TypeVarTuple``.
 
     Returns:
-        tuple[str, ...] produced by this operation.
+        tuple[str, ...]: tuple[str, ...] produced by this operation.
 
     """
     return tuple(
@@ -230,15 +238,15 @@ def _member_signature(
     """Describe one function or annotated attribute of a stub, if any.
 
     Args:
-        chosen: Chosen supplied as str for this operation.
-        member: Member supplied as stmt for this operation.
-        module_name: Identifier of the module being resolved.
-        parent: Parent supplied as str for this operation.
-        type_parameters: Type parameters supplied as tuple[str, ...] for this
-            operation.
+        chosen (str): Chosen supplied as str for this operation.
+        member (stmt): Member supplied as stmt for this operation.
+        module_name (str): Identifier of the module being resolved.
+        parent (str): Parent supplied as str for this operation.
+        type_parameters (tuple[str, ...]): Type parameters supplied as
+            tuple[str, ...] for this operation.
 
     Returns:
-        StubSignature | None produced by this operation.
+        StubSignature | None: StubSignature | None produced by this operation.
 
     """
     if (
@@ -279,13 +287,13 @@ def stub_signatures(
     """Extract declared signatures from parsed stub source.
 
     Args:
-        source: Text of a ``.pyi`` file or of a ``.py`` file from a
+        source (str): Text of a ``.pyi`` file or of a ``.py`` file from a
             ``py.typed`` package.
-        module_name: Dotted name the source provides.
-        chosen: Path recorded on each signature for provenance.
+        module_name (str): Dotted name the source provides.
+        chosen (str): Path recorded on each signature for provenance.
 
     Returns:
-        The signatures the source declares.
+        tuple[StubSignature, ...]: The signatures the source declares.
 
     """
     try:
@@ -308,13 +316,14 @@ def _stub_signatures(
     """Collect every declared signature of a parsed stub module.
 
     Args:
-        chosen: Chosen supplied as str for this operation.
-        module: The module examined while collect every declared signature of a
-            parsed stub module.
-        module_name: Identifier of the module being resolved.
+        chosen (str): Chosen supplied as str for this operation.
+        module (Module): The module examined while collect every
+            declared signature of a parsed stub module.
+        module_name (str): Identifier of the module being resolved.
 
     Returns:
-        tuple[StubSignature, ...] produced by this operation.
+        tuple[StubSignature, ...]: tuple[StubSignature, ...] produced by this
+            operation.
 
     """
     result: list[StubSignature] = []

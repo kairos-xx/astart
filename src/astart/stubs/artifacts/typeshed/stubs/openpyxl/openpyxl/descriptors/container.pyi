@@ -1,0 +1,16 @@
+from typing import Self, TypeVar
+
+from openpyxl.descriptors.serialisable import Serialisable
+from openpyxl.xml.functions import Element
+
+_T = TypeVar("_T", bound=Serialisable)
+
+class ElementList(list[_T]):
+    @property
+    def tagname(self) -> str: ...
+    @property
+    def expected_type(self) -> type[_T]: ...
+    @classmethod
+    def from_tree(cls, tree: Element) -> Self: ...
+    def to_tree(self) -> Element: ...
+    def append(self, value: _T) -> None: ...

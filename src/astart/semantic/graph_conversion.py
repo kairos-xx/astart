@@ -6,11 +6,11 @@ only annotations with matching semantic declaration paths, valid names and
 unambiguous sites become proposals. Proposals are immutable and carry the
 original mutable AST node to which evidence may be attached. No analyzed code
 is imported or executed.
+
 """
 
 from __future__ import annotations
 
-import builtins
 from ast import (
     AST,
     AnnAssign,
@@ -36,20 +36,21 @@ from ast import (
     unparse,
     walk,
 )
+from builtins import __dict__
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, final
 
-from astart._graph.conversion.engine import GraphOnlyConverter
-from astart.node_attributes import list_items, render_source
+from astart.graph.conversion.engine import GraphOnlyConverter
 from astart.semantic.type_expressions import TypeExpressionCodec
 from astart.semantic.type_shapes import TypeShape, type_shape
+from astart.source.node_attributes import list_items, render_source
 
 if TYPE_CHECKING:
     from ast import arguments as ast_arguments
     from ast import expr
     from pathlib import Path
 
-    from astart._graph.conversion.engine import ConversionResult
+    from astart.graph.conversion.engine import ConversionResult
 
 
 @final
@@ -57,7 +58,7 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        typing_names: Grouped module constant.
+        typing_names (Final[frozenset[str]]): Grouped module constant.
 
     """
 
@@ -129,11 +130,14 @@ class GraphAnnotation:
     """One verified proposal bound to a stable original syntax node.
 
     Attributes:
-        annotation: Annotation retained as TypeShape by this instance.
-        role: Role retained as str by this instance.
-        site: Site retained as tuple[str, ...] by this instance.
-        source: Original source text retained for parsing and reconstruction.
-        target: AST target associated with this record.
+        annotation (TypeShape): Annotation retained as TypeShape by this
+            instance.
+        role (str): Role retained as str by this instance.
+        site (tuple[str, ...]): Site retained as tuple[str, ...] by this
+            instance.
+        source (str): Original source text retained for parsing and
+            reconstruction.
+        target (AST): AST target associated with this record.
 
     """
 
@@ -150,12 +154,16 @@ class GraphConversion:
     """Full Astart conversion output and selectively reusable evidence.
 
     Attributes:
-        converted_source: Converted source retained as str by this instance.
-        proposals: Proposals retained as tuple[GraphAnnotation, ...] by this
+        converted_source (str): Converted source retained as str by this
             instance.
-        skipped: Skipped retained as tuple[str, ...] by this instance.
-        stages: Stages retained as tuple[str, ...] by this instance.
-        warnings: Warnings retained as tuple[str, ...] by this instance.
+        proposals (tuple[GraphAnnotation, ...]): Proposals retained as
+            tuple[GraphAnnotation, ...] by this instance.
+        skipped (tuple[str, ...]): Skipped retained as tuple[str, ...] by this
+            instance.
+        stages (tuple[str, ...]): Stages retained as tuple[str, ...] by this
+            instance.
+        warnings (tuple[str, ...]): Warnings retained as tuple[str, ...] by
+            this instance.
 
     """
 
@@ -170,7 +178,7 @@ class GraphConversion:
         """Count annotations that have a safe target in the original AST.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         return len(self.proposals)
@@ -180,11 +188,12 @@ def declaration_sites(*, module: Module) -> dict[tuple[str, ...], AST]:
     """Index declarations by scope and occurrence, not line number.
 
     Args:
-        module: The module examined while index declarations by scope and
-            occurrence, not line number.
+        module (Module): The module examined while index declarations
+            by scope and occurrence, not line number.
 
     Returns:
-        dict[tuple[str, ...], AST] produced by this operation.
+        dict[tuple[str, ...], AST]: dict[tuple[str, ...], AST] produced by this
+            operation.
 
     """
     result: dict[tuple[str, ...], AST] = {}
@@ -268,13 +277,13 @@ def available_type_names(*, root: Module) -> frozenset[str]:
     """Collect names available to unquoted annotations in the source.
 
     Args:
-        root: Filesystem path identifying the root.
+        root (Module): Filesystem path identifying the root.
 
     Returns:
-        frozenset[str] produced by this operation.
+        frozenset[str]: frozenset[str] produced by this operation.
 
     """
-    available: set[str] = set(dir(builtins))
+    available: set[str] = set(__dict__)
     available.update(Constants.typing_names)
     for node in walk(node=root):
         if isinstance(node, Import):
@@ -304,12 +313,13 @@ def annotation_shape(
     """Reject converter-generated names that would be undefined at runtime.
 
     Args:
-        available: Available supplied as frozenset[str] for this operation.
-        node: The node examined while reject converter-generated names that
-            would be undefined at runtime.
+        available (frozenset[str]): Available supplied as frozenset[str] for
+            this operation.
+        node (AST): The node examined while reject converter-generated
+            names that would be undefined at runtime.
 
     Returns:
-        TypeShape | None produced by this operation.
+        TypeShape | None: TypeShape | None produced by this operation.
 
     """
     if any(
@@ -330,10 +340,11 @@ def _all_arguments(*, arguments: ast_arguments) -> tuple[arg, ...]:
     """Every parameter of a signature, including ``*args`` and ``**kwargs``.
 
     Args:
-        arguments: Collection of arguments supplied for this operation.
+        arguments (ast_arguments): Collection of arguments supplied for this
+            operation.
 
     Returns:
-        tuple[arg, ...] produced by this operation.
+        tuple[arg, ...]: tuple[arg, ...] produced by this operation.
 
     """
     variadic: tuple[arg, ...] = tuple(
@@ -360,16 +371,21 @@ def _function_proposals(
     """Propose missing parameter and return annotations of one function.
 
     Args:
-        available: Available supplied as frozenset[str] for this operation.
-        output: Output supplied as FunctionDef | AsyncFunctionDef for this
+        available (frozenset[str]): Available supplied as frozenset[str] for
+            this operation.
+        output (FunctionDef | AsyncFunctionDef): Output supplied as FunctionDef
+            |
+            AsyncFunctionDef for this operation.
+        site (tuple[str, ...]): Site supplied as tuple[str, ...] for this
             operation.
-        site: Site supplied as tuple[str, ...] for this operation.
-        skipped: Skipped supplied as list[str] for this operation.
-        target: The target examined while propose missing parameter and return
-            annotations of one function.
+        skipped (list[str]): Skipped supplied as list[str] for this operation.
+        target (FunctionDef | AsyncFunctionDef): The target examined while
+            propose missing
+            parameter and return annotations of one function.
 
     Returns:
-        list[GraphAnnotation] produced by this operation.
+        list[GraphAnnotation]: list[GraphAnnotation] produced by this
+            operation.
 
     """
     proposals: list[GraphAnnotation] = []
@@ -433,15 +449,18 @@ def _variable_proposal(
     """Propose an annotation for a plain assignment, if it is precise.
 
     Args:
-        available: Available supplied as frozenset[str] for this operation.
-        output: Output supplied as AnnAssign for this operation.
-        site: Site supplied as tuple[str, ...] for this operation.
-        skipped: Skipped supplied as list[str] for this operation.
-        target: The target examined while propose an annotation for a plain
-            assignment, if it is precise.
+        available (frozenset[str]): Available supplied as frozenset[str] for
+            this operation.
+        output (AnnAssign): Output supplied as AnnAssign for this operation.
+        site (tuple[str, ...]): Site supplied as tuple[str, ...] for this
+            operation.
+        skipped (list[str]): Skipped supplied as list[str] for this operation.
+        target (Assign): The target examined while propose an annotation
+            for a plain assignment, if it is precise.
 
     Returns:
-        GraphAnnotation | None produced by this operation.
+        GraphAnnotation | None:
+            GraphAnnotation | None produced by this operation.
 
     """
     inferred: TypeShape | None = annotation_shape(
@@ -478,15 +497,13 @@ def collect_graph_annotations(
         OSError: The explicitly selected source/stubs cannot be read.
         RuntimeError: A Astart conversion stage failed.
 
-
-
     Args:
-        filename: Filename supplied as str for this operation.
-        root: Filesystem path identifying the root.
-        stubs_path: Filesystem path identifying the stubs.
+        filename (str): Filename supplied as str for this operation.
+        root (Module): Filesystem path identifying the root.
+        stubs_path (Path): Filesystem path identifying the stubs.
 
     Returns:
-        GraphConversion produced by this operation.
+        GraphConversion: GraphConversion produced by this operation.
 
     """
     current_source: str = render_source(
@@ -548,14 +565,14 @@ def _introduce_typing_imports(
     Insert after a module docstring and all future imports. No synthesized
     Astart helper code or unnecessary converter imports are copied.
 
-
     Args:
-        proposals: Proposals supplied as tuple[GraphAnnotation, ...] for this
-            operation.
-        root: Filesystem path identifying the root.
+        proposals (tuple[GraphAnnotation, ...]): Proposals supplied as
+            tuple[GraphAnnotation,
+            ...] for this operation.
+        root (Module): Filesystem path identifying the root.
 
     """
-    available: set[str] = set(dir(builtins))
+    available: set[str] = set(__dict__)
     for statement in root.body:
         if isinstance(statement, Import):
             available.update(
@@ -612,10 +629,11 @@ def _apply_signature_annotation(*, proposal: GraphAnnotation) -> bool:
     """Attach a parameter or return annotation when still missing.
 
     Args:
-        proposal: Proposal supplied as GraphAnnotation for this operation.
+        proposal (GraphAnnotation): Proposal supplied as GraphAnnotation for
+            this operation.
 
     Returns:
-        Whether the requested condition holds.
+        bool: Whether the requested condition holds.
 
     """
     target: AST = proposal.target
@@ -650,12 +668,12 @@ def _apply_variable_annotations(
     """Turn matched plain assignments into annotated assignments.
 
     Args:
-        root: Filesystem path identifying the root.
-        variables: Variables supplied as dict[int, GraphAnnotation] for this
-            operation.
+        root (Module): Filesystem path identifying the root.
+        variables (dict[int, GraphAnnotation]): Variables supplied as dict[int,
+            GraphAnnotation] for this operation.
 
     Returns:
-        int produced by this operation.
+        int: int produced by this operation.
 
     """
     applied: int = 0
@@ -700,12 +718,12 @@ def apply_graph_annotations(
     """Apply only matched annotation proposals; keep other source.
 
     Args:
-        integration: Integration supplied as GraphConversion for this
-            operation.
-        root: Filesystem path identifying the root.
+        integration (GraphConversion): Integration supplied as GraphConversion
+            for this operation.
+        root (Module): Filesystem path identifying the root.
 
     Returns:
-        int produced by this operation.
+        int: int produced by this operation.
 
     """
     _introduce_typing_imports(root=root, proposals=integration.proposals)

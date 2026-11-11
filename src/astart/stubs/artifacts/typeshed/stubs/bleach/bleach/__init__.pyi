@@ -1,0 +1,42 @@
+from collections.abc import Container, Iterable
+
+from .callbacks import _Callback
+from .css_sanitizer import CSSSanitizer
+from .linkifier import DEFAULT_CALLBACKS as DEFAULT_CALLBACKS
+from .linkifier import Linker as Linker
+from .sanitizer import (
+    ALLOWED_ATTRIBUTES as ALLOWED_ATTRIBUTES,
+)
+from .sanitizer import (
+    ALLOWED_PROTOCOLS as ALLOWED_PROTOCOLS,
+)
+from .sanitizer import (
+    ALLOWED_TAGS as ALLOWED_TAGS,
+)
+from .sanitizer import (
+    Cleaner as Cleaner,
+)
+from .sanitizer import (
+    _Attributes,
+)
+
+__all__ = ["clean", "linkify"]
+__releasedate__: str
+__version__: str
+type _HTMLAttrKey = tuple[str | None, str]
+
+def clean(
+    text: str,
+    tags: Iterable[str] = ...,
+    attributes: _Attributes = ...,
+    protocols: Iterable[str] = ...,
+    strip: bool = False,
+    strip_comments: bool = True,
+    css_sanitizer: CSSSanitizer | None = None,
+) -> str: ...
+def linkify(
+    text: str,
+    callbacks: Iterable[_Callback] = ...,
+    skip_tags: Container[str] | None = None,
+    parse_email: bool = False,
+) -> str: ...

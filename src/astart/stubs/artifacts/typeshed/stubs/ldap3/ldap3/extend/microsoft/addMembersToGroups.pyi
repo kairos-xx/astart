@@ -1,0 +1,7 @@
+def ad_add_members_to_groups(
+    connection,
+    members_dn,
+    groups_dn,
+    fix: bool = True,
+    raise_error: bool = False,
+): ...

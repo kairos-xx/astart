@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal, final
 
-from astart.node_attributes import clear_attribute, write_attribute
+from astart.source.node_attributes import clear_attribute, write_attribute
 
 if TYPE_CHECKING:
     from ast import AST
@@ -16,7 +16,7 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        inherited_attributes: Grouped module constant.
+        inherited_attributes (Final[tuple[str, ...]]): Grouped module constant.
 
     """
 
@@ -68,13 +68,14 @@ class Symbol:
     """Persistent lexical symbol, independent from its current name.
 
     Attributes:
-        id: Semantic identity.
-        name: Current lexical spelling.
-        kind: Parameter, function, class, import, or variable.
-        scope_id: Scope owning the lexical binding.
-        declaration_node_id: First syntax node defining the symbol.
-        origin_id: Previous-revision symbol this record descends from
-            after a cross-scope relocation, or None.
+        id (int): Semantic identity.
+        name (str): Current lexical spelling.
+        kind (str): Parameter, function, class, import, or variable.
+        scope_id (int): Scope owning the lexical binding.
+        declaration_node_id (int | None): First syntax node defining the
+            symbol.
+        origin_id (int | None): Previous-revision symbol this record descends
+            from after a cross-scope relocation, or None.
 
     """
 
@@ -92,10 +93,10 @@ class Binding:
     """One definition occurrence of a symbol.
 
     Attributes:
-        id: Assignment identity.
-        symbol_id: Lexical symbol receiving the definition.
-        node_id: Syntax occurrence performing the assignment.
-        kind: Definition, deletion, argument, or import.
+        id (int): Assignment identity.
+        symbol_id (int): Lexical symbol receiving the definition.
+        node_id (int): Syntax occurrence performing the assignment.
+        kind (str): Definition, deletion, argument, or import.
 
     """
 
@@ -111,10 +112,11 @@ class Occurrence:
     """One syntax occurrence with one or more symbol reference roles.
 
     Attributes:
-        node_id: Syntax occurrence identifier.
-        symbol_id: Referenced lexical symbol, when statically resolvable.
-        scope_id: Lexical context of the occurrence.
-        roles: All operations performed by this occurrence.
+        node_id (int): Syntax occurrence identifier.
+        symbol_id (int | None): Referenced lexical symbol, when statically
+            resolvable.
+        scope_id (int): Lexical context of the occurrence.
+        roles (frozenset[Role]): All operations performed by this occurrence.
 
     """
 
@@ -130,9 +132,9 @@ class DependencyEdge:
     """Directed, labeled semantic dependency from consumer to producer.
 
     Attributes:
-        consumer: Node ID affected when producer changes.
-        producer: Node ID supplying the semantic fact.
-        kind: Kind of semantic dependence.
+        consumer (int): Node ID affected when producer changes.
+        producer (int): Node ID supplying the semantic fact.
+        kind (EdgeKind): Kind of semantic dependence.
 
     """
 
@@ -154,10 +156,10 @@ class IdentityIndex:
         """Return stable syntax identity for an owned mutable AST object.
 
         Args:
-            node: AST object; never identified by source position.
+            node (AST): AST object; never identified by source position.
 
         Returns:
-            Per-module persistent node identity.
+            int: Per-module persistent node identity.
 
         """
         existing: tuple[AST, int] | None = self._by_python_id.get(id(node))
@@ -175,7 +177,7 @@ class IdentityIndex:
         """Return all identities owned since the first indexing.
 
         Returns:
-            tuple[AST, ...] produced by this operation.
+            tuple[AST, ...]: tuple[AST, ...] produced by this operation.
 
         """
         return tuple(item[0] for item in self._by_python_id.values())
@@ -194,9 +196,9 @@ class DependencyGraph:
         """Add a dependency edge, deduplicated by all three fields.
 
         Args:
-            consumer: Dependent node ID.
-            producer: Producer node ID.
-            kind: Dependency classification.
+            consumer (int): Dependent node ID.
+            producer (int): Producer node ID.
+            kind (EdgeKind): Dependency classification.
 
         """
         edge: DependencyEdge = DependencyEdge(
@@ -211,9 +213,9 @@ class DependencyGraph:
         """Remove one matching dependency edge from both indexes.
 
         Args:
-            consumer: Dependent node ID.
-            producer: Producer node ID.
-            kind: Dependency classification.
+            consumer (int): Dependent node ID.
+            producer (int): Producer node ID.
+            kind (EdgeKind): Dependency classification.
 
         """
         edge: DependencyEdge = DependencyEdge(
@@ -232,10 +234,10 @@ class DependencyGraph:
         """List direct producer dependencies ordered deterministically.
 
         Args:
-            node_id: Consumer identity.
+            node_id (int): Consumer identity.
 
         Returns:
-            Producer edges.
+            tuple[DependencyEdge, ...]: Producer edges.
 
         """
         return tuple(
@@ -249,10 +251,10 @@ class DependencyGraph:
         """List direct consumers that rely on this node.
 
         Args:
-            node_id: Producer identity.
+            node_id (int): Producer identity.
 
         Returns:
-            Consumer edges.
+            tuple[DependencyEdge, ...]: Consumer edges.
 
         """
         return tuple(
@@ -271,12 +273,14 @@ class DependencyGraph:
         """Compute transitive invalidation closure without recursive revisits.
 
         Args:
-            exclude: Edge kinds to skip while walking consumers, for
+            exclude (frozenset[EdgeKind]): Edge kinds to skip while walking
+                consumers, for
                 dependencies that must not drive reanalysis.
-            node_id: Mutated identity.
+            node_id (int): Mutated identity.
 
         Returns:
-            Set of affected node identities, including the source.
+            frozenset[int]: Set of affected node identities, including the
+                source.
 
         """
         seen: set[int] = set()

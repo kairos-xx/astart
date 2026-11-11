@@ -1,0 +1,295 @@
+# `stdlib/`
+
+Provide VERSIONS project content.
+
+<!-- exactus:inventory:start -->
+## Directory contents
+
+### Files
+
+- [`VERSIONS`](VERSIONS) — Provide VERSIONS project content.
+- [`__future__.pyi`](__future__.pyi) — Provide   future   pyi content.
+- [`__main__.pyi`](__main__.pyi) — Provide   main   pyi content.
+- [`_ast.pyi`](_ast.pyi) — Provide  ast pyi content.
+- [`_asyncio.pyi`](_asyncio.pyi) — Provide  asyncio pyi content.
+- [`_bisect.pyi`](_bisect.pyi) — Provide  bisect pyi content.
+- [`_blake2.pyi`](_blake2.pyi) — Provide  blake2 pyi content.
+- [`_bz2.pyi`](_bz2.pyi) — Provide  bz2 pyi content.
+- [`_codecs.pyi`](_codecs.pyi) — Provide  codecs pyi content.
+- [`_collections_abc.pyi`](_collections_abc.pyi) — Provide  collections abc pyi content.
+- [`_compat_pickle.pyi`](_compat_pickle.pyi) — Provide  compat pickle pyi content.
+- [`_compression.pyi`](_compression.pyi) — Provide  compression pyi content.
+- [`_contextvars.pyi`](_contextvars.pyi) — Provide  contextvars pyi content.
+- [`_csv.pyi`](_csv.pyi) — Provide  csv pyi content.
+- [`_ctypes.pyi`](_ctypes.pyi) — Provide  ctypes pyi content.
+- [`_curses.pyi`](_curses.pyi) — Provide  curses pyi content.
+- [`_curses_panel.pyi`](_curses_panel.pyi) — Provide  curses panel pyi content.
+- [`_dbm.pyi`](_dbm.pyi) — Provide  dbm pyi content.
+- [`_decimal.pyi`](_decimal.pyi) — Provide  decimal pyi content.
+- [`_frozen_importlib.pyi`](_frozen_importlib.pyi) — Provide  frozen importlib pyi content.
+- [`_frozen_importlib_external.pyi`](_frozen_importlib_external.pyi) — Provide  frozen importlib external pyi content.
+- [`_gdbm.pyi`](_gdbm.pyi) — Provide  gdbm pyi content.
+- [`_hashlib.pyi`](_hashlib.pyi) — Provide  hashlib pyi content.
+- [`_heapq.pyi`](_heapq.pyi) — Provide  heapq pyi content.
+- [`_imp.pyi`](_imp.pyi) — Provide  imp pyi content.
+- [`_interpchannels.pyi`](_interpchannels.pyi) — Provide  interpchannels pyi content.
+- [`_interpqueues.pyi`](_interpqueues.pyi) — Provide  interpqueues pyi content.
+- [`_interpreters.pyi`](_interpreters.pyi) — Provide  interpreters pyi content.
+- [`_io.pyi`](_io.pyi) — Provide  io pyi content.
+- [`_json.pyi`](_json.pyi) — Provide  json pyi content.
+- [`_locale.pyi`](_locale.pyi) — Provide  locale pyi content.
+- [`_lsprof.pyi`](_lsprof.pyi) — Provide  lsprof pyi content.
+- [`_lzma.pyi`](_lzma.pyi) — Provide  lzma pyi content.
+- [`_markupbase.pyi`](_markupbase.pyi) — Provide  markupbase pyi content.
+- [`_msi.pyi`](_msi.pyi) — Provide  msi pyi content.
+- [`_multibytecodec.pyi`](_multibytecodec.pyi) — Provide  multibytecodec pyi content.
+- [`_operator.pyi`](_operator.pyi) — Provide  operator pyi content.
+- [`_osx_support.pyi`](_osx_support.pyi) — Provide  osx support pyi content.
+- [`_pickle.pyi`](_pickle.pyi) — Provide  pickle pyi content.
+- [`_posixsubprocess.pyi`](_posixsubprocess.pyi) — Provide  posixsubprocess pyi content.
+- [`_py_abc.pyi`](_py_abc.pyi) — Provide  py abc pyi content.
+- [`_pydecimal.pyi`](_pydecimal.pyi) — Provide  pydecimal pyi content.
+- [`_queue.pyi`](_queue.pyi) — Provide  queue pyi content.
+- [`_random.pyi`](_random.pyi) — Provide  random pyi content.
+- [`_remote_debugging.pyi`](_remote_debugging.pyi) — Provide  remote debugging pyi content.
+- [`_sitebuiltins.pyi`](_sitebuiltins.pyi) — Provide  sitebuiltins pyi content.
+- [`_socket.pyi`](_socket.pyi) — Provide  socket pyi content.
+- [`_sqlite3.pyi`](_sqlite3.pyi) — Provide  sqlite3 pyi content.
+- [`_ssl.pyi`](_ssl.pyi) — Provide  ssl pyi content.
+- [`_stat.pyi`](_stat.pyi) — Provide  stat pyi content.
+- [`_struct.pyi`](_struct.pyi) — Provide  struct pyi content.
+- [`_thread.pyi`](_thread.pyi) — Provide  thread pyi content.
+- [`_threading_local.pyi`](_threading_local.pyi) — Provide  threading local pyi content.
+- [`_tkinter.pyi`](_tkinter.pyi) — Provide  tkinter pyi content.
+- [`_tracemalloc.pyi`](_tracemalloc.pyi) — Provide  tracemalloc pyi content.
+- [`_warnings.pyi`](_warnings.pyi) — Provide  warnings pyi content.
+- [`_weakref.pyi`](_weakref.pyi) — Provide  weakref pyi content.
+- [`_weakrefset.pyi`](_weakrefset.pyi) — Provide  weakrefset pyi content.
+- [`_winapi.pyi`](_winapi.pyi) — Provide  winapi pyi content.
+- [`_zstd.pyi`](_zstd.pyi) — Provide  zstd pyi content.
+- [`abc.pyi`](abc.pyi) — Provide abc pyi content.
+- [`aifc.pyi`](aifc.pyi) — Provide aifc pyi content.
+- [`annotationlib.pyi`](annotationlib.pyi) — Provide annotationlib pyi content.
+- [`antigravity.pyi`](antigravity.pyi) — Provide antigravity pyi content.
+- [`argparse.pyi`](argparse.pyi) — Provide argparse pyi content.
+- [`array.pyi`](array.pyi) — Provide array pyi content.
+- [`ast.pyi`](ast.pyi) — Provide ast pyi content.
+- [`asynchat.pyi`](asynchat.pyi) — Provide asynchat pyi content.
+- [`asyncore.pyi`](asyncore.pyi) — Provide asyncore pyi content.
+- [`atexit.pyi`](atexit.pyi) — Provide atexit pyi content.
+- [`audioop.pyi`](audioop.pyi) — Provide audioop pyi content.
+- [`base64.pyi`](base64.pyi) — Provide base64 pyi content.
+- [`bdb.pyi`](bdb.pyi) — Provide bdb pyi content.
+- [`binascii.pyi`](binascii.pyi) — Provide binascii pyi content.
+- [`binhex.pyi`](binhex.pyi) — Provide binhex pyi content.
+- [`bisect.pyi`](bisect.pyi) — Provide bisect pyi content.
+- [`builtins.pyi`](builtins.pyi) — Provide builtins pyi content.
+- [`bz2.pyi`](bz2.pyi) — Provide bz2 pyi content.
+- [`cProfile.pyi`](cProfile.pyi) — Provide cProfile pyi content.
+- [`calendar.pyi`](calendar.pyi) — Provide calendar pyi content.
+- [`cgi.pyi`](cgi.pyi) — Provide cgi pyi content.
+- [`cgitb.pyi`](cgitb.pyi) — Provide cgitb pyi content.
+- [`chunk.pyi`](chunk.pyi) — Provide chunk pyi content.
+- [`cmath.pyi`](cmath.pyi) — Provide cmath pyi content.
+- [`cmd.pyi`](cmd.pyi) — Provide cmd pyi content.
+- [`code.pyi`](code.pyi) — Provide code pyi content.
+- [`codecs.pyi`](codecs.pyi) — Provide codecs pyi content.
+- [`codeop.pyi`](codeop.pyi) — Provide codeop pyi content.
+- [`colorsys.pyi`](colorsys.pyi) — Provide colorsys pyi content.
+- [`compileall.pyi`](compileall.pyi) — Provide compileall pyi content.
+- [`configparser.pyi`](configparser.pyi) — Provide configparser pyi content.
+- [`contextlib.pyi`](contextlib.pyi) — Provide contextlib pyi content.
+- [`contextvars.pyi`](contextvars.pyi) — Provide contextvars pyi content.
+- [`copy.pyi`](copy.pyi) — Provide copy pyi content.
+- [`copyreg.pyi`](copyreg.pyi) — Provide copyreg pyi content.
+- [`crypt.pyi`](crypt.pyi) — Provide crypt pyi content.
+- [`csv.pyi`](csv.pyi) — Provide csv pyi content.
+- [`dataclasses.pyi`](dataclasses.pyi) — Provide dataclasses pyi content.
+- [`datetime.pyi`](datetime.pyi) — Provide datetime pyi content.
+- [`decimal.pyi`](decimal.pyi) — Provide decimal pyi content.
+- [`difflib.pyi`](difflib.pyi) — Provide difflib pyi content.
+- [`dis.pyi`](dis.pyi) — Provide dis pyi content.
+- [`doctest.pyi`](doctest.pyi) — Provide doctest pyi content.
+- [`enum.pyi`](enum.pyi) — Provide enum pyi content.
+- [`errno.pyi`](errno.pyi) — Provide errno pyi content.
+- [`faulthandler.pyi`](faulthandler.pyi) — Provide faulthandler pyi content.
+- [`fcntl.pyi`](fcntl.pyi) — Provide fcntl pyi content.
+- [`filecmp.pyi`](filecmp.pyi) — Provide filecmp pyi content.
+- [`fileinput.pyi`](fileinput.pyi) — Provide fileinput pyi content.
+- [`fnmatch.pyi`](fnmatch.pyi) — Provide fnmatch pyi content.
+- [`fractions.pyi`](fractions.pyi) — Provide fractions pyi content.
+- [`ftplib.pyi`](ftplib.pyi) — Provide ftplib pyi content.
+- [`functools.pyi`](functools.pyi) — Provide functools pyi content.
+- [`gc.pyi`](gc.pyi) — Provide gc pyi content.
+- [`genericpath.pyi`](genericpath.pyi) — Provide genericpath pyi content.
+- [`getopt.pyi`](getopt.pyi) — Provide getopt pyi content.
+- [`getpass.pyi`](getpass.pyi) — Provide getpass pyi content.
+- [`gettext.pyi`](gettext.pyi) — Provide gettext pyi content.
+- [`glob.pyi`](glob.pyi) — Provide glob pyi content.
+- [`graphlib.pyi`](graphlib.pyi) — Provide graphlib pyi content.
+- [`grp.pyi`](grp.pyi) — Provide grp pyi content.
+- [`gzip.pyi`](gzip.pyi) — Provide gzip pyi content.
+- [`hashlib.pyi`](hashlib.pyi) — Provide hashlib pyi content.
+- [`heapq.pyi`](heapq.pyi) — Provide heapq pyi content.
+- [`hmac.pyi`](hmac.pyi) — Provide hmac pyi content.
+- [`imaplib.pyi`](imaplib.pyi) — Provide imaplib pyi content.
+- [`imghdr.pyi`](imghdr.pyi) — Provide imghdr pyi content.
+- [`imp.pyi`](imp.pyi) — Provide imp pyi content.
+- [`inspect.pyi`](inspect.pyi) — Provide inspect pyi content.
+- [`io.pyi`](io.pyi) — Provide io pyi content.
+- [`ipaddress.pyi`](ipaddress.pyi) — Provide ipaddress pyi content.
+- [`itertools.pyi`](itertools.pyi) — Provide itertools pyi content.
+- [`keyword.pyi`](keyword.pyi) — Provide keyword pyi content.
+- [`linecache.pyi`](linecache.pyi) — Provide linecache pyi content.
+- [`locale.pyi`](locale.pyi) — Provide locale pyi content.
+- [`lzma.pyi`](lzma.pyi) — Provide lzma pyi content.
+- [`mailbox.pyi`](mailbox.pyi) — Provide mailbox pyi content.
+- [`mailcap.pyi`](mailcap.pyi) — Provide mailcap pyi content.
+- [`marshal.pyi`](marshal.pyi) — Provide marshal pyi content.
+- [`mimetypes.pyi`](mimetypes.pyi) — Provide mimetypes pyi content.
+- [`mmap.pyi`](mmap.pyi) — Provide mmap pyi content.
+- [`modulefinder.pyi`](modulefinder.pyi) — Provide modulefinder pyi content.
+- [`msvcrt.pyi`](msvcrt.pyi) — Provide msvcrt pyi content.
+- [`netrc.pyi`](netrc.pyi) — Provide netrc pyi content.
+- [`nis.pyi`](nis.pyi) — Provide nis pyi content.
+- [`nntplib.pyi`](nntplib.pyi) — Provide nntplib pyi content.
+- [`nt.pyi`](nt.pyi) — Provide nt pyi content.
+- [`ntpath.pyi`](ntpath.pyi) — Provide ntpath pyi content.
+- [`nturl2path.pyi`](nturl2path.pyi) — Provide nturl2path pyi content.
+- [`numbers.pyi`](numbers.pyi) — Provide numbers pyi content.
+- [`opcode.pyi`](opcode.pyi) — Provide opcode pyi content.
+- [`operator.pyi`](operator.pyi) — Provide operator pyi content.
+- [`optparse.pyi`](optparse.pyi) — Provide optparse pyi content.
+- [`ossaudiodev.pyi`](ossaudiodev.pyi) — Provide ossaudiodev pyi content.
+- [`pdb.pyi`](pdb.pyi) — Provide pdb pyi content.
+- [`pickle.pyi`](pickle.pyi) — Provide pickle pyi content.
+- [`pickletools.pyi`](pickletools.pyi) — Provide pickletools pyi content.
+- [`pipes.pyi`](pipes.pyi) — Provide pipes pyi content.
+- [`pkgutil.pyi`](pkgutil.pyi) — Provide pkgutil pyi content.
+- [`platform.pyi`](platform.pyi) — Provide platform pyi content.
+- [`plistlib.pyi`](plistlib.pyi) — Provide plistlib pyi content.
+- [`poplib.pyi`](poplib.pyi) — Provide poplib pyi content.
+- [`posix.pyi`](posix.pyi) — Provide posix pyi content.
+- [`posixpath.pyi`](posixpath.pyi) — Provide posixpath pyi content.
+- [`pprint.pyi`](pprint.pyi) — Provide pprint pyi content.
+- [`profile.pyi`](profile.pyi) — Provide profile pyi content.
+- [`pstats.pyi`](pstats.pyi) — Provide pstats pyi content.
+- [`pty.pyi`](pty.pyi) — Provide pty pyi content.
+- [`pwd.pyi`](pwd.pyi) — Provide pwd pyi content.
+- [`py_compile.pyi`](py_compile.pyi) — Provide py compile pyi content.
+- [`pyclbr.pyi`](pyclbr.pyi) — Provide pyclbr pyi content.
+- [`pydoc.pyi`](pydoc.pyi) — Provide pydoc pyi content.
+- [`queue.pyi`](queue.pyi) — Provide queue pyi content.
+- [`quopri.pyi`](quopri.pyi) — Provide quopri pyi content.
+- [`random.pyi`](random.pyi) — Provide random pyi content.
+- [`re.pyi`](re.pyi) — Provide re pyi content.
+- [`readline.pyi`](readline.pyi) — Provide readline pyi content.
+- [`reprlib.pyi`](reprlib.pyi) — Provide reprlib pyi content.
+- [`resource.pyi`](resource.pyi) — Provide resource pyi content.
+- [`rlcompleter.pyi`](rlcompleter.pyi) — Provide rlcompleter pyi content.
+- [`runpy.pyi`](runpy.pyi) — Provide runpy pyi content.
+- [`sched.pyi`](sched.pyi) — Provide sched pyi content.
+- [`secrets.pyi`](secrets.pyi) — Provide secrets pyi content.
+- [`select.pyi`](select.pyi) — Provide select pyi content.
+- [`selectors.pyi`](selectors.pyi) — Provide selectors pyi content.
+- [`shelve.pyi`](shelve.pyi) — Provide shelve pyi content.
+- [`shlex.pyi`](shlex.pyi) — Provide shlex pyi content.
+- [`shutil.pyi`](shutil.pyi) — Provide shutil pyi content.
+- [`signal.pyi`](signal.pyi) — Provide signal pyi content.
+- [`site.pyi`](site.pyi) — Provide site pyi content.
+- [`smtpd.pyi`](smtpd.pyi) — Provide smtpd pyi content.
+- [`smtplib.pyi`](smtplib.pyi) — Provide smtplib pyi content.
+- [`sndhdr.pyi`](sndhdr.pyi) — Provide sndhdr pyi content.
+- [`socket.pyi`](socket.pyi) — Provide socket pyi content.
+- [`socketserver.pyi`](socketserver.pyi) — Provide socketserver pyi content.
+- [`spwd.pyi`](spwd.pyi) — Provide spwd pyi content.
+- [`sre_compile.pyi`](sre_compile.pyi) — Provide sre compile pyi content.
+- [`sre_constants.pyi`](sre_constants.pyi) — Provide sre constants pyi content.
+- [`sre_parse.pyi`](sre_parse.pyi) — Provide sre parse pyi content.
+- [`ssl.pyi`](ssl.pyi) — Provide ssl pyi content.
+- [`stat.pyi`](stat.pyi) — Provide stat pyi content.
+- [`statistics.pyi`](statistics.pyi) — Provide statistics pyi content.
+- [`stringprep.pyi`](stringprep.pyi) — Provide stringprep pyi content.
+- [`struct.pyi`](struct.pyi) — Provide struct pyi content.
+- [`subprocess.pyi`](subprocess.pyi) — Provide subprocess pyi content.
+- [`sunau.pyi`](sunau.pyi) — Provide sunau pyi content.
+- [`symtable.pyi`](symtable.pyi) — Provide symtable pyi content.
+- [`sysconfig.pyi`](sysconfig.pyi) — Provide sysconfig pyi content.
+- [`syslog.pyi`](syslog.pyi) — Provide syslog pyi content.
+- [`tabnanny.pyi`](tabnanny.pyi) — Provide tabnanny pyi content.
+- [`tarfile.pyi`](tarfile.pyi) — Provide tarfile pyi content.
+- [`telnetlib.pyi`](telnetlib.pyi) — Provide telnetlib pyi content.
+- [`tempfile.pyi`](tempfile.pyi) — Provide tempfile pyi content.
+- [`termios.pyi`](termios.pyi) — Provide termios pyi content.
+- [`textwrap.pyi`](textwrap.pyi) — Provide textwrap pyi content.
+- [`this.pyi`](this.pyi) — Provide this pyi content.
+- [`threading.pyi`](threading.pyi) — Provide threading pyi content.
+- [`time.pyi`](time.pyi) — Provide time pyi content.
+- [`timeit.pyi`](timeit.pyi) — Provide timeit pyi content.
+- [`token.pyi`](token.pyi) — Provide token pyi content.
+- [`tokenize.pyi`](tokenize.pyi) — Provide tokenize pyi content.
+- [`tomllib.pyi`](tomllib.pyi) — Provide tomllib pyi content.
+- [`trace.pyi`](trace.pyi) — Provide trace pyi content.
+- [`traceback.pyi`](traceback.pyi) — Provide traceback pyi content.
+- [`tracemalloc.pyi`](tracemalloc.pyi) — Provide tracemalloc pyi content.
+- [`tty.pyi`](tty.pyi) — Provide tty pyi content.
+- [`turtle.pyi`](turtle.pyi) — Provide turtle pyi content.
+- [`types.pyi`](types.pyi) — Provide types pyi content.
+- [`typing.pyi`](typing.pyi) — Provide typing pyi content.
+- [`typing_extensions.pyi`](typing_extensions.pyi) — Provide typing extensions pyi content.
+- [`unicodedata.pyi`](unicodedata.pyi) — Provide unicodedata pyi content.
+- [`uu.pyi`](uu.pyi) — Provide uu pyi content.
+- [`uuid.pyi`](uuid.pyi) — Provide uuid pyi content.
+- [`warnings.pyi`](warnings.pyi) — Provide warnings pyi content.
+- [`wave.pyi`](wave.pyi) — Provide wave pyi content.
+- [`weakref.pyi`](weakref.pyi) — Provide weakref pyi content.
+- [`webbrowser.pyi`](webbrowser.pyi) — Provide webbrowser pyi content.
+- [`winreg.pyi`](winreg.pyi) — Provide winreg pyi content.
+- [`winsound.pyi`](winsound.pyi) — Provide winsound pyi content.
+- [`xdrlib.pyi`](xdrlib.pyi) — Provide xdrlib pyi content.
+- [`xxlimited.pyi`](xxlimited.pyi) — Provide xxlimited pyi content.
+- [`zipapp.pyi`](zipapp.pyi) — Provide zipapp pyi content.
+- [`zipimport.pyi`](zipimport.pyi) — Provide zipimport pyi content.
+- [`zlib.pyi`](zlib.pyi) — Provide zlib pyi content.
+
+### Subdirectories
+
+- [`_typeshed/`](_typeshed/README.md) — Provide init pyi content.
+- [`asyncio/`](asyncio/README.md) — Provide init pyi content.
+- [`collections/`](collections/README.md) — Provide init pyi content.
+- [`compression/`](compression/README.md) — Provide init pyi content.
+- [`concurrent/`](concurrent/README.md) — Provide init pyi content.
+- [`ctypes/`](ctypes/README.md) — Provide init pyi content.
+- [`curses/`](curses/README.md) — Provide init pyi content.
+- [`dbm/`](dbm/README.md) — Provide init pyi content.
+- [`distutils/`](distutils/README.md) — Provide init pyi content.
+- [`email/`](email/README.md) — Provide init pyi content.
+- [`encodings/`](encodings/README.md) — Provide init pyi content.
+- [`ensurepip/`](ensurepip/README.md) — Provide init pyi content.
+- [`html/`](html/README.md) — Provide init pyi content.
+- [`http/`](http/README.md) — Provide init pyi content.
+- [`importlib/`](importlib/README.md) — Provide init pyi content.
+- [`json/`](json/README.md) — Provide init pyi content.
+- [`lib2to3/`](lib2to3/README.md) — Provide init pyi content.
+- [`logging/`](logging/README.md) — Provide init pyi content.
+- [`math/`](math/README.md) — Provide init pyi content.
+- [`msilib/`](msilib/README.md) — Provide init pyi content.
+- [`multiprocessing/`](multiprocessing/README.md) — Provide init pyi content.
+- [`os/`](os/README.md) — Provide init pyi content.
+- [`pathlib/`](pathlib/README.md) — Provide init pyi content.
+- [`profiling/`](profiling/README.md) — Provide init pyi content.
+- [`pydoc_data/`](pydoc_data/README.md) — Provide init pyi content.
+- [`pyexpat/`](pyexpat/README.md) — Provide init pyi content.
+- [`sqlite3/`](sqlite3/README.md) — Provide init pyi content.
+- [`string/`](string/README.md) — Provide init pyi content.
+- [`sys/`](sys/README.md) — Provide init pyi content.
+- [`tkinter/`](tkinter/README.md) — Provide init pyi content.
+- [`unittest/`](unittest/README.md) — Provide init pyi content.
+- [`urllib/`](urllib/README.md) — Provide init pyi content.
+- [`wsgiref/`](wsgiref/README.md) — Provide init pyi content.
+- [`xml/`](xml/README.md) — Provide init pyi content.
+- [`xmlrpc/`](xmlrpc/README.md) — Provide init pyi content.
+- [`zipfile/`](zipfile/README.md) — Provide init pyi content.
+- [`zoneinfo/`](zoneinfo/README.md) — Provide init pyi content.
+
+<!-- exactus:inventory:end -->

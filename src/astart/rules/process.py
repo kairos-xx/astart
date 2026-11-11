@@ -21,9 +21,9 @@ class Completed:
     """Raw outcome of an external command.
 
     Attributes:
-        code: Exit status.
-        stdout: Standard output text.
-        stderr: Standard error text.
+        code (int): Exit status.
+        stdout (str): Standard output text.
+        stderr (str): Standard error text.
 
     """
 
@@ -43,14 +43,15 @@ async def _spawn(
     """Run a command with text on standard input.
 
     Args:
-        arguments: Argument vector.
-        stdin: Text written to standard input.
-        cwd: Working directory.
-        limit: Seconds before the process is killed.
-        environment: Variables added to the inherited environment.
+        arguments (tuple[str, ...]): Argument vector.
+        stdin (str): Text written to standard input.
+        cwd (Path): Working directory.
+        limit (float): Seconds before the process is killed.
+        environment (Mapping[str, str] | None): Variables added to the
+            inherited environment.
 
     Returns:
-        The exit status and captured output.
+        Completed: The exit status and captured output.
 
     Raises:
         TimeoutError: The command did not finish in time.
@@ -92,14 +93,15 @@ def run_command(
     loop.
 
     Args:
-        arguments: Argument vector.
-        cwd: Working directory.
-        stdin: Text written to standard input.
-        timeout: Seconds before the process is killed.
-        environment: Variables added to the inherited environment.
+        arguments (tuple[str, ...]): Argument vector.
+        cwd (Path): Working directory.
+        stdin (str): Text written to standard input.
+        timeout (float): Seconds before the process is killed.
+        environment (Mapping[str, str] | None): Variables added to the
+            inherited environment.
 
     Returns:
-        The exit status and captured output.
+        Completed: The exit status and captured output.
 
     Raises:
         FileNotFoundError: The executable does not exist.

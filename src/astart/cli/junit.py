@@ -20,8 +20,9 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        suite_name: Name of the emitted test suite.
-        failure_severities: Severities rendered as failures.
+        suite_name (str): Name of the emitted test suite.
+        failure_severities (frozenset[Severity]): Severities rendered as
+            failures.
 
     """
 
@@ -43,11 +44,11 @@ def render_junit(
     cases) and file-level errors become a single failing case.
 
     Args:
-        results: One report per file.
-        catalog: Catalog that owns the findings' rules.
+        results (Sequence[FileReport]): One report per file.
+        catalog (Catalog): Catalog that owns the findings' rules.
 
     Returns:
-        The XML text.
+        str: The XML text.
 
     """
     suite: Element = Element("testsuite", name=Constants.suite_name)
@@ -56,15 +57,15 @@ def render_junit(
     skipped: int = 0
     for report in results:
         case: Element = SubElement(
-            suite,
-            "testcase",
+            parent=suite,
+            tag="testcase",
             name=report.path,
             classname=Constants.suite_name,
         )
         if report.error is not None:
             failure: Element = SubElement(
-                case,
-                "failure",
+                parent=case,
+                tag="failure",
                 message="file error",
             )
             failure.text = report.error
@@ -78,8 +79,8 @@ def render_junit(
             if finding.severity in Constants.failure_severities:
                 failures += 1
                 failure = SubElement(
-                    case,
-                    "failure",
+                    parent=case,
+                    tag="failure",
                     message=f"{rule.code}: {message}",
                 )
                 failure.text = (
@@ -89,8 +90,8 @@ def render_junit(
             else:
                 skipped += 1
                 skip: Element = SubElement(
-                    case,
-                    "skipped",
+                    parent=case,
+                    tag="skipped",
                     message=f"{rule.code}: {message}",
                 )
                 skip.text = message

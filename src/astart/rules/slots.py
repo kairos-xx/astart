@@ -12,6 +12,7 @@ class SlotTable:
     A slot gathers ``(kind, source)`` deposits. ``settle`` answers with the
     kind only when exactly one kind has claims, so disagreeing evidence
     stays unresolved instead of being guessed.
+
     """
 
     def __init__(self) -> None:
@@ -22,9 +23,9 @@ class SlotTable:
         """Record that ``source`` claims ``kind`` for ``slot``.
 
         Args:
-            slot: Slot name the claim belongs to.
-            kind: Claimed type.
-            source: Evidence source identifier.
+            slot (str): Slot name the claim belongs to.
+            kind (str): Claimed type.
+            source (str): Evidence source identifier.
 
         """
         self._claims.setdefault(slot, {}).setdefault(kind, set()).add(source)
@@ -33,11 +34,11 @@ class SlotTable:
         """Return the slot's kind-to-sources mapping.
 
         Args:
-            slot: Slot name to inspect.
+            slot (str): Slot name to inspect.
 
         Returns:
-            A copy of kind → set of evidence sources; empty when the slot
-            was never deposited into.
+            dict[str, set[str]]: A copy of kind → set of evidence sources;
+                empty when the slot was never deposited into.
 
         """
         return {
@@ -49,11 +50,11 @@ class SlotTable:
         """Return the slot's kind when exactly one kind has claims.
 
         Args:
-            slot: Slot name to settle.
+            slot (str): Slot name to settle.
 
         Returns:
-            The single claimed kind, or ``None`` when the slot is empty or
-            kinds disagree.
+            str | None: The single claimed kind, or ``None`` when
+                the slot is empty or kinds disagree.
 
         """
         kinds: dict[str, set[str]] | None = self._claims.get(slot)

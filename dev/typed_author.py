@@ -62,12 +62,11 @@ from typing import (
     cast,
     final,
 )
+from uuid import NAMESPACE_DNS, UUID, uuid5
+from weakref import ReferenceType, WeakKeyDictionary, ref
 
 if TYPE_CHECKING:
     from types import ModuleType
-
-from uuid import NAMESPACE_DNS, UUID, uuid5
-from weakref import ReferenceType, WeakKeyDictionary, ref
 
 P = ParamSpec(name="P")
 R = TypeVar(name="R")
@@ -79,16 +78,33 @@ K = TypeVar(name="K")
 N = TypeVar("N", int, float, complex)
 
 
+type IntList = list[int]
+type IntDict = dict[str, int]
+type TestResult = dict[str, object]
+type ConditionalResult = IntList | IntDict | str | int
+type NestedLoopFunc = Callable[[Sequence[Sequence[int]]], IntList]
+type ExtendedPayload = object
+type ExtendedMetadata = TestResult
+type ExtendedContextMap = TestResult
+type ExtendedResultTuple = tuple["ExtendedResult", str, object, object]
+type ExtendedTestResult = TestResult
+type PatternStressInput = Mapping[str, object] | Sequence[object] | None
+type PatternStressResult = (
+    tuple[int, int] | list[object] | TestResult | object | str
+)
+type ConfigMapping = MutableMapping[str, object]
+
+
 @final
 class Constants:
     """Constants for the test.
 
     Attributes:
-        threshold: TODO.
-        max_value: TODO.
-        min_length: TODO.
-        extended_sentinel: TODO.
-        extended_context: TODO.
+        threshold (Final[int]): TODO.
+        max_value (Final[int]): TODO.
+        min_length (Final[int]): TODO.
+        extended_sentinel (Final[object]): TODO.
+        extended_context (ContextVar[ExtendedContextMap | None]): TODO.
 
     """
 
@@ -102,23 +118,6 @@ class Constants:
     )
 
 
-type IntList = list[int]
-type IntDict = dict[str, int]
-type TestResult = dict[str, object]
-type ConditionalResult = list[int] | IntDict | str | int
-type NestedLoopFunc = Callable[[Sequence[Sequence[int]]], list[int]]
-type ExtendedPayload = object
-type ExtendedMetadata = dict[str, object]
-type ExtendedContextMap = dict[str, object]
-type ExtendedResultTuple = tuple["ExtendedResult", str, object, object]
-type ExtendedTestResult = dict[str, object]
-type PatternStressInput = Mapping[str, object] | Sequence[object] | None
-type PatternStressResult = (
-    tuple[int, int] | list[object] | dict[str, object] | object | str
-)
-type ConfigMapping = MutableMapping[str, object]
-
-
 class SupportsUpdate(Protocol):
     """Protocol for observer-like objects."""
 
@@ -126,7 +125,7 @@ class SupportsUpdate(Protocol):
         """Receive an update message.
 
         Args:
-            message: TODO.
+            message (str): TODO.
 
         """
         ...
@@ -139,8 +138,8 @@ class SupportsExecuteInt(Protocol):
         """Execute with two integer inputs.
 
         Args:
-            a: TODO.
-            b: TODO.
+            a (int): TODO.
+            b (int): TODO.
 
         Returns:
             TODO.
@@ -166,7 +165,7 @@ class SupportsInitializedByMeta(Protocol):
     """Protocol for objects initialized by metaclass.
 
     Attributes:
-        initialized_by_meta: TODO.
+        initialized_by_meta (bool): TODO.
 
     """
 
@@ -190,8 +189,8 @@ class SupportsVector(Protocol):
     """Protocol for vector-like objects.
 
     Attributes:
-        x: TODO.
-        y: TODO.
+        x (int): TODO.
+        y (int): TODO.
 
     """
 
@@ -202,7 +201,7 @@ class SupportsVector(Protocol):
         """Add vectors.
 
         Args:
-            other: TODO.
+            other (SupportsVector): TODO.
 
         Returns:
             TODO.
@@ -221,20 +220,20 @@ class MetaClass(type):
         mcs: type[MetaClass],
         name: str,
         bases: tuple[type[object], ...],
-        namespace: dict[str, object],
+        namespace: TestResult,
         **_kwargs: object,
     ) -> MetaClass:
         """Create a new class with ``meta_added``.
 
         Args:
-            mcs: TODO.
-            name: TODO.
-            bases: TODO.
-            namespace: TODO.
-            _kwargs: TODO.
+            mcs (type[MetaClass]): TODO.
+            name (str): TODO.
+            bases (tuple[type[object], ...]): TODO.
+            namespace (TestResult): TODO.
+            _kwargs (object): TODO.
 
         Returns:
-            TODO.
+            MetaClass: TODO.
 
         """
         namespace["meta_added"] = True
@@ -249,11 +248,11 @@ class MetaClass(type):
         """Create instance with ``initialized_by_meta``.
 
         Args:
-            args: TODO.
-            kwargs: TODO.
+            args (object): TODO.
+            kwargs (object): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         """
         instance: SupportsInitializedByMeta = cast(
@@ -272,7 +271,7 @@ class AbstractBase(ABC):
         """Abstract method for testing.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         Returns:
             TODO.
@@ -297,8 +296,8 @@ class BaseClass:
         """Initialize base class.
 
         Args:
-            x: TODO.
-            y: TODO.
+            x (int): TODO.
+            y (int | None): TODO.
 
         """
         self.x: int = x
@@ -308,11 +307,11 @@ class BaseClass:
         """Test base method.
 
         Args:
-            a: TODO.
-            b: TODO.
+            a (int): TODO.
+            b (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return a + b
@@ -322,7 +321,7 @@ class BaseClass:
         """Base property getter.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return self.x
@@ -332,7 +331,7 @@ class BaseClass:
         """Set base property.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         """
         self.x = value
@@ -345,9 +344,9 @@ class DerivedClass(BaseClass, AbstractBase):
         """Initialize derived class.
 
         Args:
-            x: TODO.
-            y: TODO.
-            z: TODO.
+            x (int): TODO.
+            y (int | None): TODO.
+            z (int): TODO.
 
         """
         super().__init__(x=x, y=y)
@@ -357,10 +356,10 @@ class DerivedClass(BaseClass, AbstractBase):
         """Implement abstract method.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return value * 2
@@ -377,13 +376,13 @@ class DerivedClass(BaseClass, AbstractBase):
         """Test derived method.
 
         Args:
-            a: TODO.
-            b: TODO.
-            c: TODO.
-            d: TODO.
+            a (int): TODO.
+            b (int): TODO.
+            c (int): TODO.
+            d (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         if a > b:
@@ -400,7 +399,7 @@ class MetaDecoratedClass:
         """Initialize meta decorated class.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         """
         self.value: int = value
@@ -410,10 +409,10 @@ def decorator[**P, R](func: Callable[P, R]) -> Callable[P, R]:
     """Multiply result by 2.
 
     Args:
-        func: TODO.
+        func (Callable[P, R]): TODO.
 
     Returns:
-        TODO.
+        Callable[P, R]: TODO.
 
     """
 
@@ -422,11 +421,11 @@ def decorator[**P, R](func: Callable[P, R]) -> Callable[P, R]:
         """TODO.
 
         Args:
-            args: TODO.
-            kwargs: TODO.
+            args (P.args): TODO.
+            kwargs (P.kwargs): TODO.
 
         Returns:
-            TODO.
+            R: TODO.
 
         """
         result: R = func(*args, **kwargs)
@@ -443,10 +442,10 @@ def decorator_with_args[**P, R](
     """Create decorator with configurable multiplier.
 
     Args:
-        multiplier: TODO.
+        multiplier (int): TODO.
 
     Returns:
-        TODO.
+        Callable[[Callable[P, R]], Callable[P, R]]: TODO.
 
     """
 
@@ -454,10 +453,10 @@ def decorator_with_args[**P, R](
         """TODO.
 
         Args:
-            func: TODO.
+            func (Callable[P, R]): TODO.
 
         Returns:
-            TODO.
+            Callable[P, R]: TODO.
 
         """
 
@@ -466,11 +465,11 @@ def decorator_with_args[**P, R](
             """TODO.
 
             Args:
-                args: TODO.
-                kwargs: TODO.
+                args (P.args): TODO.
+                kwargs (P.kwargs): TODO.
 
             Returns:
-                TODO.
+                R: TODO.
 
             """
             result: R = func(*args, **kwargs)
@@ -490,7 +489,7 @@ def decorator_with_class(cls: type[T]) -> type:
         cls: TODO.
 
     Returns:
-        TODO.
+        type: TODO.
 
     """
 
@@ -501,8 +500,8 @@ def decorator_with_class(cls: type[T]) -> type:
             """TODO.
 
             Args:
-                args: TODO.
-                _kwargs: TODO.
+                args (object): TODO.
+                _kwargs (object): TODO.
 
             """
             self.instance: T = cls(*args)
@@ -511,10 +510,10 @@ def decorator_with_class(cls: type[T]) -> type:
             """Get attribute from wrapped instance.
 
             Args:
-                name: TODO.
+                name (str): TODO.
 
             Returns:
-                TODO.
+                object: TODO.
 
             """
             return getattr(self.instance, name)
@@ -527,10 +526,10 @@ def simple_function(x: int) -> int:
     """Test simple function.
 
     Args:
-        x: TODO.
+        x (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     return x + 1
@@ -541,11 +540,11 @@ def function_with_args(x: int, y: int = 5) -> int:
     """Test function with args.
 
     Args:
-        x: TODO.
-        y: TODO.
+        x (int): TODO.
+        y (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     return x + y
@@ -559,7 +558,7 @@ class DecoratedClass:
         """Initialize decorated class.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         """
         self.value: int = value
@@ -568,7 +567,7 @@ class DecoratedClass:
         """Test method.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return self.value
@@ -579,15 +578,15 @@ class DataClassExample:
     """Dataclass for testing type inference.
 
     Attributes:
-        x: TODO.
-        y: TODO.
-        z: TODO.
+        x (int): TODO.
+        y (str): TODO.
+        z (IntList): TODO.
 
     """
 
     x: int
     y: str = "default"
-    z: list[int] = field(default_factory=list)
+    z: IntList = field(default_factory=list)
 
 
 class EnumClass(Enum):
@@ -615,14 +614,14 @@ def function_without_hints(
     """Test function without missing type hints.
 
     Args:
-        a: TODO.
-        b: TODO.
-        c: TODO.
-        d: TODO.
-        e: TODO.
+        a (int): TODO.
+        b (int): TODO.
+        c (int | None): TODO.
+        d (int): TODO.
+        e (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     resolved_c: int = a + b if c is None else c
@@ -633,12 +632,12 @@ def function_with_kwargs(a: int, b: int = 5, **kwargs: int) -> int:
     """Test function with kwargs.
 
     Args:
-        a: TODO.
-        b: TODO.
-        kwargs: TODO.
+        a (int): TODO.
+        b (int): TODO.
+        kwargs (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     result: int = a + b
@@ -651,11 +650,11 @@ def function_with_args_kwargs(*args: int, **kwargs: int) -> int:
     """Test function with args and kwargs.
 
     Args:
-        args: TODO.
-        kwargs: TODO.
+        args (int): TODO.
+        kwargs (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     total: int = sum(args)
@@ -668,12 +667,12 @@ def nested_function(x: int, y: int, z: int) -> int:
     """Test nested function.
 
     Args:
-        x: TODO.
-        y: TODO.
-        z: TODO.
+        x (int): TODO.
+        y (int): TODO.
+        z (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
 
@@ -681,11 +680,11 @@ def nested_function(x: int, y: int, z: int) -> int:
         """Inner function for testing.
 
         Args:
-            a: TODO.
-            b: TODO.
+            a (int): TODO.
+            b (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
 
@@ -693,11 +692,11 @@ def nested_function(x: int, y: int, z: int) -> int:
             """Deeper function for testing.
 
             Args:
-                c: TODO.
-                d: TODO.
+                c (int): TODO.
+                d (int): TODO.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             return c * d
@@ -711,10 +710,10 @@ def closure_function(x: int) -> Callable[[int], int]:
     """Test closure function.
 
     Args:
-        x: TODO.
+        x (int): TODO.
 
     Returns:
-        TODO.
+        Callable[[int], int]: TODO.
 
     """
 
@@ -722,10 +721,10 @@ def closure_function(x: int) -> Callable[[int], int]:
         """Inner closure for testing.
 
         Args:
-            y: TODO.
+            y (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return x + y
@@ -742,13 +741,13 @@ def function_with_slices(
     """Test function with slices.
 
     Args:
-        data: TODO.
-        start: TODO.
-        end: TODO.
-        step: TODO.
+        data (Sequence[T]): TODO.
+        start (int): TODO.
+        end (int): TODO.
+        step (int | None): TODO.
 
     Returns:
-        TODO.
+        Sequence[T]: TODO.
 
     """
     if step is None:
@@ -758,17 +757,17 @@ def function_with_slices(
 
 def function_with_comprehensions(
     items: Sequence[int],
-) -> tuple[list[int], dict[int, int], Generator[int]]:
+) -> tuple[IntList, dict[int, int], Generator[int]]:
     """Test function with comprehensions.
 
     Args:
-        items: TODO.
+        items (Sequence[int]): TODO.
 
     Returns:
-        TODO.
+        tuple[IntList, dict[int, int], Generator[int]]: TODO.
 
     """
-    squared: list[int] = [x**2 for x in items if x > 0]
+    squared: IntList = [x**2 for x in items if x > 0]
     filtered: dict[int, int] = {
         k: v for k, v in enumerate(iterable=items) if v % 2 == 0
     }
@@ -784,10 +783,10 @@ def function_with_lambdas(
     """Test function with lambdas.
 
     Args:
-        items: TODO.
+        items (Sequence[str]): TODO.
 
     Returns:
-        TODO.
+        tuple[list[str], list[str], list[str]]: TODO.
 
     """
     sorted_items: list[str] = sorted(items, key=lambda x: x.lower())
@@ -800,10 +799,10 @@ def function_with_recursion(n: int) -> int:
     """Test function with recursion.
 
     Args:
-        n: TODO.
+        n (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     if n <= 1:
@@ -815,10 +814,10 @@ def function_with_try_except(value: str) -> int:
     """Test function with try except.
 
     Args:
-        value: TODO.
+        value (str): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     try:
@@ -838,7 +837,7 @@ def function_with_context() -> bool:
     """Test function with context.
 
     Returns:
-        TODO.
+        bool: TODO.
 
     """
     with NamedTemporaryFile(mode="w", delete=False) as f:
@@ -852,8 +851,8 @@ def function_with_context() -> bool:
 def custom_context() -> Generator[str]:
     """Create custom context manager.
 
-    Returns:
-        TODO.
+    Yields:
+        str: TODO.
 
     """
     resource: str = acquire_resource()
@@ -867,7 +866,7 @@ def acquire_resource() -> str:
     """Acquire resource.
 
     Returns:
-        TODO.
+        str: TODO.
 
     """
     return "resource"
@@ -877,25 +876,25 @@ def release_resource(resource: str) -> None:
     """Release resource.
 
     Args:
-        resource: TODO.
+        resource (str): TODO.
 
     """
     resource = resource * 3
 
 
-def function_with_generators() -> list[int]:
+def function_with_generators() -> IntList:
     """Test function with generators.
 
     Returns:
-        TODO.
+        IntList: TODO.
 
     """
 
     def generator() -> Generator[int]:
         """Generate values.
 
-        Returns:
-            TODO.
+        Yields:
+            int: TODO.
 
         """
         yield from range(10)
@@ -907,7 +906,7 @@ def function_with_coroutines() -> Callable[[int], Awaitable[int]]:
     """Test function with coroutines.
 
     Returns:
-        TODO.
+        Callable[[int], Awaitable[int]]: TODO.
 
     """
 
@@ -915,10 +914,10 @@ def function_with_coroutines() -> Callable[[int], Awaitable[int]]:
         """Test async function.
 
         Args:
-            x: TODO.
+            x (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         await sleep(delay=1)
@@ -931,7 +930,7 @@ def function_with_class_methods() -> type[object]:
     """Test function with class methods.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -943,7 +942,7 @@ def function_with_class_methods() -> type[object]:
             """Implement class method.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             return cls.__name__
@@ -953,7 +952,7 @@ def function_with_class_methods() -> type[object]:
             """Implement static method.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             return "static"
@@ -962,7 +961,7 @@ def function_with_class_methods() -> type[object]:
             """Test instance method.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             return "instance"
@@ -974,7 +973,7 @@ def function_with_property() -> type[object]:
     """Test function with property.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -990,7 +989,7 @@ def function_with_property() -> type[object]:
             """Get value property.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             return self._value
@@ -1000,7 +999,7 @@ def function_with_property() -> type[object]:
             """Set value property.
 
             Args:
-                val: TODO.
+                val (int): TODO.
 
             """
             self._value = val
@@ -1017,7 +1016,7 @@ def function_with_descriptor() -> type[object]:
     """Test function with descriptor.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -1032,11 +1031,11 @@ def function_with_descriptor() -> type[object]:
             """Get descriptor value.
 
             Args:
-                obj: TODO.
-                objtype: TODO.
+                obj (object): TODO.
+                objtype (type[object]): TODO.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             _ = obj, objtype
@@ -1046,8 +1045,8 @@ def function_with_descriptor() -> type[object]:
             """Set descriptor value.
 
             Args:
-                obj: TODO.
-                value: TODO.
+                obj (object): TODO.
+                value (int): TODO.
 
             """
             _ = obj
@@ -1057,7 +1056,7 @@ def function_with_descriptor() -> type[object]:
             """Delete descriptor value.
 
             Args:
-                obj: TODO.
+                obj (object): TODO.
 
             """
             _ = obj
@@ -1070,7 +1069,7 @@ def function_with_operator_overloading() -> VectorFactory:
     """Test function with operator overloading.
 
     Returns:
-        TODO.
+        VectorFactory: TODO.
 
     """
 
@@ -1081,8 +1080,8 @@ def function_with_operator_overloading() -> VectorFactory:
             """Initialize vector.
 
             Args:
-                x: TODO.
-                y: TODO.
+                x (int): TODO.
+                y (int): TODO.
 
             """
             self.x: int = x
@@ -1092,10 +1091,10 @@ def function_with_operator_overloading() -> VectorFactory:
             """Add vectors.
 
             Args:
-                other: TODO.
+                other (SupportsVector): TODO.
 
             Returns:
-                TODO.
+                Vector: TODO.
 
             """
             return Vector(x=self.x + other.x, y=self.y + other.y)
@@ -1104,10 +1103,10 @@ def function_with_operator_overloading() -> VectorFactory:
             """Subtract vectors.
 
             Args:
-                other: TODO.
+                other (Vector): TODO.
 
             Returns:
-                TODO.
+                Vector: TODO.
 
             """
             return Vector(x=self.x - other.x, y=self.y - other.y)
@@ -1116,10 +1115,10 @@ def function_with_operator_overloading() -> VectorFactory:
             """Multiply vector by scalar.
 
             Args:
-                scalar: TODO.
+                scalar (int): TODO.
 
             Returns:
-                TODO.
+                Vector: TODO.
 
             """
             return Vector(x=self.x * scalar, y=self.y * scalar)
@@ -1128,10 +1127,10 @@ def function_with_operator_overloading() -> VectorFactory:
             """Check vector equality.
 
             Args:
-                other: TODO.
+                other (object): TODO.
 
             Returns:
-                TODO.
+                bool: TODO.
 
             """
             if not isinstance(other, Vector):
@@ -1142,7 +1141,7 @@ def function_with_operator_overloading() -> VectorFactory:
             """Return hash of vector.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             return hash((self.x, self.y))
@@ -1151,10 +1150,10 @@ def function_with_operator_overloading() -> VectorFactory:
             """Check if vector is less than other.
 
             Args:
-                other: TODO.
+                other (Vector): TODO.
 
             Returns:
-                TODO.
+                bool: TODO.
 
             """
             return self.x < other.x
@@ -1163,7 +1162,7 @@ def function_with_operator_overloading() -> VectorFactory:
             """Return vector representation.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             return f"Vector({self.x}, {self.y})"
@@ -1175,7 +1174,7 @@ def function_with_metaclass_usage() -> object:
     """Test function with metaclass usage.
 
     Returns:
-        TODO.
+        object: TODO.
 
     """
 
@@ -1189,7 +1188,7 @@ def function_with_multiple_inheritance() -> type[object]:
     """Test function with multiple inheritance.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -1200,7 +1199,7 @@ def function_with_multiple_inheritance() -> type[object]:
             """Test method A.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             return "A"
@@ -1212,7 +1211,7 @@ def function_with_multiple_inheritance() -> type[object]:
             """Test method B.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             return "B"
@@ -1224,7 +1223,7 @@ def function_with_multiple_inheritance() -> type[object]:
             """Test combined method.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             return self.method_a() + self.method_b()
@@ -1236,7 +1235,7 @@ def function_with_abstract_methods() -> type[AbstractBase]:
     """Test function with abstract methods.
 
     Returns:
-        TODO.
+        type[AbstractBase]: TODO.
 
     """
 
@@ -1247,10 +1246,10 @@ def function_with_abstract_methods() -> type[AbstractBase]:
             """Test abstract method.
 
             Args:
-                value: TODO.
+                value (int): TODO.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             return value + 10
@@ -1270,7 +1269,7 @@ def function_with_protocol() -> type[object]:
     """Test function with protocol.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -1281,10 +1280,10 @@ def function_with_protocol() -> type[object]:
             """Test protocol method.
 
             Args:
-                x: TODO.
+                x (int): TODO.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             return x * 2
@@ -1296,7 +1295,7 @@ def function_with_generic_types() -> tuple[int, int, str]:
     """Test function with generic types.
 
     Returns:
-        TODO.
+        tuple[int, int, str]: TODO.
 
     """
 
@@ -1304,10 +1303,10 @@ def function_with_generic_types() -> tuple[int, int, str]:
         """Test generic function.
 
         Args:
-            container: TODO.
+            container (Sequence[T] | Mapping[T, U]): TODO.
 
         Returns:
-            TODO.
+            T | U: TODO.
 
         """
         if isinstance(container, Mapping):
@@ -1324,7 +1323,7 @@ def function_with_union_types() -> Callable[[int | str], int | str]:
     """Test function with union types.
 
     Returns:
-        TODO.
+        Callable[[int | str], int | str]: TODO.
 
     """
 
@@ -1332,10 +1331,10 @@ def function_with_union_types() -> Callable[[int | str], int | str]:
         """Test union function.
 
         Args:
-            value: TODO.
+            value (int | str): TODO.
 
         Returns:
-            TODO.
+            int | str: TODO.
 
         """
         if isinstance(value, int):
@@ -1351,7 +1350,7 @@ def function_with_optional_types() -> Callable[[object], object]:
     """Test function with optional types.
 
     Returns:
-        TODO.
+        Callable[[object], object]: TODO.
 
     """
 
@@ -1359,10 +1358,10 @@ def function_with_optional_types() -> Callable[[object], object]:
         """Test optional function.
 
         Args:
-            value: TODO.
+            value (object): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         """
         if value is None:
@@ -1379,7 +1378,7 @@ def function_with_callable() -> Callable[
     """Test function with callable.
 
     Returns:
-        TODO.
+        Callable[[Callable[[object], object], object], object]: TODO.
 
     """
 
@@ -1390,11 +1389,11 @@ def function_with_callable() -> Callable[
         """Test callable function.
 
         Args:
-            func: TODO.
-            arg: TODO.
+            func (Callable[[object], object]): TODO.
+            arg (object): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         """
         return func(arg)
@@ -1406,7 +1405,7 @@ def function_with_tuple_unpacking() -> tuple[int, int, int, int, int]:
     """Test function with tuple unpacking.
 
     Returns:
-        TODO.
+        tuple[int, int, int, int, int]: TODO.
 
     """
     data: tuple[int, int, int, int, int] = (1, 2, 3, 4, 5)
@@ -1419,7 +1418,7 @@ def function_with_dict_operations() -> tuple[IntDict, IntDict]:
     """Test function with dict operations.
 
     Returns:
-        TODO.
+        tuple[IntDict, IntDict]: TODO.
 
     """
     d1: IntDict = {"a": 1, "b": 2}
@@ -1433,7 +1432,7 @@ def function_with_set_operations() -> tuple[set[int], set[int], set[int]]:
     """Test function with set operations.
 
     Returns:
-        TODO.
+        tuple[set[int], set[int], set[int]]: TODO.
 
     """
     s1: set[int] = {1, 2, 3, 4}
@@ -1448,7 +1447,7 @@ def function_with_bitwise_operations() -> tuple[int, int, int, int, int, int]:
     """Test function with bitwise operations.
 
     Returns:
-        TODO.
+        tuple[int, int, int, int, int, int]: TODO.
 
     """
     a: int = 0b1010
@@ -1473,7 +1472,7 @@ def function_with_augmented_assignment() -> int:
     """Test function with augmented assignment.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     x: int = 10
@@ -1496,7 +1495,7 @@ def function_with_ternary() -> tuple[int, int]:
     """Test function with ternary.
 
     Returns:
-        TODO.
+        tuple[int, int]: TODO.
 
     """
     x: int = 10
@@ -1510,7 +1509,7 @@ def function_with_chained_comparisons() -> tuple[bool, bool, bool]:
     """Test function with chained comparisons.
 
     Returns:
-        TODO.
+        tuple[bool, bool, bool]: TODO.
 
     """
     x: int = Constants.threshold
@@ -1524,7 +1523,7 @@ def function_with_boolean_logic() -> tuple[bool, bool, bool, bool, bool]:
     """Test function with boolean logic.
 
     Returns:
-        TODO.
+        tuple[bool, bool, bool, bool, bool]: TODO.
 
     """
     a: bool = True
@@ -1542,7 +1541,7 @@ def function_with_none_handling() -> tuple[int | None, int | None]:
     """Test function with none handling.
 
     Returns:
-        TODO.
+        tuple[int | None, int | None]: TODO.
 
     """
 
@@ -1550,10 +1549,10 @@ def function_with_none_handling() -> tuple[int | None, int | None]:
         """Maybe none function for testing.
 
         Args:
-            value: TODO.
+            value (int | None): TODO.
 
         Returns:
-            TODO.
+            int | None: TODO.
 
         """
         if value is None:
@@ -1569,7 +1568,7 @@ def function_with_ellipsis() -> Callable[[int, int], int]:
     """Test function with ellipsis.
 
     Returns:
-        TODO.
+        Callable[[int, int], int]: TODO.
 
     """
 
@@ -1577,11 +1576,11 @@ def function_with_ellipsis() -> Callable[[int, int], int]:
         """Ellipsis function for testing.
 
         Args:
-            a: TODO.
-            b: TODO.
+            a (int): TODO.
+            b (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return a + b
@@ -1589,14 +1588,14 @@ def function_with_ellipsis() -> Callable[[int, int], int]:
     return ellipsis_function
 
 
-def function_with_star_expressions() -> list[int]:
+def function_with_star_expressions() -> IntList:
     """Test function with star expressions.
 
     Returns:
-        TODO.
+        IntList: TODO.
 
     """
-    data: list[int] = [1, 2, 3]
+    data: IntList = [1, 2, 3]
     return [*data, 4, 5]
 
 
@@ -1604,7 +1603,7 @@ def function_with_double_star_expressions() -> IntDict:
     """Test function with double star expressions.
 
     Returns:
-        TODO.
+        IntDict: TODO.
 
     """
     d1: IntDict = {"a": 1}
@@ -1616,30 +1615,30 @@ def function_with_matrix_multiplication() -> type[object]:
     """Test function with matrix multiplication.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
     class Matrix:
         """Test matrix class."""
 
-        def __init__(self, data: list[list[int]]) -> None:
+        def __init__(self, data: list[IntList]) -> None:
             """Initialize matrix with data.
 
             Args:
-                data: TODO.
+                data (list[IntList]): TODO.
 
             """
-            self.data: list[list[int]] = data
+            self.data: list[IntList] = data
 
         def __matmul__(self, other: Matrix) -> Matrix:
             """Matrix multiplication operator.
 
             Args:
-                other: TODO.
+                other (Matrix): TODO.
 
             Returns:
-                TODO.
+                Matrix: TODO.
 
             """
             return Matrix(
@@ -1659,7 +1658,7 @@ def function_with_async_await() -> Callable[[], Awaitable[int]]:
     """Test function with async await.
 
     Returns:
-        TODO.
+        Callable[[], Awaitable[int]]: TODO.
 
     """
 
@@ -1667,7 +1666,7 @@ def function_with_async_await() -> Callable[[], Awaitable[int]]:
         """Async function for testing.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         await sleep(delay=0.1)
@@ -1687,7 +1686,15 @@ def function_with_type_annotations_missing() -> tuple[
     """Test formerly missing type annotations.
 
     Returns:
-        TODO.
+        tuple[
+                Callable[[int], int],
+                Callable[[int, int], int],
+                Callable[[int, int], int],
+                Callable[..., int],
+                Callable[..., int],
+                Callable[..., int]
+            ]:
+            TODO.
 
     """
 
@@ -1695,10 +1702,10 @@ def function_with_type_annotations_missing() -> tuple[
         """Func1 for testing.
 
         Args:
-            x: TODO.
+            x (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return x + 1
@@ -1707,11 +1714,11 @@ def function_with_type_annotations_missing() -> tuple[
         """Func2 for testing.
 
         Args:
-            x: TODO.
-            y: TODO.
+            x (int): TODO.
+            y (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return x + y
@@ -1720,11 +1727,11 @@ def function_with_type_annotations_missing() -> tuple[
         """Func3 for testing.
 
         Args:
-            x: TODO.
-            y: TODO.
+            x (int): TODO.
+            y (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return x * y
@@ -1733,10 +1740,10 @@ def function_with_type_annotations_missing() -> tuple[
         """Func4 for testing.
 
         Args:
-            args: TODO.
+            args (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return sum(args)
@@ -1745,10 +1752,10 @@ def function_with_type_annotations_missing() -> tuple[
         """Func5 for testing.
 
         Args:
-            kwargs: TODO.
+            kwargs (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return sum(kwargs.values())
@@ -1757,11 +1764,11 @@ def function_with_type_annotations_missing() -> tuple[
         """Func6 for testing.
 
         Args:
-            args: TODO.
-            kwargs: TODO.
+            args (int): TODO.
+            kwargs (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return sum(args) + sum(kwargs.values())
@@ -1773,7 +1780,7 @@ def function_with_complex_conditionals() -> Callable[[int, int, int], int]:
     """Test function with complex conditionals.
 
     Returns:
-        TODO.
+        Callable[[int, int, int], int]: TODO.
 
     """
 
@@ -1781,12 +1788,12 @@ def function_with_complex_conditionals() -> Callable[[int, int, int], int]:
         """Complex function for testing.
 
         Args:
-            x: TODO.
-            y: TODO.
-            z: TODO.
+            x (int): TODO.
+            y (int): TODO.
+            z (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         x_sign: int = 1 if x > 0 else -1
@@ -1801,21 +1808,21 @@ def function_with_nested_loops() -> NestedLoopFunc:
     """Test function with nested loops.
 
     Returns:
-        TODO.
+        NestedLoopFunc: TODO.
 
     """
 
-    def nested_loop_func(matrix: Sequence[Sequence[int]]) -> list[int]:
+    def nested_loop_func(matrix: Sequence[Sequence[int]]) -> IntList:
         """Nested loop function for testing.
 
         Args:
-            matrix: TODO.
+            matrix (Sequence[Sequence[int]]): TODO.
 
         Returns:
-            TODO.
+            IntList: TODO.
 
         """
-        result: list[int] = []
+        result: IntList = []
         for row in matrix:
             row_sum: int = 0
             for element in row:
@@ -1830,7 +1837,7 @@ def function_with_exception_chaining() -> Callable[[], None]:
     """Test function with exception chaining.
 
     Returns:
-        TODO.
+        Callable[[], None]: TODO.
 
     """
 
@@ -1851,7 +1858,7 @@ def function_with_exception_chaining() -> Callable[[], None]:
             """TODO.
 
             Args:
-                original_error: TODO.
+                original_error (ValueError): TODO.
 
             Raises:
                 TypeError: TODO.
@@ -1872,7 +1879,7 @@ def function_with_custom_exceptions() -> Callable[[], None]:
     """Test function with custom exceptions.
 
     Returns:
-        TODO.
+        Callable[[], None]: TODO.
 
     """
 
@@ -1899,7 +1906,7 @@ def function_with_weak_refs() -> ReferenceType[object]:
     """Test function with weak refs.
 
     Returns:
-        TODO.
+        ReferenceType[object]: TODO.
 
     """
 
@@ -1914,7 +1921,7 @@ def function_with_slots() -> type[object]:
     """Test function with slots.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -1932,8 +1939,8 @@ def function_with_slots() -> type[object]:
             """TODO.
 
             Args:
-                x: TODO.
-                y: TODO.
+                x (int): TODO.
+                y (int): TODO.
 
             """
             self.x: int = x
@@ -1946,7 +1953,7 @@ def function_with_class_decorator() -> type[object]:
     """Test function with class decorator.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -1957,7 +1964,7 @@ def function_with_class_decorator() -> type[object]:
             cls: TODO.
 
         Returns:
-            TODO.
+            type[T]: TODO.
 
         """
 
@@ -1968,7 +1975,7 @@ def function_with_class_decorator() -> type[object]:
                 self: TODO.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             _ = self
@@ -1989,7 +1996,7 @@ def function_with_singleton() -> type[object]:
     """Test function with singleton.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -1997,7 +2004,7 @@ def function_with_singleton() -> type[object]:
         """Test singleton class.
 
         Attributes:
-            _instance: TODO.
+            _instance (Singleton | None): TODO.
 
         """
 
@@ -2007,7 +2014,7 @@ def function_with_singleton() -> type[object]:
             """Create singleton instance.
 
             Returns:
-                TODO.
+                Self: TODO.
 
             """
             if cls._instance is None:
@@ -2021,7 +2028,7 @@ def function_with_factory() -> type[object]:
     """Test function with factory.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -2039,10 +2046,10 @@ def function_with_factory() -> type[object]:
             """Create type for testing.
 
             Args:
-                type_name: TODO.
+                type_name (str): TODO.
 
             Returns:
-                TODO.
+                TypeA | TypeB | None: TODO.
 
             """
             if type_name == "a":
@@ -2058,7 +2065,7 @@ def function_with_builder() -> type[object]:
     """Test function with builder.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -2069,7 +2076,7 @@ def function_with_builder() -> type[object]:
             """Initialize product with parts.
 
             Args:
-                parts: TODO.
+                parts (Sequence[str]): TODO.
 
             """
             self.parts: list[str] = list(parts)
@@ -2085,10 +2092,10 @@ def function_with_builder() -> type[object]:
             """TODO.
 
             Args:
-                part: TODO.
+                part (str): TODO.
 
             Returns:
-                TODO.
+                Self: TODO.
 
             """
             self.parts.append(part)
@@ -2098,7 +2105,7 @@ def function_with_builder() -> type[object]:
             """TODO.
 
             Returns:
-                TODO.
+                Product: TODO.
 
             """
             return Product(parts=self.parts)
@@ -2110,7 +2117,7 @@ def function_with_observer() -> tuple[type[object], type[object]]:
     """Test function with observer.
 
     Returns:
-        TODO.
+        tuple[type[object], type[object]]: TODO.
 
     """
 
@@ -2121,7 +2128,7 @@ def function_with_observer() -> tuple[type[object], type[object]]:
             """Update observer with message.
 
             Args:
-                message: TODO.
+                message (str): TODO.
 
             """
             _ = self, message
@@ -2137,7 +2144,7 @@ def function_with_observer() -> tuple[type[object], type[object]]:
             """Attach observer to subject.
 
             Args:
-                observer: TODO.
+                observer (SupportsUpdate): TODO.
 
             """
             self.observers.append(observer)
@@ -2146,7 +2153,7 @@ def function_with_observer() -> tuple[type[object], type[object]]:
             """Notify all observers with message.
 
             Args:
-                message: TODO.
+                message (str): TODO.
 
             """
             for observer in self.observers:
@@ -2159,7 +2166,7 @@ def function_with_strategy() -> tuple[type[object], type[object]]:
     """Test function with strategy.
 
     Returns:
-        TODO.
+        tuple[type[object], type[object]]: TODO.
 
     """
 
@@ -2170,11 +2177,11 @@ def function_with_strategy() -> tuple[type[object], type[object]]:
             """Execute strategy.
 
             Args:
-                a: TODO.
-                b: TODO.
+                a (int): TODO.
+                b (int): TODO.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             _ = self, a, b
@@ -2187,11 +2194,11 @@ def function_with_strategy() -> tuple[type[object], type[object]]:
             """Execute add strategy.
 
             Args:
-                a: TODO.
-                b: TODO.
+                a (int): TODO.
+                b (int): TODO.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             return a + b
@@ -2203,11 +2210,11 @@ def function_with_strategy() -> tuple[type[object], type[object]]:
             """Execute multiply strategy.
 
             Args:
-                a: TODO.
-                b: TODO.
+                a (int): TODO.
+                b (int): TODO.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             return a * b
@@ -2219,7 +2226,7 @@ def function_with_command() -> tuple[type[object], type[object]]:
     """Test function with command.
 
     Returns:
-        TODO.
+        tuple[type[object], type[object]]: TODO.
 
     """
 
@@ -2236,7 +2243,7 @@ def function_with_command() -> tuple[type[object], type[object]]:
             """Perform action.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             return "Action performed"
@@ -2248,7 +2255,7 @@ def function_with_command() -> tuple[type[object], type[object]]:
             """TODO.
 
             Args:
-                receiver: TODO.
+                receiver (SupportsAction): TODO.
 
             """
             self.receiver: SupportsAction = receiver
@@ -2264,7 +2271,7 @@ def function_with_chain_of_responsibility() -> type[object]:
     """Test function with chain of responsibility.
 
     Returns:
-        TODO.
+        type[object]: TODO.
 
     """
 
@@ -2279,10 +2286,10 @@ def function_with_chain_of_responsibility() -> type[object]:
             """Set next handler.
 
             Args:
-                handler: TODO.
+                handler (Handler): TODO.
 
             Returns:
-                TODO.
+                Handler: TODO.
 
             """
             self.next = handler
@@ -2292,10 +2299,10 @@ def function_with_chain_of_responsibility() -> type[object]:
             """Handle request.
 
             Args:
-                request: TODO.
+                request (str): TODO.
 
             Returns:
-                TODO.
+                str | None: TODO.
 
             """
             if self.next is not None:
@@ -2309,7 +2316,7 @@ def function_with_decorator_stack() -> Callable[[], str]:
     """Test function with decorator stack.
 
     Returns:
-        TODO.
+        Callable[[], str]: TODO.
 
     """
 
@@ -2317,10 +2324,10 @@ def function_with_decorator_stack() -> Callable[[], str]:
         """Test decorator 1.
 
         Args:
-            func: TODO.
+            func (Callable[P, R]): TODO.
 
         Returns:
-            TODO.
+            Callable[P, R]: TODO.
 
         """
 
@@ -2329,11 +2336,11 @@ def function_with_decorator_stack() -> Callable[[], str]:
             """Wrap decorator 1.
 
             Args:
-                args: TODO.
-                kwargs: TODO.
+                args (P.args): TODO.
+                kwargs (P.kwargs): TODO.
 
             Returns:
-                TODO.
+                R: TODO.
 
             """
             return func(*args, **kwargs)
@@ -2344,10 +2351,10 @@ def function_with_decorator_stack() -> Callable[[], str]:
         """Test decorator 2.
 
         Args:
-            func: TODO.
+            func (Callable[P, R]): TODO.
 
         Returns:
-            TODO.
+            Callable[P, R]: TODO.
 
         """
 
@@ -2356,11 +2363,11 @@ def function_with_decorator_stack() -> Callable[[], str]:
             """Wrap decorator 2.
 
             Args:
-                args: TODO.
-                kwargs: TODO.
+                args (P.args): TODO.
+                kwargs (P.kwargs): TODO.
 
             Returns:
-                TODO.
+                R: TODO.
 
             """
             return func(*args, **kwargs)
@@ -2373,7 +2380,7 @@ def function_with_decorator_stack() -> Callable[[], str]:
         """Test stacked function.
 
         Returns:
-            TODO.
+            str: TODO.
 
         """
         return "stacked"
@@ -2385,7 +2392,7 @@ def function_with_partial() -> Callable[[int], int]:
     """Test function with partial.
 
     Returns:
-        TODO.
+        Callable[[int], int]: TODO.
 
     """
 
@@ -2393,11 +2400,11 @@ def function_with_partial() -> Callable[[int], int]:
         """Test multiply function.
 
         Args:
-            a: TODO.
-            b: TODO.
+            a (int): TODO.
+            b (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return a * b
@@ -2409,18 +2416,18 @@ def function_with_reduce() -> int:
     """Test function with reduce.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
-    numbers: list[int] = [1, 2, 3, 4, 5]
+    numbers: IntList = [1, 2, 3, 4, 5]
     return reduce(lambda x, y: x + y, numbers)
 
 
-def function_with_groupby() -> dict[str, list[int]]:
+def function_with_groupby() -> dict[str, IntList]:
     """Test function with groupby.
 
     Returns:
-        TODO.
+        dict[str, IntList]: TODO.
 
     """
     data: list[tuple[str, int]] = [("a", 1), ("b", 2), ("a", 3), ("b", 4)]
@@ -2437,10 +2444,10 @@ def function_with_permutations_combinations() -> tuple[
     """Test function with permutations and combinations.
 
     Returns:
-        TODO.
+        tuple[list[tuple[int, ...]], list[tuple[int, ...]]]: TODO.
 
     """
-    items: list[int] = [1, 2, 3]
+    items: IntList = [1, 2, 3]
     perms: list[tuple[int, ...]] = list(permutations(iterable=items, r=2))
     combs: list[tuple[int, ...]] = list(combinations(iterable=items, r=2))
     return perms, combs
@@ -2450,7 +2457,7 @@ def function_with_defaultdict() -> defaultdict[str, int]:
     """Test function with defaultdict.
 
     Returns:
-        TODO.
+        defaultdict[str, int]: TODO.
 
     """
     d: defaultdict[str, int] = defaultdict(int)
@@ -2463,7 +2470,7 @@ def function_with_counter() -> Counter[int]:
     """Test function with counter.
 
     Returns:
-        TODO.
+        Counter[int]: TODO.
 
     """
     return Counter([1, 2, 2, 3, 3, 3])
@@ -2473,7 +2480,7 @@ def function_with_deque() -> deque[int]:
     """Test function with deque.
 
     Returns:
-        TODO.
+        deque[int]: TODO.
 
     """
     d: deque[int] = deque(iterable=[1, 2, 3])
@@ -2488,7 +2495,7 @@ def function_with_ordereddict() -> OrderedDict[str, int]:
     """Test function with ordereddict.
 
     Returns:
-        TODO.
+        OrderedDict[str, int]: TODO.
 
     """
     return OrderedDict([("a", 1), ("b", 2), ("c", 3)])
@@ -2498,7 +2505,7 @@ def function_with_namedtuple() -> Point:
     """Test function with namedtuple.
 
     Returns:
-        TODO.
+        Point: TODO.
 
     """
     return Point(x=1, y=2)
@@ -2508,8 +2515,8 @@ class Point(NamedTuple):
     """Test point.
 
     Attributes:
-        x: TODO.
-        y: TODO.
+        x (int): TODO.
+        y (int): TODO.
 
     """
 
@@ -2517,39 +2524,39 @@ class Point(NamedTuple):
     y: int
 
 
-def function_with_chain() -> list[int]:
+def function_with_chain() -> IntList:
     """Test function with chain.
 
     Returns:
-        TODO.
+        IntList: TODO.
 
     """
-    list1: list[int] = [1, 2, 3]
-    list2: list[int] = [4, 5, 6]
+    list1: IntList = [1, 2, 3]
+    list2: IntList = [4, 5, 6]
     return list(chain(list1, list2))
 
 
-def function_with_islice() -> list[int]:
+def function_with_islice() -> IntList:
     """Test function with islice.
 
     Returns:
-        TODO.
+        IntList: TODO.
 
     """
     data: range = range(10)
     return list(islice(data, 2, 8, 2))
 
 
-def function_with_takewhile_dropwhile() -> tuple[list[int], list[int]]:
+def function_with_takewhile_dropwhile() -> tuple[IntList, IntList]:
     """Test function with takewhile and dropwhile.
 
     Returns:
-        TODO.
+        tuple[IntList, IntList]: TODO.
 
     """
-    data: list[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    taken: list[int] = list(takewhile(lambda x: x < Constants.threshold, data))
-    dropped: list[int] = list(
+    data: IntList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    taken: IntList = list(takewhile(lambda x: x < Constants.threshold, data))
+    dropped: IntList = list(
         dropwhile(lambda x: x < Constants.threshold, data),
     )
     return taken, dropped
@@ -2559,10 +2566,10 @@ def function_with_zip_longest() -> list[tuple[int | None, str | None]]:
     """Test function with zip longest.
 
     Returns:
-        TODO.
+        list[tuple[int | None, str | None]]: TODO.
 
     """
-    list1: list[int] = [1, 2, 3]
+    list1: IntList = [1, 2, 3]
     list2: list[str] = ["a", "b"]
     return list(zip_longest(list1, list2, fillvalue=None))
 
@@ -2571,10 +2578,10 @@ def function_with_product() -> list[tuple[int, str]]:
     """Test function with product.
 
     Returns:
-        TODO.
+        list[tuple[int, str]]: TODO.
 
     """
-    list1: list[int] = [1, 2]
+    list1: IntList = [1, 2]
     list2: list[str] = ["a", "b"]
     return list(product(list1, list2))
 
@@ -2589,52 +2596,52 @@ def function_with_positional_and_keyword_only(
     """Test function with positional-only and keyword-only arguments.
 
     Args:
-        pos_only: TODO.
-        normal: TODO.
-        kw_only: TODO.
+        pos_only (int): TODO.
+        normal (int): TODO.
+        kw_only (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     return pos_only + normal + kw_only
 
 
-def function_with_compress() -> list[int]:
+def function_with_compress() -> IntList:
     """Test function with compress.
 
     Returns:
-        TODO.
+        IntList: TODO.
 
     """
-    data: list[int] = [1, 2, 3, 4, 5]
+    data: IntList = [1, 2, 3, 4, 5]
     selectors: list[bool] = [True, False, True, False, True]
     return list(compress(data=data, selectors=selectors))
 
 
-def function_with_accumulate() -> list[int]:
+def function_with_accumulate() -> IntList:
     """Test function with accumulate.
 
     Returns:
-        TODO.
+        IntList: TODO.
 
     """
-    data: list[int] = [1, 2, 3, 4, 5]
+    data: IntList = [1, 2, 3, 4, 5]
     return list(accumulate(iterable=data))
 
 
 def function_with_conditional_output(
     value: int,
     mode: str,
-) -> list[int] | IntDict | str | int:
+) -> ConditionalResult:
     """Test function with conditions, globals, and conditional output type.
 
     Args:
-        value: TODO.
-        mode: TODO.
+        value (int): TODO.
+        mode (str): TODO.
 
     Returns:
-        TODO.
+        ConditionalResult: TODO.
 
     """
     if value > Constants.threshold and mode == "list":
@@ -2650,7 +2657,7 @@ def test_function_calls_part1() -> TestResult:
     """Test basic function calls with kwargs where possible.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
     result1: int = function_without_hints(a=1, b=2)
@@ -2669,7 +2676,7 @@ def test_function_calls_part1() -> TestResult:
         end=5,
         step=2,
     )
-    result8: tuple[list[int], dict[int, int], Generator[int]] = (
+    result8: tuple[IntList, dict[int, int], Generator[int]] = (
         function_with_comprehensions(items=[1, 2, 3, 4, 5])
     )
     result9: tuple[list[str], list[str], list[str]] = function_with_lambdas(
@@ -2678,7 +2685,7 @@ def test_function_calls_part1() -> TestResult:
     result10: int = function_with_recursion(n=5)
     result11: int = function_with_try_except(value="123")
     result12: int = function_with_try_except(value="abc")
-    result13: list[int] = function_with_generators()
+    result13: IntList = function_with_generators()
     result14: type[object] = function_with_class_methods()
     result15: type[object] = function_with_property()
     result16: VectorFactory = function_with_operator_overloading()
@@ -2718,7 +2725,7 @@ def test_function_calls_part2() -> TestResult:
     """Test intermediate function calls with kwargs where possible.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
     result23: tuple[int, int, int, int, int] = function_with_tuple_unpacking()
@@ -2736,7 +2743,7 @@ def test_function_calls_part2() -> TestResult:
         function_with_boolean_logic()
     )
     result31: tuple[int | None, int | None] = function_with_none_handling()
-    result32: list[int] = function_with_star_expressions()
+    result32: IntList = function_with_star_expressions()
     result33: IntDict = function_with_double_star_expressions()
     result34: tuple[
         Callable[[int], int],
@@ -2748,7 +2755,7 @@ def test_function_calls_part2() -> TestResult:
     ] = function_with_type_annotations_missing()
     result35: int = function_with_complex_conditionals()(1, 2, 3)
     nested_loop: NestedLoopFunc = function_with_nested_loops()
-    result36: list[int] = nested_loop([[1, 2], [3, 4], [5, 6]])
+    result36: IntList = nested_loop([[1, 2], [3, 4], [5, 6]])
     result37: type[object] = function_with_slots()
     result38: type[object] = function_with_class_decorator()
     result39: type[object] = function_with_singleton()
@@ -2787,14 +2794,14 @@ def test_function_calls_part3() -> TestResult:
     """Test advanced function calls with kwargs where possible.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
     result45: type[object] = function_with_chain_of_responsibility()
     result46: Callable[[], str] = function_with_decorator_stack()
     result47: Callable[[int], int] = function_with_partial()
     result48: int = function_with_reduce()
-    result49: dict[str, list[int]] = function_with_groupby()
+    result49: dict[str, IntList] = function_with_groupby()
     result50: tuple[list[tuple[int, ...]], list[tuple[int, ...]]] = (
         function_with_permutations_combinations()
     )
@@ -2803,13 +2810,13 @@ def test_function_calls_part3() -> TestResult:
     result53: deque[int] = function_with_deque()
     result54: OrderedDict[str, int] = function_with_ordereddict()
     result55: Point = function_with_namedtuple()
-    result56: list[int] = function_with_chain()
-    result57: list[int] = function_with_islice()
-    result58: tuple[list[int], list[int]] = function_with_takewhile_dropwhile()
+    result56: IntList = function_with_chain()
+    result57: IntList = function_with_islice()
+    result58: tuple[IntList, IntList] = function_with_takewhile_dropwhile()
     result59: list[tuple[int | None, str | None]] = function_with_zip_longest()
     result60: list[tuple[int, str]] = function_with_product()
-    result61: list[int] = function_with_compress()
-    result62: list[int] = function_with_accumulate()
+    result61: IntList = function_with_compress()
+    result62: IntList = function_with_accumulate()
     result63: ConditionalResult = function_with_conditional_output(
         value=10,
         mode="list",
@@ -2856,7 +2863,7 @@ def test_function_calls() -> TestResult:
     """Test various function calls with kwargs where possible.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
     return {
@@ -2870,7 +2877,7 @@ def test_class_instantiations() -> TestResult:
     """Test class instantiations with kwargs where possible.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
     return {
@@ -2887,7 +2894,7 @@ def test_other_operations() -> TestResult:
     """Test enum, closure, context, and vector operations.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
     enum_val: EnumClass = EnumClass.VALUE_A
@@ -2911,19 +2918,19 @@ class SliceExampleResult(NamedTuple):
     """Result for list and dictionary slice inference examples.
 
     Attributes:
-        list_slice: TODO.
-        list_stride_slice: TODO.
-        dict_slice: TODO.
-        dict_key_slice: TODO.
-        dict_value_slice: TODO.
+        list_slice (IntList): TODO.
+        list_stride_slice (IntList): TODO.
+        dict_slice (IntDict): TODO.
+        dict_key_slice (list[str]): TODO.
+        dict_value_slice (IntList): TODO.
 
     """
 
-    list_slice: list[int]
-    list_stride_slice: list[int]
-    dict_slice: dict[str, int]
+    list_slice: IntList
+    list_stride_slice: IntList
+    dict_slice: IntDict
     dict_key_slice: list[str]
-    dict_value_slice: list[int]
+    dict_value_slice: IntList
 
 
 class BuiltinMethodList(list[int]):
@@ -2933,7 +2940,7 @@ class BuiltinMethodList(list[int]):
         """Append a doubled integer, unlike ``list.append`` semantics.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         """
         super().append(value * 2)
@@ -2942,10 +2949,10 @@ class BuiltinMethodList(list[int]):
         """Return the normal list count plus one for disambiguation.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return super().count(value) + 1
@@ -2962,7 +2969,7 @@ class CustomAddSet(set[int]):
         """Add a shifted element.
 
         Args:
-            element: TODO.
+            element (int): TODO.
 
         """
         super().add(element + 100)
@@ -2975,7 +2982,7 @@ class CustomAdder:
         """Initialize custom adder.
 
         Args:
-            seed: TODO.
+            seed (int): TODO.
 
         """
         self.seed: int = seed
@@ -2984,10 +2991,10 @@ class CustomAdder:
         """Return an arithmetic result instead of mutating a set.
 
         Args:
-            element: TODO.
+            element (int): TODO.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return self.seed + element
@@ -2997,9 +3004,9 @@ class ImportExampleResult(NamedTuple):
     """Result for importlib and ``__import__`` inference examples.
 
     Attributes:
-        importlib_module_name: TODO.
-        dunder_module_name: TODO.
-        imported_join_result: TODO.
+        importlib_module_name (str): TODO.
+        dunder_module_name (str): TODO.
+        imported_join_result (str): TODO.
 
     """
 
@@ -3012,34 +3019,34 @@ class RedefinitionResult(NamedTuple):
     """Result for variable type redefinition examples.
 
     Attributes:
-        first_type_value: TODO.
-        second_type_value: TODO.
-        third_type_value: TODO.
-        union_final_value: TODO.
+        first_type_value (int): TODO.
+        second_type_value (str): TODO.
+        third_type_value (IntList): TODO.
+        union_final_value (IntDict): TODO.
 
     """
 
     first_type_value: int
     second_type_value: str
-    third_type_value: list[int]
-    union_final_value: dict[str, int]
+    third_type_value: IntList
+    union_final_value: IntDict
 
 
 class ScopeResolutionResult(NamedTuple):
     """Result for same names in nested, class, and module scopes.
 
     Attributes:
-        module_value: TODO.
-        outer_value: TODO.
-        inner_value: TODO.
-        class_value: TODO.
-        method_and_nested_results: TODO.
+        module_value (str): TODO.
+        outer_value (int): TODO.
+        inner_value (IntList): TODO.
+        class_value (str): TODO.
+        method_and_nested_results (list[float | str]): TODO.
 
     """
 
     module_value: str
     outer_value: int
-    inner_value: list[int]
+    inner_value: IntList
     class_value: str
     method_and_nested_results: list[float | str]
 
@@ -3048,10 +3055,10 @@ def duplicate_scope_name(value: str) -> str:
     """Module-scope function intentionally reused in inner scopes.
 
     Args:
-        value: TODO.
+        value (str): TODO.
 
     Returns:
-        TODO.
+        str: TODO.
 
     """
     return f"module:{value}"
@@ -3061,21 +3068,21 @@ def function_with_list_and_dict_slices() -> SliceExampleResult:
     """Assign variables from slices of lists and dictionary views.
 
     Returns:
-        TODO.
+        SliceExampleResult: TODO.
 
     """
-    numbers: list[int] = [10, 20, 30, 40, 50, 60]
-    mapping: dict[str, int] = {
+    numbers: IntList = [10, 20, 30, 40, 50, 60]
+    mapping: IntDict = {
         "alpha": 1,
         "beta": 2,
         "gamma": 3,
         "delta": 4,
     }
-    list_slice: list[int] = numbers[1:4]
-    list_stride_slice: list[int] = numbers[::2]
-    dict_slice: dict[str, int] = dict(islice(mapping.items(), 1, 3))
+    list_slice: IntList = numbers[1:4]
+    list_stride_slice: IntList = numbers[::2]
+    dict_slice: IntDict = dict(islice(mapping.items(), 1, 3))
     dict_key_slice: list[str] = list(mapping.keys())[1:]
-    dict_value_slice: list[int] = list(mapping.values())[:3]
+    dict_value_slice: IntList = list(mapping.values())[:3]
     return SliceExampleResult(
         list_slice=list_slice,
         list_stride_slice=list_stride_slice,
@@ -3094,18 +3101,18 @@ def function_with_builtin_name_collisions() -> tuple[
     """Disambiguate builtin method names from custom method names.
 
     Returns:
-        TODO.
+        tuple[BuiltinMethodList, BuiltinMethodDict, CustomAddSet, int]: TODO.
 
     """
     custom_list: BuiltinMethodList = BuiltinMethodList([1, 2, 2])
-    builtin_list: list[int] = [1, 2, 2]
+    builtin_list: IntList = [1, 2, 2]
     custom_list.append(value=3)
     builtin_list.append(3)
     custom_count: int = custom_list.count(value=2)
     builtin_count: int = builtin_list.count(2)
 
     custom_dict: BuiltinMethodDict = BuiltinMethodDict({"a": 1})
-    builtin_dict: dict[str, int] = {"a": 1}
+    builtin_dict: IntDict = {"a": 1}
     custom_dict.update({"b": 2}, c=3)
     builtin_dict.update({"b": 2}, c=3)
 
@@ -3124,7 +3131,7 @@ def function_with_importlib_and_dunder_import() -> ImportExampleResult:
     """Use both importlib and ``__import__`` in resolvable examples.
 
     Returns:
-        TODO.
+        ImportExampleResult: TODO.
 
     """
     pathlib_module: ModuleType = import_module(name="pathlib")
@@ -3141,18 +3148,18 @@ def function_with_variable_type_redefinition() -> RedefinitionResult:
     """Redefine variable types in a deliberate linear flow.
 
     Returns:
-        TODO.
+        RedefinitionResult: TODO.
 
     """
-    evolving_value: int | str | list[int] | dict[str, int]
+    evolving_value: int | str | IntList | IntDict
     evolving_value = 10
     first_type_value: int = evolving_value
     evolving_value = "ten"
     second_type_value: str = evolving_value
     evolving_value = [1, 2, 3]
-    third_type_value: list[int] = evolving_value
+    third_type_value: IntList = evolving_value
     evolving_value = {"ten": 10}
-    union_final_value: dict[str, int] = evolving_value
+    union_final_value: IntDict = evolving_value
     return RedefinitionResult(
         first_type_value=first_type_value,
         second_type_value=second_type_value,
@@ -3165,7 +3172,7 @@ def function_with_scope_resolution() -> ScopeResolutionResult:
     """Use identical names in module, function, nested, and class scopes.
 
     Returns:
-        TODO.
+        ScopeResolutionResult: TODO.
 
     """
     duplicated_name: int = 7
@@ -3174,19 +3181,19 @@ def function_with_scope_resolution() -> ScopeResolutionResult:
         """Inner function that shadows the module-level function.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         Returns:
-            TODO.
+            str: TODO.
 
         """
-        duplicated_name: list[int] = [value, value + 1]
+        duplicated_name: IntList = [value, value + 1]
 
-        def deepest() -> list[int]:
+        def deepest() -> IntList:
             """Return the innermost variable with the reused name.
 
             Returns:
-                TODO.
+                IntList: TODO.
 
             """
             return duplicated_name
@@ -3197,7 +3204,7 @@ def function_with_scope_resolution() -> ScopeResolutionResult:
         """Class with same conceptual name family as outer symbols.
 
         Attributes:
-            duplicated_name: TODO.
+            duplicated_name (str): TODO.
 
         """
 
@@ -3207,7 +3214,7 @@ def function_with_scope_resolution() -> ScopeResolutionResult:
             """Return a method-local value with a reused variable name.
 
             Returns:
-                TODO.
+                float: TODO.
 
             """
             duplicated_name: float = 3.5
@@ -3229,7 +3236,7 @@ def test_new_inference_edge_cases() -> TestResult:
     """Run extra tests for slices, builtins, imports, and scoping.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
     return {
@@ -3264,9 +3271,9 @@ class ExtendedResult:
         """Store a name, payload, and metadata mapping.
 
         Args:
-            name: TODO.
-            payload: TODO.
-            metadata: TODO.
+            name (str): TODO.
+            payload (object): TODO.
+            metadata (ExtendedMetadata | None): TODO.
 
         """
         self.name: str = name
@@ -3276,8 +3283,8 @@ class ExtendedResult:
     def __iter__(self) -> Iterator[object]:
         """Iterate over stored fields.
 
-        Returns:
-            TODO.
+        Yields:
+            object: TODO.
 
         """
         yield self.name
@@ -3288,7 +3295,7 @@ class ExtendedResult:
         """Return tuple-like field count.
 
         Returns:
-            TODO.
+            int: TODO.
 
         """
         return 3
@@ -3297,10 +3304,10 @@ class ExtendedResult:
         """Return one field by index or name.
 
         Args:
-            index: TODO.
+            index (int | str): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         Raises:
             IndexError: TODO.
@@ -3322,22 +3329,22 @@ class ExtendedDataclassStress:
     def __init__(
         self,
         name: str = "anonymous",
-        values: list[int] | None = None,
-        lookup: dict[str, int] | None = None,
+        values: IntList | None = None,
+        lookup: IntDict | None = None,
         flags: set[bool] | None = None,
     ) -> None:
         """Initialize values without leaking mutable defaults.
 
         Args:
-            name: TODO.
-            values: TODO.
-            lookup: TODO.
-            flags: TODO.
+            name (str): TODO.
+            values (IntList | None): TODO.
+            lookup (IntDict | None): TODO.
+            flags (set[bool] | None): TODO.
 
         """
         self.name: str = name
-        self.values: list[int] = [] if values is None else values
-        self.lookup: dict[str, int] = {} if lookup is None else lookup
+        self.values: IntList = [] if values is None else values
+        self.lookup: IntDict = {} if lookup is None else lookup
         self.flags: set[bool] = set() if flags is None else flags
         self.lookup.setdefault(self.name, len(self.values))
         self.flags.add(self.name in self.lookup)
@@ -3353,7 +3360,7 @@ class DescriptorWithOwnerCache:
         """Initialize descriptor storage.
 
         Args:
-            default: TODO.
+            default (object): TODO.
 
         """
         self.default: object = default
@@ -3365,8 +3372,8 @@ class DescriptorWithOwnerCache:
         """Store the owner/name pair.
 
         Args:
-            owner: TODO.
-            name: TODO.
+            owner (type[object]): TODO.
+            name (str): TODO.
 
         """
         self.owner = owner
@@ -3380,11 +3387,11 @@ class DescriptorWithOwnerCache:
         """Return descriptor or stored instance value.
 
         Args:
-            instance: TODO.
-            owner: TODO.
+            instance (object | None): TODO.
+            owner (type[object] | None): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         """
         _ = owner
@@ -3396,8 +3403,8 @@ class DescriptorWithOwnerCache:
         """Set a value in weak storage.
 
         Args:
-            instance: TODO.
-            value: TODO.
+            instance (object): TODO.
+            value (object): TODO.
 
         """
         self.storage[instance] = value
@@ -3406,7 +3413,7 @@ class DescriptorWithOwnerCache:
         """Delete value if present.
 
         Args:
-            instance: TODO.
+            instance (object): TODO.
 
         """
         with suppress(KeyError):
@@ -3417,8 +3424,8 @@ class DescriptorStressOwner:
     """Owner class for descriptor stress.
 
     Attributes:
-        score: TODO.
-        label: TODO.
+        score (ClassVar[DescriptorWithOwnerCache]): TODO.
+        label (ClassVar[DescriptorWithOwnerCache]): TODO.
 
     """
 
@@ -3433,19 +3440,19 @@ class DescriptorStressOwner:
         """Initialize descriptor-backed fields.
 
         Args:
-            score: TODO.
-            label: TODO.
+            score (int): TODO.
+            label (str): TODO.
 
         """
         self.score = score
         self.label = label
 
     @cached_property
-    def summary(self) -> dict[str, object]:
+    def summary(self) -> TestResult:
         """Return cached mixed summary.
 
         Returns:
-            TODO.
+            TestResult: TODO.
 
         """
         return {"score": self.score, "label": self.label}
@@ -3455,7 +3462,7 @@ class RegistryMeta(type):
     """Metaclass that registers subclasses and injects attributes.
 
     Attributes:
-        registry: TODO.
+        registry (ClassVar[dict[str, type[object]]]): TODO.
 
     """
 
@@ -3465,20 +3472,20 @@ class RegistryMeta(type):
         mcls: type[RegistryMeta],
         name: str,
         bases: tuple[type[object], ...],
-        namespace: dict[str, object],
+        namespace: TestResult,
         **_kwargs: object,
     ) -> RegistryMeta:
         """Create class and register it by lower-case name.
 
         Args:
-            mcls: TODO.
-            name: TODO.
-            bases: TODO.
-            namespace: TODO.
-            _kwargs: TODO.
+            mcls (type[RegistryMeta]): TODO.
+            name (str): TODO.
+            bases (tuple[type[object], ...]): TODO.
+            namespace (TestResult): TODO.
+            _kwargs (object): TODO.
 
         Returns:
-            TODO.
+            RegistryMeta: TODO.
 
         """
         namespace.setdefault("created_by_registry_meta", True)
@@ -3491,11 +3498,11 @@ class RegistryMeta(type):
         """Create instance and mark it.
 
         Args:
-            args: TODO.
-            kwargs: TODO.
+            args (object): TODO.
+            kwargs (object): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         """
         instance = super().__call__(*args, **kwargs)
@@ -3510,13 +3517,13 @@ class RegistryBase(metaclass=RegistryMeta):
         """Clone using the current instance dictionary.
 
         Args:
-            overrides: TODO.
+            overrides (object): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         """
-        data: dict[str, object] = dict(self.__dict__)
+        data: TestResult = dict(self.__dict__)
         data.update(overrides)
         return self.__class__(**data)
 
@@ -3534,25 +3541,25 @@ class RegistryItem(RegistryBase):
         """Initialize with optional tags and arbitrary extras.
 
         Args:
-            name: TODO.
-            count: TODO.
-            tags: TODO.
-            extras: TODO.
+            name (str): TODO.
+            count (int): TODO.
+            tags (list[str] | None): TODO.
+            extras (object): TODO.
 
         """
         self.name: str = name
         self.count: int = count
         self.tags: list[str] = [] if tags is None else tags
-        self.extras: dict[str, object] = extras
+        self.extras: TestResult = extras
 
     def bump(self, amount: int = 1) -> Self:
         """Increment count and return self for chaining.
 
         Args:
-            amount: TODO.
+            amount (int): TODO.
 
         Returns:
-            TODO.
+            Self: TODO.
 
         """
         self.count += amount
@@ -3565,17 +3572,17 @@ class FluentBuilder:
     def __init__(self) -> None:
         """Initialize builder state."""
         self.parts: list[str] = []
-        self.options: dict[str, object] = {}
+        self.options: TestResult = {}
 
     def add(self, part: str, *, repeat: int = 1) -> Self:
         """Add repeated parts and return self.
 
         Args:
-            part: TODO.
-            repeat: TODO.
+            part (str): TODO.
+            repeat (int): TODO.
 
         Returns:
-            TODO.
+            Self: TODO.
 
         """
         for _ in range(repeat):
@@ -3586,23 +3593,23 @@ class FluentBuilder:
         """Merge options and return self.
 
         Args:
-            options: TODO.
+            options (object): TODO.
 
         Returns:
-            TODO.
+            Self: TODO.
 
         """
         self.options.update(options)
         return self
 
-    def build(self, *, compact: bool = False) -> str | dict[str, object]:
+    def build(self, *, compact: bool = False) -> str | TestResult:
         """Return a compact string or a structured result.
 
         Args:
-            compact: TODO.
+            compact (bool): TODO.
 
         Returns:
-            TODO.
+            str | TestResult: TODO.
 
         """
         if compact:
@@ -3617,18 +3624,18 @@ class HybridContainer:
         """Initialize mixed storage.
 
         Args:
-            items: TODO.
-            named: TODO.
+            items (object): TODO.
+            named (object): TODO.
 
         """
         self.items: list[object] = list(items)
-        self.named: dict[str, object] = dict(named)
+        self.named: TestResult = dict(named)
 
     def __iter__(self) -> Iterator[object]:
         """Iterate over positional items.
 
         Returns:
-            TODO.
+            Iterator[object]: TODO.
 
         """
         return iter(self.items)
@@ -3637,10 +3644,10 @@ class HybridContainer:
         """Check both positional and named storage.
 
         Args:
-            item: TODO.
+            item (object): TODO.
 
         Returns:
-            TODO.
+            bool: TODO.
 
         """
         return item in self.items or item in self.named
@@ -3649,10 +3656,10 @@ class HybridContainer:
         """Return item by int index or dict key.
 
         Args:
-            key: TODO.
+            key (int | str): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         """
         if isinstance(key, int):
@@ -3663,8 +3670,8 @@ class HybridContainer:
         """Set item by int index or dict key.
 
         Args:
-            key: TODO.
-            value: TODO.
+            key (int | str): TODO.
+            value (object): TODO.
 
         """
         if isinstance(key, int):
@@ -3676,10 +3683,10 @@ class HybridContainer:
         """Merge with another container or mapping.
 
         Args:
-            other: TODO.
+            other (HybridContainer | Mapping[str, object]): TODO.
 
         Returns:
-            TODO.
+            Self: TODO.
 
         """
         merged: Self = self.__class__(*self.items, **self.named)
@@ -3698,7 +3705,7 @@ class CallableObject:
         """Store call mode.
 
         Args:
-            mode: TODO.
+            mode (str): TODO.
 
         """
         self.mode: str = mode
@@ -3707,11 +3714,11 @@ class CallableObject:
         """Return different types based on mode.
 
         Args:
-            value: TODO.
-            scale: TODO.
+            value (object): TODO.
+            scale (int): TODO.
 
         Returns:
-            TODO.
+            object: TODO.
 
         """
         if self.mode == "number" and isinstance(value, int):
@@ -3728,7 +3735,7 @@ class AsyncResource:
         """Initialize resource.
 
         Args:
-            name: TODO.
+            name (str): TODO.
 
         """
         self.name: str = name
@@ -3738,7 +3745,7 @@ class AsyncResource:
         """Enter async context.
 
         Returns:
-            TODO.
+            Self: TODO.
 
         """
         self.events.append("enter")
@@ -3753,26 +3760,26 @@ class AsyncResource:
         """Exit async context.
 
         Args:
-            exc_type: TODO.
-            exc: TODO.
-            tb: TODO.
+            exc_type (type[BaseException] | None): TODO.
+            exc (BaseException | None): TODO.
+            tb (object): TODO.
 
         Returns:
-            TODO.
+            bool: TODO.
 
         """
         _ = (exc, tb)
         self.events.append("exit")
         return exc_type is None
 
-    async def fetch(self, value: int) -> dict[str, object]:
+    async def fetch(self, value: int) -> TestResult:
         """Return async payload.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         Returns:
-            TODO.
+            TestResult: TODO.
 
         """
         await sleep(delay=0)
@@ -3780,18 +3787,18 @@ class AsyncResource:
 
 
 @contextmanager
-def extended_sync_context(seed: int) -> Generator[dict[str, object]]:
+def extended_sync_context(seed: int) -> Generator[TestResult]:
     """Yield a mutable context dictionary.
 
     Args:
-        seed: TODO.
+        seed (int): TODO.
 
-    Returns:
-        TODO.
+    Yields:
+        TestResult: TODO.
 
     """
     events: list[str] = []
-    context: dict[str, object] = {"seed": seed, "events": events}
+    context: TestResult = {"seed": seed, "events": events}
     events.append("enter")
     try:
         yield context
@@ -3804,10 +3811,10 @@ async def extended_async_context(seed: int) -> AsyncGenerator[AsyncResource]:
     """Yield an async resource and mutate its events.
 
     Args:
-        seed: TODO.
+        seed (int): TODO.
 
-    Returns:
-        TODO.
+    Yields:
+        AsyncResource: TODO.
 
     """
     resource: AsyncResource = AsyncResource(name=f"resource-{seed}")
@@ -3821,10 +3828,10 @@ def preserve_signature_decorator[**P, R](
     """Preserve arbitrary args and kwargs through a decorator.
 
     Args:
-        func: TODO.
+        func (Callable[P, R]): TODO.
 
     Returns:
-        TODO.
+        Callable[P, R | list[object]]: TODO.
 
     """
 
@@ -3833,11 +3840,11 @@ def preserve_signature_decorator[**P, R](
         """TODO.
 
         Args:
-            args: TODO.
-            kwargs: TODO.
+            args (P.args): TODO.
+            kwargs (P.kwargs): TODO.
 
         Returns:
-            TODO.
+            R | list[object]: TODO.
 
         """
         result: R | list[object] = func(*args, **kwargs)
@@ -3862,11 +3869,11 @@ def decorator_factory[**P](
     """Create a decorator factory changing string outputs.
 
     Args:
-        prefix: TODO.
-        uppercase: TODO.
+        prefix (str): TODO.
+        uppercase (bool): TODO.
 
     Returns:
-        TODO.
+        Callable[[Callable[P, object]], Callable[P, str]]: TODO.
 
     """
 
@@ -3874,10 +3881,10 @@ def decorator_factory[**P](
         """TODO.
 
         Args:
-            func: TODO.
+            func (Callable[P, object]): TODO.
 
         Returns:
-            TODO.
+            Callable[P, str]: TODO.
 
         """
 
@@ -3886,11 +3893,11 @@ def decorator_factory[**P](
             """TODO.
 
             Args:
-                args: TODO.
-                kwargs: TODO.
+                args (P.args): TODO.
+                kwargs (P.kwargs): TODO.
 
             Returns:
-                TODO.
+                str: TODO.
 
             """
             result: object = func(*args, **kwargs)
@@ -3910,11 +3917,11 @@ def decorated_pipeline_value(value: str, suffix: str = "end") -> str:
     """Return decorated text.
 
     Args:
-        value: TODO.
-        suffix: TODO.
+        value (str): TODO.
+        suffix (str): TODO.
 
     Returns:
-        TODO.
+        str: TODO.
 
     """
     return f"{value}-{suffix}"
@@ -3925,10 +3932,10 @@ def singledispatch_stress(value: object) -> object:
     """Return the default singledispatch branch.
 
     Args:
-        value: TODO.
+        value (object): TODO.
 
     Returns:
-        TODO.
+        object: TODO.
 
     """
     return {"type": type(value).__name__, "value": value}
@@ -3939,10 +3946,10 @@ def _(value: int) -> int:
     """Integer branch.
 
     Args:
-        value: TODO.
+        value (int): TODO.
 
     Returns:
-        TODO.
+        int: TODO.
 
     """
     return value * 10
@@ -3953,10 +3960,10 @@ def _(value: str) -> str:
     """Return the string branch.
 
     Args:
-        value: TODO.
+        value (str): TODO.
 
     Returns:
-        TODO.
+        str: TODO.
 
     """
     return value.upper()
@@ -3967,10 +3974,10 @@ def cached_recursive_pair(n: int) -> tuple[int, int]:
     """Return Fibonacci-like pair with recursion and cache.
 
     Args:
-        n: TODO.
+        n (int): TODO.
 
     Returns:
-        TODO.
+        tuple[int, int]: TODO.
 
     """
     if n <= 1:
@@ -3986,10 +3993,10 @@ def function_with_pattern_matching_stress(
     """Exercise match/case inference across structural patterns.
 
     Args:
-        value: TODO.
+        value (PatternStressInput): TODO.
 
     Returns:
-        TODO.
+        PatternStressResult: TODO.
 
     """
     match value:
@@ -4063,10 +4070,10 @@ def function_with_chained_exceptions(mode: str) -> object:
     """Exercise exception value types and chained exceptions.
 
     Args:
-        mode: TODO.
+        mode (str): TODO.
 
     Returns:
-        TODO.
+        object: TODO.
 
     Raises:
         RuntimeError: TODO.
@@ -4096,10 +4103,10 @@ def function_with_walrus_and_narrowing(
     """Use walrus, truthiness, regex, and narrowing.
 
     Args:
-        records: TODO.
+        records (Sequence[Mapping[str, object]]): TODO.
 
     Returns:
-        TODO.
+        tuple[defaultdict[str, int], list[str]]: TODO.
 
     """
     totals: defaultdict[str, int] = defaultdict(int)
@@ -4123,43 +4130,43 @@ def function_with_walrus_and_narrowing(
     return totals, matched
 
 
-def function_with_recursive_containers(seed: int) -> dict[str, object]:
+def function_with_recursive_containers(seed: int) -> TestResult:
     """Create recursive containers and aliased references.
 
     Args:
-        seed: TODO.
+        seed (int): TODO.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
-    root: dict[str, object] = {"seed": seed, "children": []}
-    child: dict[str, object] = {"parent": root, "values": [seed]}
-    children: list[dict[str, object]] = cast(
+    root: TestResult = {"seed": seed, "children": []}
+    child: TestResult = {"parent": root, "values": [seed]}
+    children: list[TestResult] = cast(
         typ="list[dict[str, object]]",
         val=root["children"],
     )
     children.append(child)
-    alias: dict[str, object] = children[0]
-    values: list[int] = cast(typ="list[int]", val=alias["values"])
+    alias: TestResult = children[0]
+    values: IntList = cast(typ="list[int]", val=alias["values"])
     values.extend([seed + 1, seed + 2])
     return root
 
 
 def function_with_numeric_tower(
     values: Sequence[int | float | str],
-) -> tuple[int, float, float, list[int]]:
+) -> tuple[int, float, float, IntList]:
     """Mix int, float, string fallback, and math/operator functions.
 
     Args:
-        values: TODO.
+        values (Sequence[int | float | str]): TODO.
 
     Returns:
-        TODO.
+        tuple[int, float, float, IntList]: TODO.
 
     """
     total: int = 0
-    products: list[int] = []
+    products: IntList = []
     for index, value in enumerate(iterable=values):
         adjusted: int = index if isinstance(value, str) else int(value) + index
         total += adjusted
@@ -4176,11 +4183,11 @@ def function_with_type_reassignment_maze(
     """Stress linear reassignment across unrelated runtime shapes.
 
     Args:
-        flag: TODO.
-        payload: TODO.
+        flag (str): TODO.
+        payload (object): TODO.
 
     Returns:
-        TODO.
+        object: TODO.
 
     """
     if flag == "none":
@@ -4191,7 +4198,7 @@ def function_with_type_reassignment_maze(
         value_list: list[object] = [payload]
         return [*value_list, "extra"]
     if flag == "dict":
-        value_dict: dict[str, object] = {"payload": payload}
+        value_dict: TestResult = {"payload": payload}
         return {**value_dict, "seen": True}
     if flag == "callable":
 
@@ -4199,10 +4206,10 @@ def function_with_type_reassignment_maze(
             """TODO.
 
             Args:
-                item: TODO.
+                item (object): TODO.
 
             Returns:
-                TODO.
+                tuple[object, object]: TODO.
 
             """
             return (item, payload)
@@ -4217,10 +4224,10 @@ def function_with_exception_group_stress(
     """Exercise except* branches and collected errors.
 
     Args:
-        values: TODO.
+        values (Sequence[int | None]): TODO.
 
     Returns:
-        TODO.
+        tuple[list[object], list[str]]: TODO.
 
     """
 
@@ -4228,7 +4235,7 @@ def function_with_exception_group_stress(
         """TODO.
 
         Args:
-            errors: TODO.
+            errors (list[Exception]): TODO.
 
         Raises:
             ExceptionGroup: TODO.
@@ -4259,15 +4266,15 @@ def function_with_exception_group_stress(
 def function_with_import_and_reflection_stress(
     module_name: str,
     attr_name: str,
-) -> dict[str, object]:
+) -> TestResult:
     """Import module dynamically and inspect attributes.
 
     Args:
-        module_name: TODO.
-        attr_name: TODO.
+        module_name (str): TODO.
+        attr_name (str): TODO.
 
     Returns:
-        TODO.
+        TestResult: TODO.
 
     """
     module: ModuleType = import_module(name=module_name)
@@ -4285,15 +4292,15 @@ def function_with_json_uuid_and_path_stress(tmp_name: str) -> object:
     """Exercise JSON, UUID, Path, and text round-tripping.
 
     Args:
-        tmp_name: TODO.
+        tmp_name (str): TODO.
 
     Returns:
-        TODO.
+        object: TODO.
 
     """
     identifier: UUID = uuid5(namespace=NAMESPACE_DNS, name=tmp_name)
     path: Path = Path(gettempdir()) / f"{identifier}.json"
-    payload: dict[str, object] = {
+    payload: TestResult = {
         "id": str(object=identifier),
         "parts": path.stem.split(sep="-"),
         "exists": path.exists(),
@@ -4305,26 +4312,24 @@ def function_with_json_uuid_and_path_stress(tmp_name: str) -> object:
 
 
 def function_with_contextvars_and_chainmap(
-    configs: Sequence[MutableMapping[str, object]],
+    configs: Sequence[ConfigMapping],
 ) -> Mapping[str, object]:
     """Use ContextVar and ChainMap layered lookup.
 
     Args:
-        configs: TODO.
+        configs (Sequence[ConfigMapping]): TODO.
 
     Returns:
-        TODO.
+        Mapping[str, object]: TODO.
 
     """
     token: Token[dict[str, object] | None] = Constants.extended_context.set(
         None,
     )
     try:
-        current_map: dict[str, object] = {"seed": len(configs)}
+        current_map: TestResult = {"seed": len(configs)}
         chain_map: ChainMap[str, object] = ChainMap(current_map, *configs)
-        resolved: dict[str, object] = {
-            key: chain_map[key] for key in chain_map
-        }
+        resolved: TestResult = {key: chain_map[key] for key in chain_map}
     finally:
         Constants.extended_context.reset(token)
     return resolved
@@ -4332,14 +4337,15 @@ def function_with_contextvars_and_chainmap(
 
 def function_with_iterable_unpacking_stress(
     data: Sequence[int],
-) -> tuple[int, list[int], int, list[tuple[int, int]], list[tuple[int, int]]]:
+) -> tuple[int, IntList, int, list[tuple[int, int]], list[tuple[int, int]]]:
     """Mix star-unpacking, zip, enumerate, and heterogeneous outputs.
 
     Args:
-        data: TODO.
+        data (Sequence[int]): TODO.
 
     Returns:
-        TODO.
+        tuple[int, IntList, int, list[tuple[int, int]], list[tuple[int, int]]]:
+            TODO.
 
     """
     head, *middle, tail = data
@@ -4356,10 +4362,10 @@ def function_with_generator_send_throw_close(
     """Return a generator supporting send/throw/close interactions.
 
     Args:
-        limit: TODO.
+        limit (int): TODO.
 
     Returns:
-        TODO.
+        tuple[int, int, Generator[int, int | str | None, int]]: TODO.
 
     """
 
@@ -4367,7 +4373,10 @@ def function_with_generator_send_throw_close(
         """TODO.
 
         Returns:
-            TODO.
+            int: TODO.
+
+        Yields:
+            int: TODO.
 
         """
         current: int = 0
@@ -4389,21 +4398,21 @@ def function_with_generator_send_throw_close(
 
 
 def function_with_property_and_descriptor_interaction() -> tuple[
-    dict[str, object],
+    TestResult,
     int,
     object,
 ]:
     """Use descriptor owner, cached property, deletion, and reset.
 
     Returns:
-        TODO.
+        tuple[TestResult, int, object]: TODO.
 
     """
     owner: DescriptorStressOwner = DescriptorStressOwner(
         score=10,
         label="alpha",
     )
-    before: dict[str, object] = owner.summary
+    before: TestResult = owner.summary
     current_score: int = cast(typ="int", val=owner.score)
     owner.score = current_score + 5
     del owner.label
@@ -4419,7 +4428,7 @@ def function_with_metaclass_registry_stress() -> tuple[
     """Create registry instances and clone them.
 
     Returns:
-        TODO.
+        tuple[RegistryItem, object, list[str]]: TODO.
 
     """
     item: RegistryItem = cast(
@@ -4439,17 +4448,17 @@ def function_with_fluent_builder_stress() -> tuple[object, str]:
     """Use fluent builder and mixed finalization modes.
 
     Returns:
-        TODO.
+        tuple[object, str]: TODO.
 
     """
     builder: FluentBuilder = FluentBuilder()
-    structured: str | dict[str, object] = (
+    structured: str | TestResult = (
         builder.add(part="a")
         .add(part="b", repeat=2)
         .configure(debug=True)
         .build()
     )
-    compact: str | dict[str, object] = builder.build(compact=True)
+    compact: str | TestResult = builder.build(compact=True)
     return structured, cast(typ="str", val=compact)
 
 
@@ -4461,7 +4470,7 @@ def function_with_hybrid_container_stress() -> tuple[
     """Stress custom container protocols and operator overloads.
 
     Returns:
-        TODO.
+        tuple[HybridContainer, bool, object]: TODO.
 
     """
     left: HybridContainer = HybridContainer(1, 2, name="left")
@@ -4477,7 +4486,7 @@ def function_with_callable_object_stress() -> tuple[object, object, object]:
     """Call stateful callable objects with keyword-only args.
 
     Returns:
-        TODO.
+        tuple[object, object, object]: TODO.
 
     """
     number_call: CallableObject = CallableObject(mode="number")
@@ -4492,22 +4501,22 @@ def function_with_callable_object_stress() -> tuple[object, object, object]:
 
 async def function_with_async_comprehension_stress(
     values: Sequence[int],
-) -> tuple[dict[str, object], list[int]]:
+) -> tuple[TestResult, IntList]:
     """Use async context, async helper, and async comprehension.
 
     Args:
-        values: TODO.
+        values (Sequence[int]): TODO.
 
     Returns:
-        TODO.
+        tuple[TestResult, IntList]: TODO.
 
     """
 
     async def produce() -> AsyncIterator[int]:
         """TODO.
 
-        Returns:
-            TODO.
+        Yields:
+            int: TODO.
 
         """
         for value in values:
@@ -4515,8 +4524,8 @@ async def function_with_async_comprehension_stress(
             yield value * 2
 
     async with extended_async_context(seed=len(values)) as resource:
-        fetched: dict[str, object] = await resource.fetch(value=sum(values))
-        doubled: list[int] = [value async for value in produce()]
+        fetched: TestResult = await resource.fetch(value=sum(values))
+        doubled: IntList = [value async for value in produce()]
     return fetched, doubled
 
 
@@ -4524,7 +4533,7 @@ class LocalMultiplierProtocol(Protocol):
     """Protocol for local multiplier instances.
 
     Attributes:
-        offset: TODO.
+        offset (int): TODO.
 
     """
 
@@ -4534,7 +4543,7 @@ class LocalMultiplierProtocol(Protocol):
         """Apply multiplier.
 
         Args:
-            value: TODO.
+            value (int): TODO.
 
         Returns:
             TODO.
@@ -4550,7 +4559,7 @@ class LocalMultiplierFactory(Protocol):
         """Create a local multiplier.
 
         Args:
-            offset: TODO.
+            offset (int): TODO.
 
         Returns:
             TODO.
@@ -4565,7 +4574,7 @@ class LocalMultiplierFactory(Protocol):
         """Create from values.
 
         Args:
-            values: TODO.
+            values (Sequence[int]): TODO.
 
         Returns:
             TODO.
@@ -4580,10 +4589,10 @@ def function_with_local_class_closure_stress(
     """Return a local class capturing outer state.
 
     Args:
-        multiplier: TODO.
+        multiplier (int): TODO.
 
     Returns:
-        TODO.
+        LocalMultiplierFactory: TODO.
 
     """
 
@@ -4594,7 +4603,7 @@ def function_with_local_class_closure_stress(
             """TODO.
 
             Args:
-                offset: TODO.
+                offset (int): TODO.
 
             """
             self.offset: int = offset
@@ -4603,10 +4612,10 @@ def function_with_local_class_closure_stress(
             """TODO.
 
             Args:
-                value: TODO.
+                value (int): TODO.
 
             Returns:
-                TODO.
+                int: TODO.
 
             """
             return value * multiplier + self.offset
@@ -4616,10 +4625,10 @@ def function_with_local_class_closure_stress(
             """TODO.
 
             Args:
-                values: TODO.
+                values (Sequence[int]): TODO.
 
             Returns:
-                TODO.
+                Self: TODO.
 
             """
             return cls(offset=sum(values))
@@ -4628,16 +4637,19 @@ def function_with_local_class_closure_stress(
 
 
 def function_with_nested_default_factories() -> tuple[
-    defaultdict[str, defaultdict[str, list[int]]],
+    defaultdict[str, defaultdict[str, IntList]],
     dict[str, dict[str, tuple[int, ...]]],
 ]:
     """Build nested defaultdict structures.
 
     Returns:
-        TODO.
+        tuple[
+                defaultdict[str, defaultdict[str, IntList]],
+                dict[str, dict[str, tuple[int, ...]]]
+            ]: TODO.
 
     """
-    tree: defaultdict[str, defaultdict[str, list[int]]] = defaultdict(
+    tree: defaultdict[str, defaultdict[str, IntList]] = defaultdict(
         lambda: defaultdict(list),
     )
     for section, key, value in [
@@ -4656,17 +4668,17 @@ def function_with_nested_default_factories() -> tuple[
 
 def function_with_sort_key_and_grouping_stress(
     rows: Sequence[Mapping[str, object]],
-) -> tuple[list[dict[str, object]], dict[str, list[int]]]:
+) -> tuple[list[TestResult], dict[str, IntList]]:
     """Sort/group by computed keys and return nested groups.
 
     Args:
-        rows: TODO.
+        rows (Sequence[Mapping[str, object]]): TODO.
 
     Returns:
-        TODO.
+        tuple[list[TestResult], dict[str, IntList]]: TODO.
 
     """
-    normalized: list[dict[str, object]] = [
+    normalized: list[TestResult] = [
         {
             "name": str(object=row["name"]).strip().lower(),
             "score": int(cast(typ="int | str", val=row["score"])),
@@ -4679,7 +4691,7 @@ def function_with_sort_key_and_grouping_stress(
             -int(cast(typ="int | str", val=row["score"])),
         ),
     )
-    grouped: dict[str, list[int]] = {
+    grouped: dict[str, IntList] = {
         name: [cast(typ="int", val=item["score"]) for item in group]
         for name, group in groupby(
             iterable=normalized,
@@ -4691,18 +4703,18 @@ def function_with_sort_key_and_grouping_stress(
 
 def function_with_partial_reduce_and_operator_stress(
     numbers: Sequence[int],
-) -> tuple[list[int], int, int]:
+) -> tuple[IntList, int, int]:
     """Mix partial, reduce, and operator functions.
 
     Args:
-        numbers: TODO.
+        numbers (Sequence[int]): TODO.
 
     Returns:
-        TODO.
+        tuple[IntList, int, int]: TODO.
 
     """
     add_five: Callable[[int], int] = partial(add, 5)
-    transformed: list[int] = [add_five(number) for number in numbers]
+    transformed: IntList = [add_five(number) for number in numbers]
     total: int = reduce(add, transformed, 0)
     product_value: int = reduce(mul, transformed, 1)
     return transformed, total, product_value
@@ -4712,10 +4724,10 @@ def function_with_protocol_like_runtime_checks(candidate: object) -> object:
     """Infer from hasattr/callable runtime protocol checks.
 
     Args:
-        candidate: TODO.
+        candidate (object): TODO.
 
     Returns:
-        TODO.
+        object: TODO.
 
     """
     update: Callable[..., str] | None = getattr(candidate, "update", None)
@@ -4738,7 +4750,7 @@ def function_with_deep_attribute_assignment() -> tuple[object, object, object]:
     """Assign attributes at several depths and return snapshots.
 
     Returns:
-        TODO.
+        tuple[object, object, object]: TODO.
 
     """
 
@@ -4749,22 +4761,22 @@ def function_with_deep_attribute_assignment() -> tuple[object, object, object]:
             """TODO.
 
             Args:
-                name: TODO.
+                name (str): TODO.
 
             """
             self.name: str = name
             self.children: list[Node] = []
-            self.metadata: dict[str, object] = {}
+            self.metadata: TestResult = {}
             self.parent: Node | None = None
 
         def add(self, child: Node) -> Node:
             """TODO.
 
             Args:
-                child: TODO.
+                child (Node): TODO.
 
             Returns:
-                TODO.
+                Node: TODO.
 
             """
             self.children.append(child)
@@ -4784,10 +4796,10 @@ def function_with_bytes_memoryview_and_slices(
     """Exercise bytes, bytearray, memoryview, and slice inference.
 
     Args:
-        data: TODO.
+        data (bytes): TODO.
 
     Returns:
-        TODO.
+        tuple[bytearray, memoryview, bytes, int]: TODO.
 
     """
     raw: bytearray = bytearray(data)
@@ -4804,10 +4816,10 @@ def function_with_map_filter_zip_stress(
     """Use map/filter/zip pipelines with generator expressions.
 
     Args:
-        values: TODO.
+        values (Sequence[int]): TODO.
 
     Returns:
-        TODO.
+        list[tuple[int, int]]: TODO.
 
     """
     mapped: Generator[int] = (value * 2 for value in values)
@@ -4816,14 +4828,14 @@ def function_with_map_filter_zip_stress(
     return list(paired)
 
 
-def function_with_composed_inner_functions(seed: int) -> dict[str, int]:
+def function_with_composed_inner_functions(seed: int) -> IntDict:
     """Compose inner functions where each narrows a value.
 
     Args:
-        seed: TODO.
+        seed (int): TODO.
 
     Returns:
-        TODO.
+        IntDict: TODO.
 
     """
 
@@ -4831,10 +4843,10 @@ def function_with_composed_inner_functions(seed: int) -> dict[str, int]:
         """TODO.
 
         Args:
-            value: TODO.
+            value (object): TODO.
 
         Returns:
-            TODO.
+            str: TODO.
 
         """
         if isinstance(value, str):
@@ -4847,10 +4859,10 @@ def function_with_composed_inner_functions(seed: int) -> dict[str, int]:
         """TODO.
 
         Args:
-            value: TODO.
+            value (object): TODO.
 
         Returns:
-            TODO.
+            list[str]: TODO.
 
         """
         return [
@@ -4859,14 +4871,14 @@ def function_with_composed_inner_functions(seed: int) -> dict[str, int]:
             if part
         ]
 
-    def score(tokens: Sequence[str]) -> dict[str, int]:
+    def score(tokens: Sequence[str]) -> IntDict:
         """TODO.
 
         Args:
-            tokens: TODO.
+            tokens (Sequence[str]): TODO.
 
         Returns:
-            TODO.
+            IntDict: TODO.
 
         """
         return {
@@ -4883,11 +4895,11 @@ def function_with_mutable_default_like_pattern(
     """Avoid mutable defaults while preserving accumulator type.
 
     Args:
-        value: TODO.
-        store: TODO.
+        value (object): TODO.
+        store (list[object] | None): TODO.
 
     Returns:
-        TODO.
+        tuple[list[object], tuple[object, ...], set[object]]: TODO.
 
     """
     if store is None:
@@ -4900,11 +4912,11 @@ def function_with_literal_mode_dispatch(mode: str, value: object) -> object:
     """Dispatch by string literal-like mode.
 
     Args:
-        mode: TODO.
-        value: TODO.
+        mode (str): TODO.
+        value (object): TODO.
 
     Returns:
-        TODO.
+        object: TODO.
 
     """
     if mode == "int":
@@ -4925,11 +4937,11 @@ def function_with_complex_boolean_narrowing(
     """Exercise bool-op narrowing with dict/list/tuple/string paths.
 
     Args:
-        value: TODO.
-        fallback: TODO.
+        value (object): TODO.
+        fallback (object | None): TODO.
 
     Returns:
-        TODO.
+        object: TODO.
 
     """
     if isinstance(value, dict):
@@ -4947,7 +4959,7 @@ def function_with_extended_named_results() -> ExtendedResultTuple:
     """Return custom result objects and tuple-unpacking behavior.
 
     Returns:
-        TODO.
+        ExtendedResultTuple: TODO.
 
     """
     result: ExtendedResult = ExtendedResult(
@@ -4957,7 +4969,7 @@ def function_with_extended_named_results() -> ExtendedResultTuple:
     )
     name_obj, payload_obj, metadata_obj = result
     name: str = cast(typ="str", val=name_obj)
-    payload: list[int] = cast(typ="list[int]", val=payload_obj)
+    payload: IntList = cast(typ="list[int]", val=payload_obj)
     metadata: dict[str, bool] = cast(typ="dict[str, bool]", val=metadata_obj)
     return result, name, payload[-1], metadata["ok"]
 
@@ -4966,10 +4978,10 @@ def test_extended_inference_edge_cases_part1() -> ExtendedTestResult:
     """Run extended stress cases part 1.
 
     Returns:
-        TODO.
+        ExtendedTestResult: TODO.
 
     """
-    records: list[dict[str, object]] = [
+    records: list[TestResult] = [
         {"name": " Alpha ", "amount": "10"},
         {"name": "beta", "amount": 5},
         {"name": None, "amount": None},
@@ -5007,10 +5019,10 @@ def test_extended_inference_edge_cases_part2() -> ExtendedTestResult:
     """Run extended stress cases part 2.
 
     Returns:
-        TODO.
+        ExtendedTestResult: TODO.
 
     """
-    rows: list[dict[str, object]] = [
+    rows: list[TestResult] = [
         {"name": " Alpha", "score": "10"},
         {"name": "alpha", "score": 7},
         {"name": "Beta", "score": 3},
@@ -5041,7 +5053,7 @@ def test_extended_inference_edge_cases_part3() -> ExtendedTestResult:
     """Run extended stress cases part 3.
 
     Returns:
-        TODO.
+        ExtendedTestResult: TODO.
 
     """
     local_multiplier: LocalMultiplierFactory = (
@@ -5054,7 +5066,7 @@ def test_extended_inference_edge_cases_part3() -> ExtendedTestResult:
         score=3,
         label="candidate",
     )
-    async_result: tuple[dict[str, object], list[int]] = run(
+    async_result: tuple[TestResult, IntList] = run(
         main=function_with_async_comprehension_stress(values=[1, 2, 3]),
     )
     return {
@@ -5101,7 +5113,7 @@ def test_extended_inference_edge_cases() -> ExtendedTestResult:
     """Run all extended inference stress cases.
 
     Returns:
-        TODO.
+        ExtendedTestResult: TODO.
 
     """
     return {

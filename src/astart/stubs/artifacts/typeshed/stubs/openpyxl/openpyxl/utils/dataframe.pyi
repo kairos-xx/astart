@@ -1,0 +1,10 @@
+from collections.abc import Generator
+
+from _typeshed import Incomplete
+
+def dataframe_to_rows(
+    df,
+    index: bool = True,
+    header: bool = True,
+) -> Generator[Incomplete]: ...
+def expand_index(index, header: bool = False) -> Generator[Incomplete]: ...

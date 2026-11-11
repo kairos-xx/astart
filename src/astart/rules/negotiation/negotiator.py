@@ -29,8 +29,10 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        carried_back: Contract polarities a constraint may travel back over.
-        joining: Contract polarities whose missing transfer loses a type.
+        carried_back (Final[frozenset[Polarity]]): Contract polarities a
+            constraint may travel back over.
+        joining (Final[frozenset[Polarity]]): Contract polarities whose missing
+            transfer loses a type.
 
     """
 
@@ -48,14 +50,16 @@ class NegotiatorConfig:
     """Bounds and decay of one negotiation.
 
     Attributes:
-        max_iterations: Most propagation rounds.
-        max_events: Most beliefs that may change in total.
-        minimum_confidence: Candidates weaker than this are dropped.
-        forward_decay: Factor for each contract crossed forward.
-        backward_decay: Factor for each contract crossed backward.
-        memo_delta: A repeated message must beat the best one by this much.
-        entropy_epsilon: Entropy change below which a round counts as still.
-        union_limit: Most union members a settled type may have.
+        max_iterations (int): Most propagation rounds.
+        max_events (int): Most beliefs that may change in total.
+        minimum_confidence (float): Candidates weaker than this are dropped.
+        forward_decay (float): Factor for each contract crossed forward.
+        backward_decay (float): Factor for each contract crossed backward.
+        memo_delta (float): A repeated message must beat the best one by this
+            much.
+        entropy_epsilon (float): Entropy change below which a round counts as
+            still.
+        union_limit (int): Most union members a settled type may have.
 
     """
 
@@ -75,9 +79,9 @@ class Snapshot:
     """The state after one round.
 
     Attributes:
-        iteration: Round number from zero.
-        entropy: Total entropy of all beliefs.
-        changed: Beliefs that changed in the round.
+        iteration (int): Round number from zero.
+        entropy (float): Total entropy of all beliefs.
+        changed (int): Beliefs that changed in the round.
 
     """
 
@@ -92,11 +96,12 @@ class Negotiation:
     """The outcome of a negotiation.
 
     Attributes:
-        beliefs: Final belief of every node, by path text.
-        snapshots: One entry per round.
-        conflicts: Every conflict, sorted by path.
-        exhausted: ``True`` when a bound ended the run before stability.
-        lost: Paths that ended without a type: wrapper targets no candidate
+        beliefs (dict[str, Belief]): Final belief of every node, by path text.
+        snapshots (tuple[Snapshot, ...]): One entry per round.
+        conflicts (tuple[Conflict, ...]): Every conflict, sorted by path.
+        exhausted (bool): ``True`` when a bound ended the run before stability.
+        lost (frozenset[str]): Paths that ended without a type: wrapper targets
+            no candidate
             survived for and derived expressions the typer rejected.
 
     """
@@ -111,11 +116,11 @@ class Negotiation:
         """Give the type a node ended up with.
 
         Args:
-            path: Path text of the node.
+            path (str): Path text of the node.
 
         Returns:
-            The settled type, or ``None`` when unknown, ambiguous or in
-            conflict.
+            str | None: The settled type, or ``None`` when
+                unknown, ambiguous or in conflict.
 
         """
         belief: Belief | None = self.beliefs.get(path)
@@ -128,9 +133,9 @@ class _Ant:
     """One message travelling through the graph.
 
     Attributes:
-        path: Node it is arriving at.
-        candidate: The proposed type.
-        polarity: How it contributes there.
+        path (str): Node it is arriving at.
+        candidate (Candidate): The proposed type.
+        polarity (Polarity): How it contributes there.
 
     """
 
@@ -147,7 +152,8 @@ class Negotiator:
         """Remember the bounds.
 
         Args:
-            config: Bounds and decay; the defaults when omitted.
+            config (NegotiatorConfig | None): Bounds and decay; the defaults
+                when omitted.
 
         """
         self._config: NegotiatorConfig = config or NegotiatorConfig()
@@ -158,10 +164,10 @@ class Negotiator:
         """Propagate until nothing changes or a bound is reached.
 
         Args:
-            graph: Nodes, contracts and seeds.
+            graph (ContractGraph): Nodes, contracts and seeds.
 
         Returns:
-            The beliefs, a snapshot per round and every conflict.
+            Negotiation: The beliefs, a snapshot per round and every conflict.
 
         """
         config: NegotiatorConfig = self._config
@@ -240,14 +246,15 @@ class Negotiator:
         """Process the messages queued at the start of the round.
 
         Args:
-            graph: The contract graph.
-            beliefs: Beliefs by path, updated in place.
-            queue: Pending messages; new ones are appended.
-            memo: Best confidence seen per message identity.
-            budget: Most beliefs this round may change.
+            graph (ContractGraph): The contract graph.
+            beliefs (dict[str, Belief]): Beliefs by path, updated in place.
+            queue (deque[_Ant]): Pending messages; new ones are appended.
+            memo (dict[_Memo, float]): Best confidence seen per message
+                identity.
+            budget (int): Most beliefs this round may change.
 
         Returns:
-            How many beliefs changed.
+            int: How many beliefs changed.
 
         """
         changed: int = 0
@@ -281,11 +288,12 @@ class Negotiator:
         """Tell whether a message adds anything over the ones seen.
 
         Args:
-            ant: The message.
-            memo: Best confidence seen per message identity; updated.
+            ant (_Ant): The message.
+            memo (dict[_Memo, float]): Best confidence seen per message
+                identity; updated.
 
         Returns:
-            ``True`` when it is new or clearly stronger.
+            bool: ``True`` when it is new or clearly stronger.
 
         """
         key: _Memo = (
@@ -315,10 +323,10 @@ class Negotiator:
         the node was given before.
 
         Args:
-            graph: The contract graph.
-            path: The node that changed.
-            beliefs: Beliefs by path.
-            queue: Pending messages; the result is appended.
+            graph (ContractGraph): The contract graph.
+            path (str): The node that changed.
+            beliefs (dict[str, Belief]): Beliefs by path.
+            queue (deque[_Ant]): Pending messages; the result is appended.
 
         """
         for derived in graph.derived_from(path=path):
@@ -376,11 +384,11 @@ class Negotiator:
         holds, now narrowed.
 
         Args:
-            belief: The node's belief after the change.
-            ant: The message that changed it.
+            belief (Belief): The node's belief after the change.
+            ant (_Ant): The message that changed it.
 
         Returns:
-            The candidates to send forward.
+            list[Candidate]: The candidates to send forward.
 
         """
         pool: list[Candidate] = (
@@ -406,11 +414,11 @@ class Negotiator:
         sent before.
 
         Args:
-            belief: The element node's belief.
-            contract: The wrapping contract.
+            belief (Belief): The element node's belief.
+            contract (Contract): The wrapping contract.
 
         Returns:
-            One candidate, or none when nothing can be said.
+            list[Candidate]: One candidate, or none when nothing can be said.
 
         """
         held: list[Candidate] = [
@@ -449,10 +457,10 @@ class Negotiator:
         """Queue the messages a changed belief sends to its neighbours.
 
         Args:
-            graph: The contract graph.
-            ant: The message that changed the belief.
-            belief: The node's belief after the change.
-            queue: Pending messages; new ones are appended.
+            graph (ContractGraph): The contract graph.
+            ant (_Ant): The message that changed the belief.
+            belief (Belief): The node's belief after the change.
+            queue (deque[_Ant]): Pending messages; new ones are appended.
 
         """
         sent: list[Candidate] = self._leaving(belief=belief, ant=ant)
@@ -504,10 +512,11 @@ class Negotiator:
         """Queue one message when it is still strong enough.
 
         Args:
-            queue: Pending messages.
-            moved: The transferred candidate, or ``None``.
-            contract: The contract crossed.
-            forward: Whether the message follows the contract's direction.
+            queue (deque[_Ant]): Pending messages.
+            moved (Candidate | None): The transferred candidate, or ``None``.
+            contract (Contract): The contract crossed.
+            forward (bool): Whether the message follows the contract's
+                direction.
 
         """
         if moved is None:

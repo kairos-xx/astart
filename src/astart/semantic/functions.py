@@ -16,14 +16,17 @@ class FunctionSummary:
     """Immutable analyzed call result with possible visible effects.
 
     Attributes:
-        function_id: Function definition syntax identity.
-        context_id: Unique abstract call-analysis context.
-        result: Return abstraction.
-        value_updates: Changes to symbols observable by the caller.
-        heap_updates: Modified abstract heap objects.
-        exceptions: Possible raised exception names.
-        dependencies: Syntax or symbol identities used by the call.
-        unknown_side_effects: Whether unsupported effects were encountered.
+        function_id (int): Function definition syntax identity.
+        context_id (int): Unique abstract call-analysis context.
+        result (AbstractValue): Return abstraction.
+        value_updates (tuple[tuple[int, AbstractValue], ...]): Changes to
+            symbols observable by the caller.
+        heap_updates (tuple[HeapObject, ...]): Modified abstract heap objects.
+        exceptions (tuple[str, ...]): Possible raised exception names.
+        dependencies (tuple[int, ...]): Syntax or symbol identities used by the
+            call.
+        unknown_side_effects (bool): Whether unsupported effects were
+            encountered.
 
     """
 
@@ -59,7 +62,7 @@ class CallSummaryCache:
         """Number of cached complete call summaries.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         return len(self._summaries)
@@ -76,14 +79,16 @@ class CallSummaryCache:
         """Find a summary using complete observable abstract state.
 
         Args:
-            function_id: Function syntax identity.
-            caller_id: Call-site syntax identity.
-            args: Evaluated abstract arguments.
-            values: Current lexical abstract environment.
-            heap: Current abstract heap snapshots.
+            function_id (int): Function syntax identity.
+            caller_id (int): Call-site syntax identity.
+            args (tuple[AbstractValue, ...]): Evaluated abstract arguments.
+            values (dict[int, AbstractValue]): Current lexical abstract
+                environment.
+            heap (dict[int, HeapObject]): Current abstract heap snapshots.
 
         Returns:
-            Matching cached summary, if previously analyzed.
+            FunctionSummary | None:
+                Matching cached summary, if previously analyzed.
 
         """
         return self._summaries.get(
@@ -108,11 +113,13 @@ class CallSummaryCache:
         """Store a complete effects summary for the precise input state.
 
         Args:
-            caller_id: Call-site syntax identity.
-            args: Abstract positional arguments.
-            values: Input symbol environment, before the call.
-            heap: Input heap, before the call.
-            summary: Complete analyzed result and observable effects.
+            caller_id (int): Call-site syntax identity.
+            args (tuple[AbstractValue, ...]): Abstract positional arguments.
+            values (dict[int, AbstractValue]): Input symbol environment, before
+                the call.
+            heap (dict[int, HeapObject]): Input heap, before the call.
+            summary (FunctionSummary): Complete analyzed result and observable
+                effects.
 
         """
         self._summaries[

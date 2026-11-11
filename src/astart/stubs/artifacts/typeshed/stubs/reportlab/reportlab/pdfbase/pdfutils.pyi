@@ -1,0 +1,31 @@
+from typing import Final, Literal
+
+from _typeshed import Incomplete
+
+__version__: Final[str]
+
+def makeA85Image(
+    filename,
+    IMG=None,
+    detectJpeg: bool = False,
+) -> list[Incomplete] | None: ...
+def makeRawImage(
+    filename,
+    IMG=None,
+    detectJpeg: bool = False,
+) -> list[Incomplete] | None: ...
+def cacheImageFile(
+    filename,
+    returnInMemory: bool | Literal[0, 1] = 0,
+    IMG=None,
+): ...
+def preProcessImages(spec) -> None: ...
+def cachedImageExists(filename) -> Literal[0, 1]: ...
+def readJPEGInfo(
+    image,
+) -> tuple[Incomplete, Incomplete, Incomplete, Incomplete] | None: ...
+
+class _fusc:
+    def __init__(self, k, n) -> None: ...
+    def encrypt(self, s) -> str: ...
+    def decrypt(self, s) -> str: ...

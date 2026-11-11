@@ -4,6 +4,7 @@ Confidence never decides this. A type is accepted only when every member of
 it has independent support, nothing it depends on is opaque, and no conflict
 is open. The inference engine counts only as corroboration of a type other
 evidence already supports, never as a source of types.
+
 """
 
 from __future__ import annotations
@@ -29,11 +30,15 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        proofs: Origins that justify a type on their own.
-        pair: Two soft signals that support each other.
-        soft: Origins that need the engine's agreement or a partner.
-        unspellable: Types that are never written.
-        mutable: Container types whose element type a mutation can change.
+        proofs (Final[frozenset[Origin]]): Origins that justify a type on their
+            own.
+        pair (Final[frozenset[Origin]]): Two soft signals that support each
+            other.
+        soft (Final[frozenset[Origin]]): Origins that need the engine's
+            agreement or a partner.
+        unspellable (Final[frozenset[str]]): Types that are never written.
+        mutable (Final[frozenset[str]]): Container types whose element type a
+            mutation can change.
 
     """
 
@@ -72,11 +77,11 @@ def opaque_closure(
     """Spread opacity to everything that depends on an opaque node.
 
     Args:
-        graph: The contract graph.
-        opaque: Nodes with incomplete evidence.
+        graph (ContractGraph): The contract graph.
+        opaque (frozenset[str]): Nodes with incomplete evidence.
 
     Returns:
-        The opaque nodes and every node reachable from them.
+        frozenset[str]: The opaque nodes and every node reachable from them.
 
     """
     reached: set[str] = set(opaque)
@@ -100,12 +105,13 @@ def _supported(*, candidate: Candidate, corroborated: bool) -> bool:
     """Tell whether one member of a type has enough independent support.
 
     Args:
-        candidate: A candidate of the belief.
-        corroborated: Whether the inference engine proposed the whole type.
+        candidate (Candidate): A candidate of the belief.
+        corroborated (bool): Whether the inference engine proposed the whole
+            type.
 
     Returns:
-        ``True`` for a proof, for two different soft signals, or for one soft
-        signal plus the engine.
+        bool: ``True`` for a proof, for two different soft
+            signals, or for one soft signal plus the engine.
 
     """
     origins: frozenset[Origin] = candidate.origins
@@ -126,14 +132,17 @@ def accept(
     """Decide the annotation a belief justifies.
 
     Args:
-        belief: The node's final belief.
-        kind: ``"parameter"``, ``"return"``, ``"variable"`` or
+        belief (Belief): The node's final belief.
+        kind (str): ``"parameter"``, ``"return"``, ``"variable"`` or
             ``"attribute"``.
-        opaque: Opaque nodes including everything downstream of them.
-        corroboration: The inference engine's proposal by node path.
+        opaque (frozenset[str]): Opaque nodes including everything downstream
+            of them.
+        corroboration (Mapping[str, str]): The inference engine's proposal by
+            node path.
 
     Returns:
-        The annotation source, or ``None`` when the evidence is not enough.
+        str | None:
+            The annotation source, or ``None`` when the evidence is not enough.
 
     """
     if belief.path in opaque or belief.declared is not None:
@@ -172,11 +181,13 @@ def container_risks(
     """Find risky nodes that settled to a mutable container.
 
     Args:
-        risky: Nodes used in a way that could change a container's elements.
-        beliefs: Final beliefs by path.
+        risky (frozenset[str]): Nodes used in a way that could change a
+            container's elements.
+        beliefs (Mapping[str, Belief]): Final beliefs by path.
 
     Returns:
-        The risky nodes whose settled type has a mutable container member.
+        frozenset[str]: The risky nodes whose settled type has a mutable
+            container member.
 
     """
     algebra: TypeAlgebra = TypeAlgebra()
@@ -185,7 +196,8 @@ def container_risks(
         belief: Belief | None = beliefs.get(path)
         settled: str | None = None if belief is None else belief.settle()
         if settled is not None and any(
-            member.partition("[")[0] in Constants.mutable
+            (origin := algebra.origin(source=member)) is not None
+            and origin in Constants.mutable
             for member in algebra.members(source=settled)
         ):
             found.add(path)
@@ -200,13 +212,13 @@ def blocked_nodes(
     """Find every node whose evidence is incomplete.
 
     Args:
-        built: The module's contract graph.
-        result: The solved negotiation.
+        built (Built): The module's contract graph.
+        result (Negotiation): The solved negotiation.
 
     Returns:
-        Nodes marked opaque while building, risky containers that settled,
-        nodes that lost a contribution while solving, and everything
-        downstream of them.
+        frozenset[str]: Nodes marked opaque while building, risky containers
+            that settled, nodes that lost a contribution
+            while solving, and everything downstream of them.
 
     """
     return opaque_closure(

@@ -3,9 +3,10 @@
 The loader resolves ``select``/``ignore`` rule selections, path
 ``exclude`` patterns, per-path ``overrides``, a safety ceiling, a target
 version, rule ``params`` and extra library tables into one immutable
-:class:`AstartConfig`.  It is deliberately not wired into the CLI yet;
+:class:`AstartConfig`. It is deliberately not wired into the CLI yet;
 callers build settings from :func:`effective` and expand named profiles
 through :func:`astart.cli.ignores.resolve`.
+
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time
 from fnmatch import fnmatch
-from re import fullmatch
 from tomllib import load as toml_load
 from typing import TYPE_CHECKING, Final, final
 
@@ -30,7 +30,7 @@ def _no_params() -> dict[str, FactValue]:
     """Build the empty params mapping.
 
     Returns:
-        An empty dict typed for ``Selection.params``.
+        dict[str, FactValue]: An empty dict typed for ``Selection.params``.
 
     """
     return {}
@@ -47,13 +47,19 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        pyproject: The file the loader searches upward for.
-        section: Dotted path inside ``tool`` for this tool's table.
-        scalar_keys: Allowed scalar keys of ``[tool.astart]``.
-        list_keys: Allowed string-list keys of ``[tool.astart]``.
-        table_keys: Allowed sub-table keys of ``[tool.astart]``.
-        override_scalar_keys: Allowed scalar keys of an override table.
-        override_list_keys: Allowed string-list keys of an override table.
+        pyproject (Final[str]): The file the loader searches upward for.
+        section (Final[tuple[str, str]]): Dotted path inside ``tool`` for this
+            tool's table.
+        scalar_keys (Final[frozenset[str]]): Allowed scalar keys of
+            ``[tool.astart]``.
+        list_keys (Final[frozenset[str]]): Allowed string-list keys of
+            ``[tool.astart]``.
+        table_keys (Final[frozenset[str]]): Allowed sub-table keys of
+            ``[tool.astart]``.
+        override_scalar_keys (Final[frozenset[str]]): Allowed scalar keys of an
+            override table.
+        override_list_keys (Final[frozenset[str]]): Allowed string-list keys of
+            an override table.
 
     """
 
@@ -66,6 +72,7 @@ class Constants:
             "checker",
             "safety-ceiling",
             "target-version",
+            "protocol-placement",
         },
     )
     list_keys: Final[frozenset[str]] = frozenset(
@@ -91,14 +98,19 @@ class Selection:
     """Rule selection shared by the root table and each override.
 
     Attributes:
-        select: Codes or prefixes to include; empty means all.
-        ignore: Codes or prefixes to exclude after selection.
-        profile: Catalog profile key, or ``None`` for the default.
-        min_confidence: Offer floor, or ``None`` to use the command's.
-        safety_ceiling: Highest fix safety applied automatically, or
-            ``None`` to defer to the profile or the command's default.
-        target_version: Python version rules should target, or ``None``.
-        params: Rule parameter overrides, merged over catalog and
+        select (tuple[str, ...]): Codes or prefixes to include; empty means
+            all.
+        ignore (tuple[str, ...]): Codes or prefixes to exclude after selection.
+        profile (str | None): Catalog profile key, or ``None`` for the default.
+        min_confidence (float | None): Offer floor, or ``None`` to use the
+            command's.
+        safety_ceiling (FixSafety | None): Highest fix safety applied
+            automatically, or ``None``
+            to defer to the profile or the command's default.
+        target_version (str | None): Python version rules should target, or
+            ``None``.
+        params (Mapping[str, FactValue]): Rule parameter overrides, merged over
+            catalog and
             profile parameters; later overrides win per key.
 
     """
@@ -115,10 +127,10 @@ class Selection:
         """Answer whether a rule code survives select and ignore.
 
         Args:
-            code: Rule or fix code or key to test.
+            code (str): Rule or fix code or key to test.
 
         Returns:
-            ``True`` when the code is selected and not ignored.
+            bool: ``True`` when the code is selected and not ignored.
 
         """
         if self.select and not _matches_any(code=code, prefixes=self.select):
@@ -132,9 +144,9 @@ class PathOverride:
     """A ``[tool.astart.overrides.<pattern>]`` table.
 
     Attributes:
-        pattern: ``fnmatch``-style path pattern, relative to the
+        pattern (str): ``fnmatch``-style path pattern, relative to the
             pyproject directory.
-        selection: The overrides that apply to matching paths.
+        selection (Selection): The overrides that apply to matching paths.
 
     """
 
@@ -148,13 +160,17 @@ class AstartConfig:
     """The resolved ``[tool.astart]`` table.
 
     Attributes:
-        root: Directory containing the ``pyproject.toml``.
-        selection: Root selection and defaults.
-        exclude: Path patterns the CLI should skip during discovery.
-        overrides: Per-path tables, in file order; later wins.
-        checker: Checker mode string, or ``None`` for the default.
-        library_tables: Extra signature-table files rules may consult,
-            relative to the pyproject directory.
+        root (Path): Directory containing the ``pyproject.toml``.
+        selection (Selection): Root selection and defaults.
+        exclude (tuple[str, ...]): Path patterns the CLI should skip during
+            discovery.
+        overrides (tuple[PathOverride, ...]): Per-path tables, in file order;
+            later wins.
+        checker (str | None): Checker mode string, or ``None`` for the default.
+        library_tables (tuple[str, ...]): Extra signature-table files rules may
+            consult, relative to the pyproject directory.
+        protocol_placement (str): Where synthesized protocols land:
+            ``"module"``, ``"function"`` or ``"type-checking"``.
 
     """
 
@@ -164,16 +180,17 @@ class AstartConfig:
     overrides: tuple[PathOverride, ...] = ()
     checker: str | None = None
     library_tables: tuple[str, ...] = ()
+    protocol_placement: str = "module"
 
 
 def find_pyproject(*, start: Path) -> Path | None:
     """Walk upward from ``start`` for a ``pyproject.toml``.
 
     Args:
-        start: File or directory the search begins at.
+        start (Path): File or directory the search begins at.
 
     Returns:
-        The found file, or ``None``.
+        Path | None: The found file, or ``None``.
 
     """
     directory: Path = start if start.is_dir() else start.parent
@@ -188,10 +205,11 @@ def load_config(*, path: Path) -> AstartConfig | None:
     """Parse ``[tool.astart]`` from a ``pyproject.toml``.
 
     Args:
-        path: The ``pyproject.toml`` to read.
+        path (Path): The ``pyproject.toml`` to read.
 
     Returns:
-        The config, or ``None`` when the file has no table.
+        AstartConfig | None:
+            The config, or ``None`` when the file has no table.
 
     Raises:
         ConfigError: If a present table is malformed.
@@ -227,6 +245,17 @@ def load_config(*, path: Path) -> AstartConfig | None:
     if checker is not None and not isinstance(checker, str):
         msg = "[tool.astart] checker must be a string"
         raise ConfigError(msg)
+    placement: TomlValue | None = table.get("protocol-placement")
+    if placement is not None and placement not in (
+        "module",
+        "function",
+        "type-checking",
+    ):
+        msg = (
+            '[tool.astart] protocol-placement must be "module", '
+            '"function" or "type-checking"'
+        )
+        raise ConfigError(msg)
     overrides: tuple[PathOverride, ...] = _overrides(
         table=table.get("overrides"),
     )
@@ -245,6 +274,9 @@ def load_config(*, path: Path) -> AstartConfig | None:
             key="library-tables",
             where="[tool.astart]",
         ),
+        protocol_placement=(
+            placement if isinstance(placement, str) else "module"
+        ),
     )
 
 
@@ -252,10 +284,10 @@ def load_project(*, start: Path) -> AstartConfig | None:
     """Find and load the nearest ``pyproject.toml`` config.
 
     Args:
-        start: File or directory the search begins at.
+        start (Path): File or directory the search begins at.
 
     Returns:
-        The config, or ``None`` when none exists.
+        AstartConfig | None: The config, or ``None`` when none exists.
 
     """
     found: Path | None = find_pyproject(start=start)
@@ -269,11 +301,11 @@ def effective(*, config: AstartConfig, path: Path) -> Selection:
     apply in file order, later entries winning.
 
     Args:
-        config: The loaded config.
-        path: File the selection applies to.
+        config (AstartConfig): The loaded config.
+        path (Path): File the selection applies to.
 
     Returns:
-        The effective selection for the path.
+        Selection: The effective selection for the path.
 
     """
     try:
@@ -313,11 +345,11 @@ def excluded(*, config: AstartConfig, path: Path) -> bool:
     """Answer whether discovery should skip ``path``.
 
     Args:
-        config: The loaded config.
-        path: Candidate file.
+        config (AstartConfig): The loaded config.
+        path (Path): Candidate file.
 
     Returns:
-        ``True`` when an ``exclude`` pattern matches.
+        bool: ``True`` when an ``exclude`` pattern matches.
 
     """
     try:
@@ -331,11 +363,11 @@ def _matches_any(*, code: str, prefixes: tuple[str, ...]) -> bool:
     """Answer whether ``code`` equals or starts with a prefix.
 
     Args:
-        code: Rule code or fix key.
-        prefixes: Candidate prefixes.
+        code (str): Rule code or fix key.
+        prefixes (tuple[str, ...]): Candidate prefixes.
 
     Returns:
-        ``True`` on any match.
+        bool: ``True`` on any match.
 
     """
     return any(code.startswith(prefix) for prefix in prefixes)
@@ -345,10 +377,10 @@ def _overrides(*, table: TomlValue | None) -> tuple[PathOverride, ...]:
     """Parse the ``overrides`` sub-table.
 
     Args:
-        table: Raw ``overrides`` value.
+        table (TomlValue | None): Raw ``overrides`` value.
 
     Returns:
-        The overrides, in file order.
+        tuple[PathOverride, ...]: The overrides, in file order.
 
     Raises:
         ConfigError: If the table is malformed.
@@ -395,12 +427,12 @@ def _selection(
     """Build a :class:`Selection` from a raw table.
 
     Args:
-        table: Raw config table.
-        list_keys: Allowed string-list keys.
-        where: Dotted name used in errors.
+        table (Mapping[str, TomlValue]): Raw config table.
+        list_keys (frozenset[str]): Allowed string-list keys.
+        where (str): Dotted name used in errors.
 
     Returns:
-        The parsed selection.
+        Selection: The parsed selection.
 
     Raises:
         ConfigError: On type mismatches.
@@ -448,11 +480,11 @@ def _safety_ceiling(
     """Parse the ``safety-ceiling`` key.
 
     Args:
-        value: Raw TOML value.
-        where: Dotted name used in errors.
+        value (TomlValue | None): Raw TOML value.
+        where (str): Dotted name used in errors.
 
     Returns:
-        The ceiling, or ``None`` when absent.
+        FixSafety | None: The ceiling, or ``None`` when absent.
 
     Raises:
         ConfigError: If the value is not a known safety level.
@@ -478,11 +510,11 @@ def _target_version(
     """Parse the ``target-version`` key.
 
     Args:
-        value: Raw TOML value.
-        where: Dotted name used in errors.
+        value (TomlValue | None): Raw TOML value.
+        where (str): Dotted name used in errors.
 
     Returns:
-        The version string, or ``None`` when absent.
+        str | None: The version string, or ``None`` when absent.
 
     Raises:
         ConfigError: If the value is not ``major[.minor[...]]`` digits.
@@ -490,13 +522,28 @@ def _target_version(
     """
     if value is None:
         return None
-    if isinstance(value, str) and fullmatch(
-        pattern=r"\d+(\.\d+)*",
-        string=value,
-    ):
+    if isinstance(value, str) and _is_dotted_digits(value=value):
         return value
     msg: str = f"{where} target-version must look like '3.12'"
     raise ConfigError(msg)
+
+
+def _is_dotted_digits(*, value: str) -> bool:
+    r"""Check for ``digits(.digits)*`` without a regular expression.
+
+    ``str.isdecimal`` matches exactly the Unicode decimal-digit category
+    that ``\\\\\\\\\\\\\\\\d`` covers, so ``"3.12.1"`` passes
+    and ``"3."``/``".3"``/``"3..4"``/empty parts fail.
+
+    Args:
+        value (str): Candidate version string.
+
+    Returns:
+        bool: ``True`` when every dot-separated part is non-empty decimal
+            digits.
+
+    """
+    return all(part.isdecimal() for part in value.split(sep="."))
 
 
 def _params(
@@ -507,11 +554,11 @@ def _params(
     """Parse the ``params`` sub-table of rule parameter overrides.
 
     Args:
-        table: Raw config table.
-        where: Dotted name used in errors.
+        table (Mapping[str, TomlValue]): Raw config table.
+        where (str): Dotted name used in errors.
 
     Returns:
-        Parameter overrides keyed by name.
+        Mapping[str, FactValue]: Parameter overrides keyed by name.
 
     Raises:
         ConfigError: If the table or a value is malformed.
@@ -543,12 +590,12 @@ def _string_list(
     """Read a string list key, or ``()`` when absent.
 
     Args:
-        table: Raw config table.
-        key: The list key.
-        where: Dotted name used in errors.
+        table (Mapping[str, TomlValue]): Raw config table.
+        key (str): The list key.
+        where (str): Dotted name used in errors.
 
     Returns:
-        The strings.
+        tuple[str, ...]: The strings.
 
     Raises:
         ConfigError: If the value is not a list of strings.

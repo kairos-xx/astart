@@ -1,0 +1,68 @@
+import threading
+from typing import Final, Literal, type_check_only
+
+from _typeshed import Incomplete
+
+LXML3: bool
+__origin__: Final = "lxml.etree"
+
+def tostring(
+    element_or_tree,
+    *,
+    encoding: str | None = None,
+    method: Literal["xml", "html", "text", "c14n", "c14n2"] = "xml",
+    xml_declaration: bool | None = None,
+    pretty_print: bool = False,
+    with_tail: bool = True,
+    standalone: bool | None = None,
+    doctype=None,
+    exclusive: bool = False,
+    inclusive_ns_prefixes=None,
+    with_comments: bool = True,
+    strip_text: bool = False,
+): ...
+@type_check_only
+class _ElementBase: ...
+
+class RestrictedElement(_ElementBase):
+    __slots__ = ()
+    blacklist: Incomplete
+    def __iter__(self): ...
+    def iterchildren(self, tag=None, reversed: bool = False): ...
+    def iter(self, tag=None, *tags): ...
+    def iterdescendants(self, tag=None, *tags): ...
+    def itersiblings(self, tag=None, preceding: bool = False): ...
+    def getchildren(self): ...
+    def getiterator(self, tag=None): ...
+
+class GlobalParserTLS(threading.local):
+    parser_config: Incomplete
+    element_class: Incomplete
+    def createDefaultParser(self): ...
+    def setDefaultParser(self, parser) -> None: ...
+    def getDefaultParser(self): ...
+
+def getDefaultParser(): ...
+def check_docinfo(
+    elementtree,
+    forbid_dtd: bool = False,
+    forbid_entities: bool = True,
+) -> None: ...
+def parse(
+    source,
+    parser=None,
+    base_url=None,
+    forbid_dtd: bool = False,
+    forbid_entities: bool = True,
+): ...
+def fromstring(
+    text,
+    parser=None,
+    base_url=None,
+    forbid_dtd: bool = False,
+    forbid_entities: bool = True,
+): ...
+
+XML = fromstring
+
+def iterparse(*args, **kwargs) -> None: ...

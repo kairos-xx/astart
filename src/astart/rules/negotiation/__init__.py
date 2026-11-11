@@ -2,8 +2,9 @@
 
 Entities are nodes, facts about the program are directed contracts between
 them, and typed candidates travel forward and backward along the contracts
-until every belief stops changing. See ``docs/TODO.md`` chapter 10
+until every belief stops changing. See ``docs/planning/TODO.md`` chapter 10
 (contract negotiation).
+
 """
 
 from __future__ import annotations

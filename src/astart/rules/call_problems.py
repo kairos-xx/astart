@@ -14,7 +14,8 @@ Four standalone detectors over the trusted :class:`CallBindings` layer:
 
 Builtins and unbound names are out of scope: project binding only
 covers module-level definitions, so ``print``/``len``/unknown externals
-are never flagged.  Catalog wiring is deferred (M8-22).
+are never flagged. Catalog wiring is deferred (M8-22).
+
 """
 
 from __future__ import annotations
@@ -37,18 +38,18 @@ from astart.rules.procedural import Candidate, span_of
 from astart.rules.resolve import CallBindings, binding_counts
 
 if TYPE_CHECKING:
-    from astart.ast import CommentedModule
     from astart.semantic.typing_contracts import BoundCall
+    from astart.source.ast import CommentedModule
 
 
 def _module_bindings(*, module: CommentedModule) -> CallBindings:
     """Trusted call bindings for the whole module, computed once.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Shared :class:`CallBindings` cache.
+        CallBindings: class:`CallBindings` cache.
 
     """
     return CallBindings(
@@ -61,10 +62,10 @@ def _callee_name(*, call: Call) -> str:
     """Best-effort dotted name of a call's callee.
 
     Args:
-        call: Call expression.
+        call (Call): Call expression.
 
     Returns:
-        Dotted name, or ``"?"``.
+        str: Dotted name, or ``"?"``.
 
     """
     parts: list[str] = []
@@ -81,10 +82,10 @@ def _bound_roots(*, module: CommentedModule) -> set[str]:
     """Root names bound by definitions or imports in the module.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Bound root identifiers.
+        set[str]: Bound root identifiers.
 
     """
     roots: set[str] = set()
@@ -112,10 +113,10 @@ def _calls(*, module: CommentedModule) -> list[Call]:
     """Every call expression in the module.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Call nodes in source order.
+        list[Call]: Call nodes in source order.
 
     """
     found: list[Call] = [
@@ -132,11 +133,11 @@ def _trusted(
     """Trusted binding of one call.
 
     Args:
-        bindings: Shared binding cache.
-        call: Call expression.
+        bindings (CallBindings): Shared binding cache.
+        call (Call): Call expression.
 
     Returns:
-        The binding or ``None``.
+        BoundCall | None: The binding or ``None``.
 
     """
     return bindings.get(call=call)
@@ -150,11 +151,11 @@ def find_missing_arguments(
     """Flag calls missing required arguments.
 
     Args:
-        filename: Source name for spans.
-        module: Parsed module.
+        filename (str): Source name for spans.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Candidates for each missing-argument error.
+        tuple[Candidate, ...]: Candidates for each missing-argument error.
 
     """
     bindings: CallBindings = _module_bindings(module=module)
@@ -188,11 +189,11 @@ def find_unexpected_arguments(
     """Flag calls with arguments no parameter accepts.
 
     Args:
-        filename: Source name for spans.
-        module: Parsed module.
+        filename (str): Source name for spans.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Candidates for each unexpected-argument error.
+        tuple[Candidate, ...]: Candidates for each unexpected-argument error.
 
     """
     bindings: CallBindings = _module_bindings(module=module)
@@ -230,11 +231,11 @@ def find_ambiguous_callees(
     arguments are ambiguous.
 
     Args:
-        filename: Source name for spans.
-        module: Parsed module.
+        filename (str): Source name for spans.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Candidates for each indeterminate binding.
+        tuple[Candidate, ...]: Candidates for each indeterminate binding.
 
     """
     bindings: CallBindings = _module_bindings(module=module)
@@ -267,11 +268,11 @@ def find_unresolved_callees(
     resolved by project binding and are skipped rather than flooded.
 
     Args:
-        filename: Source name for spans.
-        module: Parsed module.
+        filename (str): Source name for spans.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Candidates for each unresolvable call.
+        tuple[Candidate, ...]: Candidates for each unresolvable call.
 
     """
     roots: set[str] = _bound_roots(module=module)

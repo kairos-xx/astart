@@ -136,7 +136,7 @@ class Cost(StrEnum):
         """Return the position of this cost in the ordering.
 
         Returns:
-            Zero for syntactic up to three for project.
+            int: Zero for syntactic up to three for project.
 
         """
         return Constants.cost_order.index(self)
@@ -160,7 +160,7 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        cost_order: Grouped module constant.
+        cost_order (Final[tuple[Cost, ...]]): Grouped module constant.
 
     """
 

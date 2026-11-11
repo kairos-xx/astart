@@ -25,10 +25,10 @@ def names_bound_by(*, node: AST) -> tuple[str, ...]:
     """List the names a node binds, rebinds or deletes.
 
     Args:
-        node: Node to inspect.
+        node (AST): Node to inspect.
 
     Returns:
-        The names it introduces, possibly none.
+        tuple[str, ...]: The names it introduces, possibly none.
 
     """
     names: tuple[str, ...] = ()

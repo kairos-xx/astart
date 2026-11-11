@@ -7,6 +7,7 @@ a direct call (an escape, which makes that function's caller set
 unknowable). Module records are keyed by content hash, so
 :meth:`refresh` of an unchanged file is free and a changed file only
 invalidates the callees it used to call plus the ones it calls now.
+
 """
 
 from __future__ import annotations
@@ -47,13 +48,13 @@ class CallRecord:
     """One project-internal call site.
 
     Attributes:
-        module: Module containing the call.
-        caller: Qualified name of the scope the call executes in — the
+        module (str): Module containing the call.
+        caller (str): Qualified name of the scope the call executes in — the
             enclosing function, the enclosing class body, or the module
             itself for top-level statements.
-        node: The call AST, retained for argument binding.
-        callee: Where the callee resolved, or ``None`` when the target is
-            external or ambiguous.
+        node (Call): The call AST, retained for argument binding.
+        callee (ResolvedSymbol | None): Where the callee resolved, or ``None``
+            when the target is external or ambiguous.
 
     """
 
@@ -69,9 +70,10 @@ class ProjectConfig:
     """Toggles controlling how complete the caller set is assumed to be.
 
     Attributes:
-        assume_external_callers: When true, exported project functions may
-            be called from outside the analysed set, so their call-site
-            evidence is incomplete and guarded fixes must stay guarded.
+        assume_external_callers (bool): When true, exported project functions
+            may be called from
+            outside the analysed set, so their call-site evidence
+            is incomplete and guarded fixes must stay guarded.
             When false every project-internal definition is closed-world:
             its recorded callers are all of its callers.
 
@@ -84,10 +86,10 @@ def _dotted(func: expr) -> str:
     """Render an attribute chain as a dotted path.
 
     Args:
-        func: Expression to render (usually ``call.func``).
+        func (expr): Expression to render (usually ``call.func``).
 
     Returns:
-        ``"a.b.c"`` for name/attribute chains, ``""`` otherwise.
+        str: ``"a.b.c"`` for name/attribute chains, ``""`` otherwise.
 
     """
     match func:
@@ -112,12 +114,12 @@ def _resolve_callee(
     ``C().m()``; anything unresolved stays ``None``.
 
     Args:
-        table: Symbol table.
-        module: Module containing the call.
-        func: The ``call.func`` expression.
+        table (SymbolTable): Symbol table.
+        module (str): Module containing the call.
+        func (expr): The ``call.func`` expression.
 
     Returns:
-        The resolved callee, or ``None``.
+        ResolvedSymbol | None: The resolved callee, or ``None``.
 
     """
     match func:
@@ -166,8 +168,8 @@ class _Collector:
         """Start empty accumulation for one module.
 
         Args:
-            table: Symbol table for callee resolution.
-            module: Module being scanned.
+            table (SymbolTable): Symbol table for callee resolution.
+            module (str): Module being scanned.
 
         """
         self.table: SymbolTable = table
@@ -182,11 +184,12 @@ def _header_parts(*, node: AST) -> tuple[AST | None, ...]:
     """List the parts of a definition that run in the outer scope.
 
     Args:
-        node: Function, async function or class definition.
+        node (AST): Function, async function or class definition.
 
     Returns:
-        Decorators, signature, return annotation, type parameters and —
-        for classes — bases and keyword values, in source order.
+        tuple[AST | None, ...]: Decorators, signature, return annotation, type
+            parameters and
+            — for classes — bases and keyword values, in source order.
 
     """
     match node:
@@ -221,9 +224,9 @@ def _visit_header(
     recurse under the newly defined name.
 
     Args:
-        node: Definition whose header executes outside its body.
-        prefix: Qualified name of the enclosing scope.
-        collector: Accumulator for calls, escapes and definitions.
+        node (AST): Definition whose header executes outside its body.
+        prefix (str): Qualified name of the enclosing scope.
+        collector (_Collector): Accumulator for calls, escapes and definitions.
 
     """
     for part in _header_parts(node=node):
@@ -240,9 +243,9 @@ def _visit(
     """Walk a scope recording calls, escapes and nested definitions.
 
     Args:
-        node: AST node to visit.
-        prefix: Qualified name of the enclosing scope.
-        collector: Accumulator for calls, escapes and definitions.
+        node (AST): AST node to visit.
+        prefix (str): Qualified name of the enclosing scope.
+        collector (_Collector): Accumulator for calls, escapes and definitions.
 
     """
     match node:
@@ -283,11 +286,12 @@ def _collect_scope(
     """Index one module's calls, escapes and definitions.
 
     Args:
-        table: Symbol table.
-        scan: The module's scan.
+        table (SymbolTable): Symbol table.
+        scan (ModuleScan): The module's scan.
 
     Returns:
-        ``(calls, escaped loads, definitions)``.
+        tuple[list[CallRecord], list[expr], dict[str, Definition]]:
+            ``(calls, escaped loads, definitions)``.
 
     """
     collector: _Collector = _Collector(table=table, module=scan.name)
@@ -323,9 +327,10 @@ class ProjectIndex:
         """Build the index over a set of module scans.
 
         Args:
-            scans: Module scans by dotted name.
-            config: Open-world policy; defaults to assuming external
-                callers for exported functions.
+            scans (Mapping[str, ModuleScan]): Module scans by dotted name.
+            config (ProjectConfig | None): Open-world policy; defaults to
+                assuming
+                external callers for exported functions.
 
         """
         self.config: ProjectConfig = config or ProjectConfig()
@@ -345,10 +350,10 @@ class ProjectIndex:
         """Scan a module.
 
         Args:
-            module: Dotted module name.
+            module (str): Dotted module name.
 
         Returns:
-            The scan, or ``None``.
+            ModuleScan | None: The scan, or ``None``.
 
         """
         return self.scans.get(module)
@@ -362,12 +367,12 @@ class ProjectIndex:
         """Resolve a call's target as seen inside one module.
 
         Args:
-            module: Module containing the call.
-            func: The ``call.func`` expression.
+            module (str): Module containing the call.
+            func (expr): The ``call.func`` expression.
 
         Returns:
-            The resolved callee — project definition or external
-            symbol — or ``None``.
+            ResolvedSymbol | None: The resolved callee — project definition
+                or external symbol — or ``None``.
 
         """
         return _resolve_callee(
@@ -380,8 +385,8 @@ class ProjectIndex:
         """Every qualified name the project defines.
 
         Returns:
-            Qualified names of all indexed functions, methods and
-            classes.
+            frozenset[str]: Qualified names of all indexed functions, methods
+                and classes.
 
         """
         return frozenset(self._definitions)
@@ -390,10 +395,10 @@ class ProjectIndex:
         """All recorded call sites of one project callee.
 
         Args:
-            qualified: Qualified name such as ``"pkg.mod.func"``.
+            qualified (str): Qualified name such as ``"pkg.mod.func"``.
 
         Returns:
-            Call records across the whole project.
+            tuple[CallRecord, ...]: Call records across the whole project.
 
         """
         return tuple(self._by_callee.get(qualified, ()))
@@ -402,10 +407,10 @@ class ProjectIndex:
         """Qualified names of scopes that call a callee.
 
         Args:
-            qualified: Qualified callee name.
+            qualified (str): Qualified callee name.
 
         Returns:
-            The caller set.
+            frozenset[str]: The caller set.
 
         """
         return frozenset(
@@ -416,10 +421,11 @@ class ProjectIndex:
         """Return the AST node defining a qualified name.
 
         Args:
-            qualified: Qualified name.
+            qualified (str): Qualified name.
 
         Returns:
-            The defining ``def``/``class`` node, or ``None``.
+            Definition | None:
+                The defining ``def`` /``class`` node, or ``None``.
 
         """
         return self._definitions.get(qualified)
@@ -432,10 +438,11 @@ class ProjectIndex:
         """Every bound name in a module and where it resolves.
 
         Args:
-            module: Dotted module name.
+            module (str): Dotted module name.
 
         Returns:
-            Local name to resolution, for names that resolve at all.
+            dict[str, ResolvedSymbol]: Local name to resolution, for names that
+                resolve at all.
 
         """
         scan: ModuleScan | None = self.scans.get(module)
@@ -455,10 +462,10 @@ class ProjectIndex:
         """Whether a project name is read anywhere but as a direct callee.
 
         Args:
-            qualified: Qualified name.
+            qualified (str): Qualified name.
 
         Returns:
-            Whether the name escapes.
+            bool: Whether the name escapes.
 
         """
         return qualified in self._escaped
@@ -467,15 +474,15 @@ class ProjectIndex:
         """Whether a qualified name is part of its module's public surface.
 
         A member is exported when it appears in the owning module's
-        exports or when a package ``__init__`` re-exports it.  Methods of
+        exports or when a package ``__init__`` re-exports it. Methods of
         exported classes inherit the class's surface.
 
         Args:
-            qualified: Qualified name such as ``"pkg.mod.func"`` or
+            qualified (str): Qualified name such as ``"pkg.mod.func"`` or
                 ``"pkg.mod.C.m"``.
 
         Returns:
-            Whether the name is exported.
+            bool: Whether the name is exported.
 
         """
         owner, _, name = qualified.rpartition(".")
@@ -498,14 +505,14 @@ class ProjectIndex:
         """Whether a callee's recorded callers might be incomplete.
 
         Escaped names are always incomplete — someone can call the
-        function object through an alias the graph cannot see.  With
+        function object through an alias the graph cannot see. With
         ``assume_external_callers`` exported functions are incomplete too.
 
         Args:
-            qualified: Qualified callee name.
+            qualified (str): Qualified callee name.
 
         Returns:
-            Whether caller evidence for the callee is incomplete.
+            bool: Whether caller evidence for the callee is incomplete.
 
         """
         if self.escaped(qualified=qualified):
@@ -523,10 +530,10 @@ class ProjectIndex:
         callers can invalidate exactly the evidence that could differ.
 
         Args:
-            scan: Fresh scan of the module.
+            scan (ModuleScan): Fresh scan of the module.
 
         Returns:
-            Qualified callees whose evidence may have changed.
+            frozenset[str]: Qualified callees whose evidence may have changed.
 
         """
         old: ModuleScan | None = self.scans.get(scan.name)
@@ -546,10 +553,10 @@ class ProjectIndex:
         """Drop a module from the index.
 
         Args:
-            name: Dotted module name.
+            name (str): Dotted module name.
 
         Returns:
-            Callees whose evidence may have changed.
+            frozenset[str]: Callees whose evidence may have changed.
 
         """
         scan: ModuleScan | None = self.scans.pop(name, None)
@@ -565,11 +572,11 @@ class ProjectIndex:
         """Find the longest module prefix of a qualified owner path.
 
         Args:
-            owner: Qualified name of the containing scope, e.g.
+            owner (str): Qualified name of the containing scope, e.g.
                 ``"pkg.mod.C"`` for a method.
 
         Returns:
-            The owning module's dotted name.
+            str: The owning module's dotted name.
 
         """
         parts: list[str] = owner.split(sep=".")
@@ -583,12 +590,12 @@ class ProjectIndex:
         """Check whether a package ``__init__`` re-exports a name.
 
         Args:
-            owner_module: Module the name is defined in.
-            name: Member name.
+            owner_module (str): Module the name is defined in.
+            name (str): Member name.
 
         Returns:
-            Whether some package's export surface contains the name
-            because it imported it from ``owner_module``.
+            bool: Whether some package's export surface contains the name
+                because it imported it from ``owner_module``.
 
         """
         for scan in self.scans.values():
@@ -610,6 +617,7 @@ class ProjectIndex:
         A changed module can alter resolution for callers in other
         modules (a removed export), so every retained call record is
         re-resolved and the by-callee map rebuilt wholesale.
+
         """
         self.table = SymbolTable(scans=self.scans)
         self.missing = self.table.missing
@@ -641,10 +649,10 @@ class ProjectIndex:
         """Add a module's definitions, calls and escapes to the index.
 
         Args:
-            scan: The module's scan.
+            scan (ModuleScan): The module's scan.
 
         Returns:
-            Callees the module's calls resolve to.
+            set[str]: Callees the module's calls resolve to.
 
         """
         calls, escaped, definitions = _collect_scope(
@@ -673,10 +681,10 @@ class ProjectIndex:
         """Remove a module's records, definitions and escapes.
 
         Args:
-            scan: The module's old scan.
+            scan (ModuleScan): The module's old scan.
 
         Returns:
-            Callees the module used to call.
+            set[str]: Callees the module used to call.
 
         """
         prefix: str = f"{scan.name}."
@@ -698,6 +706,7 @@ class ProjectIndex:
 
         Escapes must be re-resolved wholesale because a refresh can make
         an old load resolve differently (a removed export, a new module).
+
         """
         self._escaped.clear()
         for name, loads in self._escaped_loads.items():
@@ -715,8 +724,8 @@ class ProjectIndex:
         """Resolve each escape load and mark resolved internal symbols.
 
         Args:
-            escaped: Escaped load expressions from one module.
-            scan: Module the loads came from.
+            escaped (list[expr]): Escaped load expressions from one module.
+            scan (ModuleScan): Module the loads came from.
 
         """
         for load in escaped:

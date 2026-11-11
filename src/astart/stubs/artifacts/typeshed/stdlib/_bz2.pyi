@@ -1,0 +1,23 @@
+from typing import Self, final
+
+from _typeshed import ReadableBuffer
+
+@final
+class BZ2Compressor:
+    def __new__(cls, compresslevel: int = 9, /) -> Self: ...
+    def compress(self, data: ReadableBuffer, /) -> bytes: ...
+    def flush(self) -> bytes: ...
+
+@final
+class BZ2Decompressor:
+    def decompress(
+        self,
+        data: ReadableBuffer,
+        max_length: int = -1,
+    ) -> bytes: ...
+    @property
+    def eof(self) -> bool: ...
+    @property
+    def needs_input(self) -> bool: ...
+    @property
+    def unused_data(self) -> bytes: ...

@@ -1,0 +1,81 @@
+from asyncio.events import AbstractEventLoop
+from concurrent.futures import Executor
+from os import PathLike
+from typing import AnyStr
+
+from _typeshed import FileDescriptorOrPath
+
+__all__ = [
+    "abspath",
+    "exists",
+    "getatime",
+    "getctime",
+    "getmtime",
+    "getsize",
+    "isdir",
+    "isfile",
+    "islink",
+    "ismount",
+    "samefile",
+    "sameopenfile",
+]
+
+async def exists(
+    path: FileDescriptorOrPath,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> bool: ...
+async def isfile(
+    path: FileDescriptorOrPath,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> bool: ...
+async def isdir(
+    s: FileDescriptorOrPath,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> bool: ...
+async def islink(path: FileDescriptorOrPath) -> bool: ...
+async def ismount(path: FileDescriptorOrPath) -> bool: ...
+async def getsize(
+    filename: FileDescriptorOrPath,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> int: ...
+async def getmtime(
+    filename: FileDescriptorOrPath,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> float: ...
+async def getatime(
+    filename: FileDescriptorOrPath,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> float: ...
+async def getctime(
+    filename: FileDescriptorOrPath,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> float: ...
+async def samefile(
+    f1: FileDescriptorOrPath,
+    f2: FileDescriptorOrPath,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> bool: ...
+async def sameopenfile(
+    fp1: int,
+    fp2: int,
+    *,
+    loop: AbstractEventLoop | None = ...,
+    executor: Executor | None = ...,
+) -> bool: ...
+async def abspath(path: PathLike[AnyStr] | AnyStr) -> AnyStr: ...

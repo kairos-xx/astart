@@ -1,20 +1,19 @@
-"""Find a copy of typeshed on this machine.
+"""Locate the typeshed snapshot bundled with astart.
 
-astart ships none. A copy is looked for, in order, at an explicit path, in
-the ``ASTART_TYPESHED`` environment variable, and inside the type checkers
-and tools that bundle one (basedpyright, mypy, jedi, pytype, typeshed_client
-when it happens to be installed — never required).
+astart ships its own typeshed copy as package data under
+``astart.stubs.artifacts.typeshed``. ``find_typeshed`` honours an explicit
+directory and the ``ASTART_TYPESHED`` environment variable first, then
+falls back to the bundled snapshot; it never scans other installed
+packages or editor extensions, so every machine resolves the same stubs.
+
 """
 
 from __future__ import annotations
 
-from importlib.util import find_spec
+from importlib.resources import files
 from os import environ
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, final
-
-if TYPE_CHECKING:
-    from importlib.machinery import ModuleSpec
+from typing import Final, final
 
 
 @final
@@ -22,22 +21,15 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        environment: Variable that names a typeshed directory.
-        bundles: Importable packages that carry a copy, with the path of the
-            copy inside the package.
-        marker: File that every typeshed root has.
+        environment (Final[str]): Variable that names a typeshed directory.
+        bundled (Final[str]): Package-data directory holding the shipped
+            typeshed root.
+        marker (Final[tuple[str, str]]): File that every typeshed root has.
 
     """
 
     environment: Final[str] = "ASTART_TYPESHED"
-    bundles: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
-        ("basedpyright", ("dist", "typeshed-fallback")),
-        ("pyright", ("dist", "typeshed-fallback")),
-        ("mypy", ("typeshed",)),
-        ("jedi", ("third_party", "typeshed")),
-        ("pytype", ("typeshed",)),
-        ("typeshed_client", ("typeshed",)),
-    )
+    bundled: Final[str] = "typeshed"
     marker: Final[tuple[str, str]] = ("stdlib", "VERSIONS")
 
 
@@ -45,42 +37,44 @@ def is_typeshed(*, root: Path) -> bool:
     """Tell whether a directory is a typeshed root.
 
     Args:
-        root: Candidate directory.
+        root (Path): Candidate directory.
 
     Returns:
-        ``True`` when it holds ``stdlib/VERSIONS``.
+        bool: ``True`` when it holds ``stdlib/VERSIONS``.
 
     """
     return root.joinpath(*Constants.marker).is_file()
 
 
-def _bundled() -> list[Path]:
-    """List the typeshed copies inside installed packages.
+def bundled_typeshed() -> Path | None:
+    """Return the typeshed snapshot shipped inside the package.
 
     Returns:
-        Candidate roots, best first.
+        Path | None: The bundled root when present and valid, or ``None``.
 
     """
-    found: list[Path] = []
-    for package, inside in Constants.bundles:
-        try:
-            spec: ModuleSpec | None = find_spec(name=package)
-        except (ImportError, ValueError):
-            continue
-        if spec is None or spec.origin is None:
-            continue
-        found.append(Path(spec.origin).parent.joinpath(*inside))
-    return found
+    root: Path = Path(
+        str(
+            object=files(anchor="astart.stubs").joinpath(
+                "artifacts",
+                Constants.bundled,
+            ),
+        ),
+    )
+    return root if is_typeshed(root=root) else None
 
 
 def find_typeshed(*, explicit: Path | None = None) -> Path | None:
-    """Find a typeshed root.
+    """Find the typeshed root to read stubs from.
 
     Args:
-        explicit: A directory the caller chose; used first when valid.
+        explicit (Path | None): A directory the caller chose; used first when
+            valid.
 
     Returns:
-        The first valid root, or ``None`` when the machine has none.
+        Path | None:
+            The explicit directory, the ``ASTART_TYPESHED`` directory, the
+            bundled snapshot, or ``None`` when none is a valid typeshed root.
 
     """
     candidates: list[Path] = []
@@ -89,8 +83,7 @@ def find_typeshed(*, explicit: Path | None = None) -> Path | None:
     named: str | None = environ.get(Constants.environment)
     if named:
         candidates.append(Path(named))
-    candidates.extend(_bundled())
     for root in candidates:
         if is_typeshed(root=root):
             return root
-    return None
+    return bundled_typeshed()

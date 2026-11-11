@@ -2,6 +2,7 @@ include LICENSE
 include README.md
 recursive-include docs *.md
 recursive-include tests *.py
+recursive-include fixtures *.py *.py.txt *.json *.md
 recursive-include src/astart py.typed
 prune build
 prune dist

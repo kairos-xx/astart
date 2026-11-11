@@ -1,0 +1,1 @@
+../scripts/compare/artifacts/results/result.py

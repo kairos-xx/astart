@@ -1,7 +1,7 @@
 # `specs/`
 
 Status: empty — the 2026-11-06 specs were implemented; their remaining
-tasks were merged into `docs/TODO.md` (M8-31 to M8-39) and the files
+tasks were merged into `docs/planning/TODO.md` (M8-31 to M8-39) and the files
 retired on 2026-11-08.
 
 <!-- exactus:inventory:start -->

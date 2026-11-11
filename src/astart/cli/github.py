@@ -19,8 +19,10 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        commands: Workflow command per severity.
-        replacements: Message escapes GitHub requires.
+        commands (Final[Mapping[Severity, str]]): Workflow command per
+            severity.
+        replacements (Final[tuple[tuple[str, str], ...]]): Message escapes
+            GitHub requires.
 
     """
 
@@ -32,7 +34,10 @@ class Constants:
     replacements: Final[tuple[tuple[str, str], ...]] = (
         ("%", "%25"),
         ("\r", "%0D"),
-        ("\n", "%0A"),
+        (
+            "\n",
+            "%0A",
+        ),
     )
 
 
@@ -44,11 +49,11 @@ def render_github(
     """Render reports as workflow annotation commands.
 
     Args:
-        results: One report per file.
-        catalog: Catalog that owns the findings' rules.
+        results (Sequence[FileReport]): One report per file.
+        catalog (Catalog): Catalog that owns the findings' rules.
 
     Returns:
-        One ``::error``/``::warning``/``::notice`` line per finding,
+        str: One ``::error``/``::warning``/``::notice`` line per finding,
         plus one ``::error`` line per file that could not be analysed.
 
     """
@@ -70,12 +75,12 @@ def _line(*, report: FileReport, finding: Finding, rule: Rule) -> str:
     """Build one annotation line.
 
     Args:
-        report: File the finding came from.
-        finding: The finding.
-        rule: Its catalog rule.
+        report (FileReport): File the finding came from.
+        finding (Finding): The finding.
+        rule (Rule): Its catalog rule.
 
     Returns:
-        A workflow command line.
+        str: A workflow command line.
 
     """
     command: str = Constants.commands.get(finding.severity, "warning")
@@ -94,10 +99,10 @@ def _escape_data(*, value: str) -> str:
     """Escape a message body for the workflow command grammar.
 
     Args:
-        value: Raw text.
+        value (str): Raw text.
 
     Returns:
-        Escaped text.
+        str: Escaped text.
 
     """
     for raw, escaped in Constants.replacements:
@@ -109,10 +114,10 @@ def _escape_property(*, value: str) -> str:
     """Escape a property value for the workflow command grammar.
 
     Args:
-        value: Raw text.
+        value (str): Raw text.
 
     Returns:
-        Escaped text.
+        str: Escaped text.
 
     """
     return _escape_data(value=value).replace(":", "%3A").replace(",", "%2C")

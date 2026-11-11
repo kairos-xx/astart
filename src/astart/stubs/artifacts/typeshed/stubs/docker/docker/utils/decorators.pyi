@@ -1,0 +1,13 @@
+from collections.abc import Callable
+from typing import ParamSpec, TypeVar
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+def check_resource(
+    resource_name: str,
+) -> Callable[[Callable[_P, _R]], Callable[_P, _R]]: ...
+def minimum_version(
+    version: str,
+) -> Callable[[Callable[_P, _R]], Callable[_P, _R]]: ...
+def update_headers[**P, R](f: Callable[_P, _R]) -> Callable[_P, _R]: ...

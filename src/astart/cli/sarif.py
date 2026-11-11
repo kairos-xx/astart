@@ -21,11 +21,11 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        schema: The SARIF schema URL.
-        version: The SARIF version emitted.
-        driver_name: Name of the reporting tool.
-        information_uri: Public URI for the tool.
-        levels: SARIF level per severity.
+        schema (Final[str]): The SARIF schema URL.
+        version (Final[str]): The SARIF version emitted.
+        driver_name (Final[str]): Name of the reporting tool.
+        information_uri (Final[str]): Public URI for the tool.
+        levels (Final[Mapping[Severity, str]]): SARIF level per severity.
 
     """
 
@@ -48,11 +48,11 @@ def render_sarif(
     """Render reports as a SARIF 2.1.0 document.
 
     Args:
-        results: One report per file.
-        catalog: Catalog that owns the findings' rules.
+        results (Sequence[FileReport]): One report per file.
+        catalog (Catalog): Catalog that owns the findings' rules.
 
     Returns:
-        The SARIF JSON text.
+        str: The SARIF JSON text.
 
     """
     rules: dict[str, Rule] = {}
@@ -104,12 +104,12 @@ def _finding_result(
     """Build the SARIF result for one finding.
 
     Args:
-        report: File the finding came from.
-        finding: The finding.
-        rule: Its catalog rule.
+        report (FileReport): File the finding came from.
+        finding (Finding): The finding.
+        rule (Rule): Its catalog rule.
 
     Returns:
-        A SARIF result object.
+        JsonValue: A SARIF result object.
 
     """
     span: Span = finding.span
@@ -140,10 +140,10 @@ def _error_result(*, report: FileReport) -> JsonValue:
     """Build the SARIF result for a file that failed.
 
     Args:
-        report: The failed report.
+        report (FileReport): The failed report.
 
     Returns:
-        A SARIF result object.
+        JsonValue: A SARIF result object.
 
     """
     return {

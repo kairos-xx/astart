@@ -1,0 +1,18 @@
+# `sqlite3/`
+
+Provide   init   pyi content.
+
+<!-- exactus:inventory:start -->
+## Directory contents
+
+### Files
+
+- [`__init__.pyi`](__init__.pyi) — Provide   init   pyi content.
+- [`dbapi2.pyi`](dbapi2.pyi) — Provide dbapi2 pyi content.
+- [`dump.pyi`](dump.pyi) — Provide dump pyi content.
+
+### Subdirectories
+
+No subdirectories.
+
+<!-- exactus:inventory:end -->

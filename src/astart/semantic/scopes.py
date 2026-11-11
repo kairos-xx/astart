@@ -42,7 +42,6 @@ from ast import (
 from dataclasses import dataclass
 from typing import Final, TypedDict, Unpack, cast, final
 
-from astart.node_attributes import list_items, write_attribute
 from astart.semantic.identities import (
     Binding,
     DependencyGraph,
@@ -51,6 +50,7 @@ from astart.semantic.identities import (
     Role,
     Symbol,
 )
+from astart.source.node_attributes import list_items, write_attribute
 
 
 @final
@@ -58,10 +58,11 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        annotation_fields: Grouped module constant.
-        function_like: Grouped module constant.
-        graftable_kinds: Grouped module constant.
-        write_roles: Grouped module constant.
+        annotation_fields (Final[dict[type, frozenset[str]]]): Grouped module
+            constant.
+        function_like (Final[frozenset[str]]): Grouped module constant.
+        graftable_kinds (Final[frozenset[str]]): Grouped module constant.
+        write_roles (Final[frozenset[str]]): Grouped module constant.
 
     """
 
@@ -92,12 +93,12 @@ class Scope:
     """One lexical namespace with explicit compiler-relevant behavior.
 
     Attributes:
-        id: Stable AST scope-owner identity.
-        parent_id: Enclosing scope, absent only for module.
-        kind: Module, function, lambda, class, or comprehension.
-        owner_node_id: Syntactic scope owner identity.
-        globals: Names explicitly declared global.
-        nonlocals: Names explicitly declared nonlocal.
+        id (int): Stable AST scope-owner identity.
+        parent_id (int | None): Enclosing scope, absent only for module.
+        kind (str): Module, function, lambda, class, or comprehension.
+        owner_node_id (int): Syntactic scope owner identity.
+        globals (frozenset[str]): Names explicitly declared global.
+        nonlocals (frozenset[str]): Names explicitly declared nonlocal.
 
     """
 
@@ -113,8 +114,9 @@ class OccurrenceOptions(TypedDict, total=False):
     """Optional metadata controlling how a lexical occurrence is indexed.
 
     Attributes:
-        definition_kind: Classification assigned to a newly created binding.
-        annotation: Whether a name read belongs to a type expression.
+        definition_kind (str): Classification assigned to a newly created
+            binding.
+        annotation (bool): Whether a name read belongs to a type expression.
 
     """
 
@@ -128,10 +130,14 @@ class RevisionDiff:
     """Node-level mutation summary used for incremental reindexing.
 
     Attributes:
-        changed: Node identities whose fingerprint entries differed.
-        structural: Changed identities that also altered tree topology.
-        parents_new: Node to parent map of the current tree.
-        parents_old: Node to parent map of the prior tree.
+        changed (frozenset[int]): Node identities whose fingerprint entries
+            differed.
+        structural (frozenset[int]): Changed identities that also altered tree
+            topology.
+        parents_new (dict[int, int | None]): Node to parent map of the current
+            tree.
+        parents_old (dict[int, int | None]): Node to parent map of the prior
+            tree.
 
     """
 
@@ -149,12 +155,12 @@ def _occurrence_name(
     """Recover the identifier an occurrence originally resolved.
 
     Args:
-        occurrence: Previously recorded occurrence.
-        previous: Previously indexed revision.
+        occurrence (Occurrence): Previously recorded occurrence.
+        previous (ScopeGraph): Previously indexed revision.
 
     Returns:
-        The lexical name to re-resolve, or None when it cannot be
-        recovered from the previous index or the node itself.
+        str | None: The lexical name to re-resolve, or None when it cannot be
+            recovered from the previous index or the node itself.
 
     """
     if occurrence.symbol_id is not None:
@@ -189,10 +195,14 @@ class ScopeGraph:
         """Index the current mutable AST with stable IDs when possible.
 
         Args:
-            root: Python module AST, not its supplementary comment children.
-            identities: Persistent per-module syntax identity allocator.
-            previous: Previously indexed revision for identity reuse.
-            diff: Node-level change summary enabling clean-subtree reuse.
+            root (AST): Python module AST, not its supplementary comment
+                children.
+            identities (IdentityIndex): Persistent per-module syntax identity
+                allocator.
+            previous (ScopeGraph | None): Previously indexed revision for
+                identity reuse.
+            diff (RevisionDiff | None): Node-level change summary enabling
+                clean-subtree reuse.
 
         """
         self.identities: IdentityIndex = identities
@@ -266,12 +276,13 @@ class ScopeGraph:
         """Resolve a read and report the scopes consulted in order.
 
         Args:
-            name: Unqualified Python name.
-            scope_id: Scope of the read.
+            name (str): Unqualified Python name.
+            scope_id (int): Scope of the read.
 
         Returns:
-            Resolved symbol identity, or None, plus every scope whose
-            structure the resolution depended on (read scope first).
+            tuple[int | None, frozenset[int]]: Resolved symbol identity, or
+                None, plus every scope whose
+                structure the resolution depended on (read scope first).
 
         """
         current: int | None = scope_id
@@ -301,11 +312,12 @@ class ScopeGraph:
         """Resolve a read from its lexical scope, honoring class lookup rules.
 
         Args:
-            name: Unqualified Python name.
-            scope_id: Scope of the read.
+            name (str): Unqualified Python name.
+            scope_id (int): Scope of the read.
 
         Returns:
-            Symbol identity, or None for unknown external/builtin names.
+            int | None:
+                Symbol identity, or None for unknown external/builtin names.
 
         """
         resolved, _path = self.resolve_with_path(name=name, scope_id=scope_id)
@@ -315,10 +327,10 @@ class ScopeGraph:
         """Return individual read nodes in deterministic source order.
 
         Args:
-            symbol_id: Lexical symbol.
+            symbol_id (int): Lexical symbol.
 
         Returns:
-            AST occurrences using that symbol.
+            tuple[AST, ...]: AST occurrences using that symbol.
 
         """
         return tuple(
@@ -338,10 +350,10 @@ class ScopeGraph:
         """Return syntactic definitions of a symbol in source order.
 
         Args:
-            symbol_id: Lexical symbol.
+            symbol_id (int): Lexical symbol.
 
         Returns:
-            AST nodes defining or assigning the symbol.
+            tuple[AST, ...]: AST nodes defining or assigning the symbol.
 
         """
         return tuple(
@@ -366,11 +378,12 @@ class ScopeGraph:
         """Collect scope-local names before visiting reads.
 
         Args:
-            owner: Owner supplied as AST for this operation.
+            owner (AST): Owner supplied as AST for this operation.
 
         Returns:
-            tuple[list[tuple[str, str, AST]], frozenset[str], frozenset[str]]
-            produced by this operation.
+            tuple[list[tuple[str, str, AST]], frozenset[str], frozenset[str]]:
+                tuple[list[tuple[str, str, AST]], frozenset[str],
+                frozenset[str]] produced by this operation.
 
         """
         declared: list[tuple[str, str, AST]] = []
@@ -406,11 +419,12 @@ class ScopeGraph:
         """Names a single non-scope node binds in its owning scope.
 
         Args:
-            node: The node examined while names a single non-scope node binds
-                in its owning scope.
+            node (AST): The node examined while names a single
+                non-scope node binds in its owning scope.
 
         Returns:
-            list[tuple[str, str, AST]] produced by this operation.
+            list[tuple[str, str, AST]]: list[tuple[str, str, AST]] produced by
+                this operation.
 
         """
         if isinstance(node, Name) and isinstance(node.ctx, (Store, Del)):
@@ -436,13 +450,14 @@ class ScopeGraph:
         """Return each AST child with its type-expression annotation flag.
 
         Args:
-            annotation: True when the node is already inside a type
+            annotation (bool): True when the node is already inside a type
                 expression; the flag then propagates to every child.
-            node: Node whose children are enumerated in field order.
+            node (AST): Node whose children are enumerated in field order.
 
         Returns:
-            ``(child, in_type_expression)`` pairs matching ``iter_child_nodes``
-            ordering while marking annotation-only fields.
+            list[tuple[AST, bool]]: ``(child, in_type_expression)`` pairs
+                matching ``iter_child_nodes`` ordering
+                while marking annotation-only fields.
 
         """
         annotation_fields: frozenset[str] = frozenset()
@@ -476,12 +491,12 @@ class ScopeGraph:
         """Register one node and its current lexical scope.
 
         Args:
-            node: The node examined while register one node and its current
-                lexical scope.
-            scope_id: Scope id supplied as int for this operation.
+            node (AST): The node examined while register one
+                node and its current lexical scope.
+            scope_id (int): Scope id supplied as int for this operation.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         identity: int = self.identities.node_id(node=node)
@@ -501,13 +516,14 @@ class ScopeGraph:
         """Create/reuse one lexical symbol without conflating definitions.
 
         Args:
-            declaration: Declaration supplied as AST | None for this operation.
-            kind: Kind supplied as str for this operation.
-            name: Identifier of the name being resolved.
-            scope_id: Scope id supplied as int for this operation.
+            declaration (AST | None): Declaration supplied as AST | None for
+                this operation.
+            kind (str): Kind supplied as str for this operation.
+            name (str): Identifier of the name being resolved.
+            scope_id (int): Scope id supplied as int for this operation.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         current: int | None = self.scope_symbols.setdefault(scope_id, {}).get(
@@ -552,13 +568,13 @@ class ScopeGraph:
         """Index one definition, reusing its identity across revisions.
 
         Args:
-            kind: Kind supplied as str for this operation.
-            node: The node examined while index one definition, reusing its
-                identity across revisions.
-            symbol_id: Symbol id supplied as int for this operation.
+            kind (str): Kind supplied as str for this operation.
+            node (AST): The node examined while index one definition,
+                reusing its identity across revisions.
+            symbol_id (int): Symbol id supplied as int for this operation.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         node_id: int = self.identities.node_id(node=node)
@@ -585,11 +601,11 @@ class ScopeGraph:
         """Resolve a binding target, honoring global and nonlocal.
 
         Args:
-            name: Identifier of the name being resolved.
-            scope_id: Scope id supplied as int for this operation.
+            name (str): Identifier of the name being resolved.
+            scope_id (int): Scope id supplied as int for this operation.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         scope: Scope = self.scopes[scope_id]
@@ -633,11 +649,13 @@ class ScopeGraph:
         additional semantic roles before their dependency edges are recorded.
 
         Args:
-            node: Syntax node representing the occurrence.
-            scope_id: Lexical scope in which the occurrence appears.
-            name: Identifier read, assigned, imported, or declared.
-            roles: Initial semantic roles of the occurrence.
-            **options: Optional binding classification and annotation flag.
+            node (AST): Syntax node representing the occurrence.
+            scope_id (int): Lexical scope in which the occurrence appears.
+            name (str): Identifier read, assigned, imported, or declared.
+            roles (frozenset[Role | str]): Initial semantic roles of the
+                occurrence.
+            **options (Unpack[OccurrenceOptions]): Optional binding
+                classification and annotation flag.
 
         """
         node_id: int = self._node(node=node, scope_id=scope_id)
@@ -695,10 +713,13 @@ class ScopeGraph:
         definitions create binding records and scope-definition edges.
 
         Args:
-            node: Syntax node associated with the recorded occurrence.
-            occurrence: Resolved occurrence carrying identity and roles.
-            scope_path: Scopes consulted while resolving the identifier.
-            definition_kind: Binding classification for definition occurrences.
+            node (AST): Syntax node associated with the recorded occurrence.
+            occurrence (Occurrence): Resolved occurrence carrying identity and
+                roles.
+            scope_path (frozenset[int]): Scopes consulted while resolving the
+                identifier.
+            definition_kind (str): Binding classification for definition
+                occurrences.
 
         """
         node_id: int = occurrence.node_id
@@ -743,9 +764,9 @@ class ScopeGraph:
         """Predeclare all lexical names, then traverse their uses.
 
         Args:
-            kind: Kind supplied as str for this operation.
-            owner: Owner supplied as AST for this operation.
-            scope_id: Scope id supplied as int for this operation.
+            kind (str): Kind supplied as str for this operation.
+            owner (AST): Owner supplied as AST for this operation.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         if self._graft_scope(owner=owner, scope_id=scope_id, kind=kind):
@@ -784,12 +805,12 @@ class ScopeGraph:
         creation the normal visit would have performed.
 
         Returns:
-            Whether the subtree index was grafted instead of revisited.
+            bool: Whether the subtree index was grafted instead of revisited.
 
         Args:
-            kind: Kind supplied as str for this operation.
-            owner: Scope owner whose statement body bounds the subtree.
-            scope_id: Scope identity of ``owner``.
+            kind (str): Kind supplied as str for this operation.
+            owner (AST): Scope owner whose statement body bounds the subtree.
+            scope_id (int): Scope identity of ``owner``.
 
         """
         previous: ScopeGraph | None = self._previous
@@ -851,13 +872,15 @@ class ScopeGraph:
         occurrence must then re-resolve to its previous symbol.
 
         Returns:
-            Whether every subtree occurrence resolves identically.
+            bool: Whether every subtree occurrence resolves identically.
 
         Args:
-            previous: Previously indexed revision.
-            scope_id: Grafted scope supplied as int for this operation.
-            subtree_occurrences: Occurrences recorded inside the subtree.
-            subtree_scopes: Scope identities belonging to the subtree.
+            previous (ScopeGraph): Previously indexed revision.
+            scope_id (int): Grafted scope supplied as int for this operation.
+            subtree_occurrences (list[Occurrence]): Occurrences recorded inside
+                the subtree.
+            subtree_scopes (set[int]): Scope identities belonging to the
+                subtree.
 
         """
         for sid in subtree_scopes:
@@ -902,11 +925,14 @@ class ScopeGraph:
         """Copy subtree index records and dependency edges wholesale.
 
         Args:
-            previous: Previously indexed revision.
-            scope_id: Grafted scope supplied as int for this operation.
-            subtree_nodes: Node identities inside the grafted region.
-            subtree_occurrences: Occurrences recorded inside the subtree.
-            subtree_scopes: Scope identities belonging to the subtree.
+            previous (ScopeGraph): Previously indexed revision.
+            scope_id (int): Grafted scope supplied as int for this operation.
+            subtree_nodes (set[int]): Node identities inside the grafted
+                region.
+            subtree_occurrences (list[Occurrence]): Occurrences recorded inside
+                the subtree.
+            subtree_scopes (set[int]): Scope identities belonging to the
+                subtree.
 
         """
         self._graft_node_records(
@@ -938,8 +964,9 @@ class ScopeGraph:
         """Copy per-node index records for a grafted subtree.
 
         Args:
-            previous: Previously indexed revision.
-            subtree_nodes: Node identities inside the grafted region.
+            previous (ScopeGraph): Previously indexed revision.
+            subtree_nodes (set[int]): Node identities inside the grafted
+                region.
 
         """
         for node_id in subtree_nodes:
@@ -964,10 +991,13 @@ class ScopeGraph:
         """Copy symbol, reference, definition and binding records.
 
         Args:
-            previous: Previously indexed revision.
-            subtree_nodes: Node identities inside the grafted region.
-            subtree_occurrences: Occurrences recorded inside the subtree.
-            subtree_scopes: Scope identities belonging to the subtree.
+            previous (ScopeGraph): Previously indexed revision.
+            subtree_nodes (set[int]): Node identities inside the grafted
+                region.
+            subtree_occurrences (list[Occurrence]): Occurrences recorded inside
+                the subtree.
+            subtree_scopes (set[int]): Scope identities belonging to the
+                subtree.
 
         """
         for sid in subtree_scopes:
@@ -999,13 +1029,13 @@ class ScopeGraph:
         """Create and register one nested lexical scope.
 
         Args:
-            kind: Kind supplied as str for this operation.
-            node: The node examined while create and register one nested
+            kind (str): Kind supplied as str for this operation.
+            node (AST): The node examined while create and register one nested
                 lexical scope.
-            parent_id: Parent id supplied as int for this operation.
+            parent_id (int): Parent id supplied as int for this operation.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         scope_id: int = self._node(node=node, scope_id=parent_id)
@@ -1025,13 +1055,12 @@ class ScopeGraph:
         Negative scope IDs are reserved for synthetic annotation scopes,
         keeping them distinct from real AST identities and stable on moves.
 
-
         Args:
-            owner: Owner supplied as AST for this operation.
-            parent_id: Parent id supplied as int for this operation.
+            owner (AST): Owner supplied as AST for this operation.
+            parent_id (int): Parent id supplied as int for this operation.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         owner_id: int = self.identities.node_id(node=owner)
@@ -1078,10 +1107,10 @@ class ScopeGraph:
         """Visit base classes and class keywords in the annotation scope.
 
         Args:
-            annotation_scope_id: Annotation scope id supplied as int for this
-                operation.
-            node: The node examined while visit base classes and class keywords
-                in the annotation scope.
+            annotation_scope_id (int): Annotation scope id supplied as int for
+                this operation.
+            node (ClassDef): The node examined while visit base classes
+                and class keywords in the annotation scope.
 
         """
         for item in (
@@ -1099,10 +1128,11 @@ class ScopeGraph:
         """Visit defaults and annotations in the annotation scope.
 
         Args:
-            annotation_scope_id: Annotation scope id supplied as int for this
-                operation.
-            node: The node examined while visit defaults and annotations in the
-                annotation scope.
+            annotation_scope_id (int): Annotation scope id supplied as int for
+                this operation.
+            node (FunctionDef | AsyncFunctionDef): The node examined while
+                visit defaults
+                and annotations in the annotation scope.
 
         """
         args: arguments = node.args
@@ -1134,9 +1164,10 @@ class ScopeGraph:
         """Define a function or class, then open its own scope.
 
         Args:
-            node: The node examined while define a function or class, then open
-                its own scope.
-            scope_id: Scope id supplied as int for this operation.
+            node (FunctionDef | AsyncFunctionDef | ClassDef): The node examined
+                while define a function
+                or class, then open its own scope.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         self._occurrence(
@@ -1176,9 +1207,9 @@ class ScopeGraph:
         """Visit a ``type`` statement's name and lazily scoped value.
 
         Args:
-            node: The node examined while visit a ``type`` statement's name and
-                lazily scoped value.
-            scope_id: Scope id supplied as int for this operation.
+            node (TypeAlias): The node examined while visit a ``type``
+                statement's name and lazily scoped value.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         self._visit(node=node.name, scope_id=scope_id)
@@ -1197,9 +1228,9 @@ class ScopeGraph:
         """Visit lambda defaults, then open the lambda scope.
 
         Args:
-            node: The node examined while visit lambda defaults, then open the
-                lambda scope.
-            scope_id: Scope id supplied as int for this operation.
+            node (Lambda): The node examined while visit lambda
+                defaults, then open the lambda scope.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         for default in (
@@ -1223,9 +1254,10 @@ class ScopeGraph:
         """Evaluate the first iterable outside, then open the scope.
 
         Args:
-            node: The node examined while evaluate the first iterable outside,
-                then open the scope.
-            scope_id: Scope id supplied as int for this operation.
+            node (ListComp | SetComp | DictComp | GeneratorExp): The node
+                examined while evaluate the first
+                iterable outside, then open the scope.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         if node.generators:
@@ -1241,14 +1273,12 @@ class ScopeGraph:
         """Open a nested scope for ``node`` when it introduces one.
 
         Returns:
-            Whether ``node`` was fully handled here.
-
-
+            bool: Whether ``node`` was fully handled here.
 
         Args:
-            node: The node examined while open a nested scope for ``node`` when
-                it introduces one.
-            scope_id: Scope id supplied as int for this operation.
+            node (AST): The node examined while open a nested
+                scope for ``node`` when it introduces one.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         if isinstance(node, (FunctionDef, AsyncFunctionDef, ClassDef)):
@@ -1273,11 +1303,11 @@ class ScopeGraph:
         """Record a read, write or delete of a name.
 
         Args:
-            annotation: True when the occurrence appears in a type
+            annotation (bool): True when the occurrence appears in a type
                 expression rather than executable code.
-            node: The node examined while record a read, write or delete of a
-                name.
-            scope_id: Scope id supplied as int for this operation.
+            node (Name): The node examined while record a
+                read, write or delete of a name.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         roles: frozenset[Role] = (
@@ -1305,9 +1335,9 @@ class ScopeGraph:
         """Record every name an import statement binds.
 
         Args:
-            node: The node examined while record every name an import statement
-                binds.
-            scope_id: Scope id supplied as int for this operation.
+            node (Import | ImportFrom): The node examined while record every
+                name an import statement binds.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         self._node(node=node, scope_id=scope_id)
@@ -1330,15 +1360,15 @@ class ScopeGraph:
         """Record the binding a node introduces.
 
         Returns:
-            Whether the node was an import, which has no children to visit.
-
-
+            bool: Whether the node was an import, which has no children to
+                visit.
 
         Args:
-            annotation: True when the occurrence appears in a type
+            annotation (bool): True when the occurrence appears in a type
                 expression rather than executable code.
-            node: The node examined while record the binding a node introduces.
-            scope_id: Scope id supplied as int for this operation.
+            node (AST): The node examined while record the binding a node
+                introduces.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         if isinstance(node, Name):
@@ -1395,9 +1425,10 @@ class ScopeGraph:
         """Declare parameters and visit the body inside the owned scope.
 
         Args:
-            node: The node examined while declare parameters and visit the body
-                inside the owned scope.
-            scope_id: Scope id supplied as int for this operation.
+            node (FunctionDef | AsyncFunctionDef | Lambda): The node examined
+                while declare parameters
+                and visit the body inside the owned scope.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         for parameter in (
@@ -1433,9 +1464,10 @@ class ScopeGraph:
         """Visit targets, later iterables, conditions and result parts.
 
         Args:
-            node: The node examined while visit targets, later iterables,
-                conditions and result parts.
-            scope_id: Scope id supplied as int for this operation.
+            node (ListComp | SetComp | DictComp | GeneratorExp): The node
+                examined while visit targets, later
+                iterables, conditions and result parts.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         for index, generator in enumerate(iterable=node.generators):
@@ -1453,8 +1485,8 @@ class ScopeGraph:
         """Add value and control dependency edges for ``node``.
 
         Args:
-            node: The node examined while add value and control dependency
-                edges for ``node``.
+            node (AST): The node examined while add value and
+                control dependency edges for ``node``.
 
         """
         if isinstance(node, (AnnAssign, NamedExpr)) and node.value is not None:
@@ -1495,12 +1527,12 @@ class ScopeGraph:
         """Traverse syntax without duplicating nested-scope ownership.
 
         Args:
-            annotation: True while traversing a type expression; name
+            annotation (bool): True while traversing a type expression; name
                 occurrences then receive the ``ANNOTATION`` role.
-            is_owner: Whether to owner.
-            node: The node examined while traverse syntax without duplicating
-                nested-scope ownership.
-            scope_id: Scope id supplied as int for this operation.
+            is_owner (bool): Whether to owner.
+            node (AST): The node examined while traverse syntax
+                without duplicating nested-scope ownership.
+            scope_id (int): Scope id supplied as int for this operation.
 
         """
         if not is_owner and self._visit_scoped_form(

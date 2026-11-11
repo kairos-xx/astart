@@ -17,8 +17,8 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        skipped_directories: Grouped module constant.
-        suffix: Grouped module constant.
+        skipped_directories (Final[frozenset[str]]): Grouped module constant.
+        suffix (Final[str]): Grouped module constant.
 
     """
 
@@ -47,8 +47,8 @@ class DiscoveryResult:
     """Files found for a command.
 
     Attributes:
-        files: Sorted, de-duplicated Python files.
-        missing: Arguments that name nothing on disk.
+        files (tuple[Path, ...]): Sorted, de-duplicated Python files.
+        missing (tuple[Path, ...]): Arguments that name nothing on disk.
 
     """
 
@@ -68,13 +68,15 @@ def discover_files(
     skipping virtual environments, caches and ``exclude`` matches.
 
     Args:
-        paths: Files and directories named on the command line.
-        exclude: ``fnmatch`` globs; a path is skipped when its posix
-            string — absolute, or relative to the walked root — matches
-            any of them.
+        paths (Sequence[Path]): Files and directories named on the command
+            line.
+        exclude (Sequence[str]): ``fnmatch`` globs; a path is skipped when its
+            posix string —
+            absolute, or relative to the walked root — matches any of them.
 
     Returns:
-        The files to process and the arguments that do not exist.
+        DiscoveryResult:
+            The files to process and the arguments that do not exist.
 
     """
     found: set[Path] = set()
@@ -94,12 +96,13 @@ def _walk(*, root: Path, exclude: Sequence[str]) -> list[Path]:
     """Collect Python files below a directory, pruning skipped names.
 
     Args:
-        root: Directory to walk.
-        exclude: ``fnmatch`` globs matched against each file's path
+        root (Path): Directory to walk.
+        exclude (Sequence[str]): ``fnmatch`` globs matched against each file's
+            path
             relative to ``root`` (and its absolute posix string).
 
     Returns:
-        Python files below the directory.
+        list[Path]: Python files below the directory.
 
     """
     collected: list[Path] = []
@@ -125,13 +128,14 @@ def _excluded(
     """Answer whether ``path`` matches any exclude glob.
 
     Args:
-        path: Candidate file.
-        bases: Directories the path is also matched relative to.
-        globs: ``fnmatch`` patterns.
+        path (Path): Candidate file.
+        bases (Sequence[Path]): Directories the path is also matched relative
+            to.
+        globs (Sequence[str]): ``fnmatch`` patterns.
 
     Returns:
-        ``True`` when any pattern matches the absolute posix string or a
-        base-relative one.
+        bool: ``True`` when any pattern matches the absolute posix string or a
+            base-relative one.
 
     """
     if not globs:

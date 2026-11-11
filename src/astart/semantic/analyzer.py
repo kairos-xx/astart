@@ -11,23 +11,21 @@ from ast import (
     Global,
     Import,
     ImportFrom,
+    Load,
     Module,
     Name,
     Nonlocal,
     alias,
     arg,
+    keyword,
     stmt,
     walk,
 )
 from dataclasses import dataclass
 from keyword import iskeyword
 from typing import TYPE_CHECKING, Literal, cast, final
+from unicodedata import normalize
 
-from astart.delta import moved_identities, node_paths
-from astart.node_attributes import (
-    clear_attribute,
-    write_attribute,
-)
 from astart.semantic.control_flow import ControlFlowGraph, ReachingDefinition
 from astart.semantic.evaluator import (
     AbstractInterpreter,
@@ -61,23 +59,35 @@ from astart.semantic.values import (
     UnknownValue,
     proof_status,
 )
+from astart.source.delta import moved_identities, node_paths
+from astart.source.node_attributes import (
+    clear_attribute,
+    read_attribute,
+    write_attribute,
+)
+from astart.source.tokens import TokenAwareMixin
+from astart.stubs.locate import find_typeshed
+
+type FrozensetInt = frozenset[int]
+type SetInt = set[int]
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
     from pathlib import Path
 
-    from astart._graph.graph.document import (
+    from astart.docstrings import DocstringNode
+    from astart.graph.graph.document import (
         AstDocument,
         AstListItem,
         AstScalar,
     )
-    from astart.delta import NodePath
-    from astart.docstrings import DocstringNode
     from astart.semantic.typing_contracts import (
         BoundCall,
         CallableContract,
         ContractDiagnostic,
     )
+    from astart.source.delta import NodePath
+    from astart.source.tokens import TokenProvider
 type MutationKind = Literal[
     "NODE_INSERTED",
     "NODE_REMOVED",
@@ -112,10 +122,10 @@ class MutationEvent:
     """Immutable semantic invalidation event for one AST identity.
 
     Attributes:
-        node_id: Persistent syntax identity.
-        kind: Semantic mutation classification.
-        old_scope_id: Previous lexical scope, if indexed.
-        new_scope_id: Current lexical scope, if indexed.
+        node_id (int): Persistent syntax identity.
+        kind (MutationKind): Semantic mutation classification.
+        old_scope_id (int | None): Previous lexical scope, if indexed.
+        new_scope_id (int | None): Current lexical scope, if indexed.
 
     """
 
@@ -131,6 +141,7 @@ class SemanticAnalyzer:
 
     No target Python code is executed. All analysis operations inspect mutable
     Python AST objects and return immutable abstract-value results.
+
     """
 
     def __init__(
@@ -142,8 +153,9 @@ class SemanticAnalyzer:
         """Create a semantic graph and defer expensive value inference.
 
         Args:
-            root: Original extended or ordinary module AST.
-            budgets: Explicit, bounded safe-analysis policy.
+            root (Module): Original extended or ordinary module AST.
+            budgets (AnalysisBudgets | None): Explicit, bounded safe-analysis
+                policy.
 
         """
         self.root: Module = root
@@ -159,7 +171,7 @@ class SemanticAnalyzer:
         self._link_documentation()
         self._paths = node_paths(root=root)
         self._last_events: tuple[MutationEvent, ...] = ()
-        self._invalidated: frozenset[int] = frozenset()
+        self._invalidated: FrozensetInt = frozenset()
         self.interpreter: AbstractInterpreter | None = None
         self._cfgs: dict[int, ControlFlowGraph] = {}
         self._incremental_statement_ids: tuple[int, ...] = ()
@@ -175,7 +187,7 @@ class SemanticAnalyzer:
         """Facade over the persistent lexical symbol registry.
 
         Returns:
-            Symbol registry view bound to this analyzer.
+            SymbolRegistry: Symbol registry view bound to this analyzer.
 
         """
         return self._symbols
@@ -185,7 +197,7 @@ class SemanticAnalyzer:
         """Statement identities re-executed by the last incremental pass.
 
         Returns:
-            tuple[int, ...] produced by this operation.
+            tuple[int, ...]: tuple[int, ...] produced by this operation.
 
         """
         self.refresh()
@@ -196,7 +208,7 @@ class SemanticAnalyzer:
         """Statement identities whose prior abstract transfer was reused.
 
         Returns:
-            tuple[int, ...] produced by this operation.
+            tuple[int, ...]: tuple[int, ...] produced by this operation.
 
         """
         self.refresh()
@@ -211,18 +223,19 @@ class SemanticAnalyzer:
         """Return events produced by the most recent effective revision.
 
         Returns:
-            tuple[MutationEvent, ...] produced by this operation.
+            tuple[MutationEvent, ...]: tuple[MutationEvent, ...] produced by
+                this operation.
 
         """
         self.refresh()
         return self._last_events
 
     @property
-    def invalidated(self) -> frozenset[int]:
+    def invalidated(self) -> FrozensetInt:
         """Return identities affected by the latest revision.
 
         Returns:
-            frozenset[int] produced by this operation.
+            FrozensetInt: frozenset[int] produced by this operation.
 
         """
         self.refresh()
@@ -233,7 +246,8 @@ class SemanticAnalyzer:
         """Return known override and class-contract violations.
 
         Returns:
-            tuple[ContractDiagnostic, ...] produced by this operation.
+            tuple[ContractDiagnostic, ...]: tuple[ContractDiagnostic, ...]
+                produced by this operation.
 
         """
         return self._solver().contracts.diagnostics
@@ -243,7 +257,8 @@ class SemanticAnalyzer:
         """Return the lazily solved bidirectional type-constraint graph.
 
         Returns:
-            TypeConstraintSolver produced by this operation.
+            TypeConstraintSolver:
+                TypeConstraintSolver produced by this operation.
 
         """
         self.refresh()
@@ -286,7 +301,8 @@ class SemanticAnalyzer:
         """Reconcile changed syntax, identities, scopes, and dependent caches.
 
         Returns:
-            Immutable events for structural and semantic changes.
+            tuple[MutationEvent, ...]: Immutable events for structural and
+                semantic changes.
 
         Notes:
             Lexical scope reindexing is currently conservative and global;
@@ -307,7 +323,7 @@ class SemanticAnalyzer:
         }
         previous: ScopeGraph = self.scopes
         paths: dict[int, NodePath] = node_paths(root=self.root)
-        relocated: set[int] = moved_identities(old=self._paths, new=paths)
+        relocated: SetInt = moved_identities(old=self._paths, new=paths)
         diff: RevisionDiff = self._revision_diff(
             old=old,
             new=new,
@@ -319,7 +335,7 @@ class SemanticAnalyzer:
             previous=previous,
             diff=diff,
         )
-        moved: set[int] = {
+        moved: SetInt = {
             identity
             for identity, node in updated.node_index.items()
             if id(node) in relocated
@@ -339,12 +355,12 @@ class SemanticAnalyzer:
                 diff=diff,
             )
         )
-        invalidated: set[int] = self._invalidated_nodes(
+        invalidated: SetInt = self._invalidated_nodes(
             events=events,
             previous=previous,
             updated=updated,
         )
-        changed_ids: frozenset[int] = frozenset(
+        changed_ids: FrozensetInt = frozenset(
             event.node_id for event in events
         )
         eligible: bool = self._incremental_eligible(
@@ -354,7 +370,7 @@ class SemanticAnalyzer:
             previous=previous,
             updated=updated,
         )
-        dirty: frozenset[int] = self._dirty_statements(
+        dirty: FrozensetInt = self._dirty_statements(
             changed_ids=changed_ids,
         )
         invalidated.update(self._heap_invalidated(dirty=dirty))
@@ -390,7 +406,8 @@ class SemanticAnalyzer:
         """Compute lazy abstract values for the latest semantic revision.
 
         Returns:
-            AbstractInterpreter produced by this operation.
+            AbstractInterpreter:
+                AbstractInterpreter produced by this operation.
 
         """
         self.refresh()
@@ -406,7 +423,7 @@ class SemanticAnalyzer:
         """Set an optional lazy ``.pyi`` source and invalidate type facts.
 
         Args:
-            root: Filesystem path identifying the root.
+            root (Path | None): Filesystem path identifying the root.
 
         """
         self._stub_index = StubIndex(root=root) if root is not None else None
@@ -419,9 +436,8 @@ class SemanticAnalyzer:
         run lazily when type facts are requested, including after AST edits.
         Unchanged revisions reuse the prior graph-proposal set and solver.
 
-
         Args:
-            stubs_path: Filesystem path identifying the stubs.
+            stubs_path (Path | None): Filesystem path identifying the stubs.
 
         """
         self.refresh()
@@ -432,7 +448,7 @@ class SemanticAnalyzer:
     def convert(
         self,
         *,
-        stubs_path: Path,
+        stubs_path: Path | None = None,
         filename: str = "<memory>",
         apply: bool = False,
     ) -> GraphConversion:
@@ -446,23 +462,33 @@ class SemanticAnalyzer:
         Raises:
             SyntaxError: Either source version is not valid Python.
             OSError: A required input source cannot be read.
-            RuntimeError: The integrated graph pipeline reports a failure.
-
-
+            RuntimeError: The integrated graph pipeline reports a failure, or
+                no typeshed stubs are available.
 
         Args:
-            apply: Apply supplied as bool for this operation.
-            filename: Filename supplied as str for this operation.
-            stubs_path: Filesystem path identifying the stubs.
+            apply (bool): Apply supplied as bool for this operation.
+            filename (str): Filename supplied as str for this operation.
+            stubs_path (Path | None): Typeshed root for stub lookups, or
+                ``None`` for the
+                ``ASTART_TYPESHED`` override and then the bundled snapshot.
 
         Returns:
-            GraphConversion produced by this operation.
+            GraphConversion: GraphConversion produced by this operation.
 
         """
         self.refresh()
+        resolved: Path | None = (
+            stubs_path if stubs_path is not None else find_typeshed()
+        )
+        if resolved is None:
+            msg: str = (
+                "no typeshed stubs available: pass stubs_path or set "
+                "ASTART_TYPESHED"
+            )
+            raise RuntimeError(msg)
         result: GraphConversion = collect_graph_annotations(
             root=self.root,
-            stubs_path=stubs_path,
+            stubs_path=resolved,
             filename=filename,
         )
         if apply:
@@ -477,10 +503,10 @@ class SemanticAnalyzer:
         """Get internal graph view of current edited source.
 
         Args:
-            filename: Filename supplied as str for this operation.
+            filename (str): Filename supplied as str for this operation.
 
         Returns:
-            AstDocument produced by this operation.
+            AstDocument: AstDocument produced by this operation.
 
         """
         return GraphTypeBridge.document(tree=self.root, filename=filename)
@@ -489,10 +515,11 @@ class SemanticAnalyzer:
         """Find module or class method signatures with all parameter kinds.
 
         Args:
-            name: Identifier of the name being resolved.
+            name (str): Identifier of the name being resolved.
 
         Returns:
-            tuple[CallableContract, ...] produced by this operation.
+            tuple[CallableContract, ...]: tuple[CallableContract, ...] produced
+                by this operation.
 
         """
         return self._solver().contracts.variants(qualified_name=name)
@@ -501,11 +528,11 @@ class SemanticAnalyzer:
         """Return a complete effective argument binding for a source call.
 
         Args:
-            node: The node examined while return a complete effective argument
-                binding for a source call.
+            node (Call): The node examined while return a complete
+                effective argument binding for a source call.
 
         Returns:
-            BoundCall | None produced by this operation.
+            BoundCall | None: BoundCall | None produced by this operation.
 
         """
         solver: TypeConstraintSolver = self._solver()
@@ -534,11 +561,11 @@ class SemanticAnalyzer:
         """Infer type hints from annotations, expressions and contracts.
 
         Args:
-            node: The node examined while infer type hints from annotations,
-                expressions and contracts.
+            node (AST | str): The node examined while infer type hints
+                from annotations, expressions and contracts.
 
         Returns:
-            TypeInference produced by this operation.
+            TypeInference: TypeInference produced by this operation.
 
         """
         if isinstance(node, str):
@@ -552,10 +579,10 @@ class SemanticAnalyzer:
         """Resolve the symbol associated with a specific name occurrence.
 
         Args:
-            node: Definition or reference AST node.
+            node (AST): Definition or reference AST node.
 
         Returns:
-            Symbol record or None for unresolvable expressions.
+            Symbol | None: Symbol record or None for unresolvable expressions.
 
         """
         self.refresh()
@@ -577,11 +604,12 @@ class SemanticAnalyzer:
         """Resolve a lexical name from an AST node or scope identity.
 
         Args:
-            name: Name to resolve.
-            scope: AST or scope identity, defaulting to the module.
+            name (str): Name to resolve.
+            scope (AST | int | None): AST or scope identity, defaulting to the
+                module.
 
         Returns:
-            Lexical symbol record when known.
+            Symbol | None: Lexical symbol record when known.
 
         """
         self.refresh()
@@ -604,10 +632,10 @@ class SemanticAnalyzer:
         """Return read occurrences of the named lexical symbol.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Ordered individual referencing AST nodes.
+            tuple[AST, ...]: Ordered individual referencing AST nodes.
 
         """
         self.refresh()
@@ -617,10 +645,10 @@ class SemanticAnalyzer:
         """Return definition occurrences of the lexical symbol.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Ordered definition AST nodes.
+            tuple[AST, ...]: Ordered definition AST nodes.
 
         """
         self.refresh()
@@ -630,10 +658,10 @@ class SemanticAnalyzer:
         """Return all stored bindings for a lexical symbol.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Binding records in ascending identity order.
+            tuple[Binding, ...]: Binding records in ascending identity order.
 
         """
         self.refresh()
@@ -648,10 +676,10 @@ class SemanticAnalyzer:
         """Return the CFG and reaching definitions of one lexical scope.
 
         Args:
-            scope: Module, function, or class scope owner.
+            scope (AST | None): Module, function, or class scope owner.
 
         Returns:
-            Graph with exceptional/control exit edges.
+            ControlFlowGraph: Graph with exceptional/control exit edges.
 
         Raises:
             TypeError: If the requested AST object has no statement suite.
@@ -678,11 +706,11 @@ class SemanticAnalyzer:
         """Find bindings that may reach a source-level statement.
 
         Args:
-            symbol_id: Lexical symbol identity.
-            at: Statement occurring in its owning suite.
+            symbol_id (int): Lexical symbol identity.
+            at (stmt): Statement occurring in its owning suite.
 
         Returns:
-            Reaching bindings.
+            ReachingDefinition: Reaching bindings.
 
         """
         self.refresh()
@@ -695,10 +723,10 @@ class SemanticAnalyzer:
         """Infer one AST node's value and proof status.
 
         Args:
-            node: AST expression, call, or assignment target.
+            node (AST): AST expression, call, or assignment target.
 
         Returns:
-            Safe abstract value and derivation trace.
+            InferenceResult: Safe abstract value and derivation trace.
 
         """
         evaluator: AbstractInterpreter = self.evaluate()
@@ -741,11 +769,12 @@ class SemanticAnalyzer:
         """Infer lexical binding at a program point or after module execution.
 
         Args:
-            symbol_id: Lexical symbol identity.
-            at: AST node at which to examine the incoming environment.
+            symbol_id (int): Lexical symbol identity.
+            at (AST | None): AST node at which to examine the incoming
+                environment.
 
         Returns:
-            Exact, approximate, unknown, or unbound result.
+            InferenceResult: Exact, approximate, unknown, or unbound result.
 
         """
         evaluator: AbstractInterpreter = self.evaluate()
@@ -777,10 +806,10 @@ class SemanticAnalyzer:
         """Infer an expression node or a module-level symbol by name.
 
         Args:
-            node: AST expression or module-level identifier.
+            node (AST | str): AST expression or module-level identifier.
 
         Returns:
-            Abstract value and its proof classification.
+            InferenceResult: Abstract value and its proof classification.
 
         """
         if isinstance(node, str):
@@ -799,13 +828,12 @@ class SemanticAnalyzer:
         This is a hypothetical static execution; it never runs analyzed code.
         Unknown external awaitables remain unknown rather than assumed pure.
 
-
         Args:
-            node: The node examined while model the first awaited execution of
-                a known deferred coroutine.
+            node (AST | str): The node examined while model the first awaited
+                execution of a known deferred coroutine.
 
         Returns:
-            InferenceResult produced by this operation.
+            InferenceResult: InferenceResult produced by this operation.
 
         """
         result: InferenceResult = self.infer(node=node)
@@ -838,10 +866,10 @@ class SemanticAnalyzer:
         """Return context-specific inference for a call expression.
 
         Args:
-            node: Python call syntax node.
+            node (AST): Python call syntax node.
 
         Returns:
-            Call result with effects already analyzed.
+            InferenceResult: Call result with effects already analyzed.
 
         """
         interpreter: AbstractInterpreter = self.evaluate()
@@ -853,14 +881,15 @@ class SemanticAnalyzer:
             ),
         )
 
-    def call_contexts(self, *, node: AST) -> frozenset[int]:
+    def call_contexts(self, *, node: AST) -> FrozensetInt:
         """Return every analysis context allocated for a call site.
 
         Args:
-            node: Call expression whose contexts are requested.
+            node (AST): Call expression whose contexts are requested.
 
         Returns:
-            Context identities; multiple when argument values differ.
+            FrozensetInt:
+                Context identities; multiple when argument values differ.
 
         """
         interpreter: AbstractInterpreter = self.evaluate()
@@ -877,24 +906,24 @@ class SemanticAnalyzer:
         """Return the most recent analysis context of a call site.
 
         Args:
-            node: Call expression carrying ``context_id`` metadata.
+            node (AST): Call expression carrying ``context_id`` metadata.
 
         Returns:
-            Context identity, or None when never analyzed.
+            int | None: Context identity, or None when never analyzed.
 
         """
         self.evaluate()
         found: object = getattr(node, "context_id", None)
         return found if isinstance(found, int) else None
 
-    def points_to(self, *, node: AST) -> frozenset[int]:
+    def points_to(self, *, node: AST) -> FrozensetInt:
         """Return abstract object identities for an expression.
 
         Args:
-            node: Expression whose points-to set is requested.
+            node (AST): Expression whose points-to set is requested.
 
         Returns:
-            Possible allocation IDs, empty for nonreferences.
+            FrozensetInt: Possible allocation IDs, empty for nonreferences.
 
         """
         value: AbstractValue = self.infer_node(node=node).value
@@ -908,11 +937,11 @@ class SemanticAnalyzer:
         """Check possible overlap of two inferred reference sets.
 
         Args:
-            a: First expression.
-            b: Second expression.
+            a (AST): First expression.
+            b (AST): Second expression.
 
         Returns:
-            True if both may reference the same allocation site.
+            bool: True if both may reference the same allocation site.
 
         """
         interpreter: AbstractInterpreter = self.evaluate()
@@ -925,11 +954,11 @@ class SemanticAnalyzer:
         """Prove two expressions refer to the same unique allocation site.
 
         Args:
-            a: First expression.
-            b: Second expression.
+            a (AST): First expression.
+            b (AST): Second expression.
 
         Returns:
-            True only when must-alias can be established.
+            bool: True only when must-alias can be established.
 
         """
         interpreter: AbstractInterpreter = self.evaluate()
@@ -942,10 +971,10 @@ class SemanticAnalyzer:
         """Return the syntax node that allocated an abstract object.
 
         Args:
-            object_id: Abstract allocation identity from ``points_to``.
+            object_id (int): Abstract allocation identity from ``points_to``.
 
         Returns:
-            Allocation-site node, or None for unmodeled origins.
+            AST | None: Allocation-site node, or None for unmodeled origins.
 
         """
         interpreter: AbstractInterpreter = self.evaluate()
@@ -959,27 +988,27 @@ class SemanticAnalyzer:
                 return node
         return None
 
-    def heap_readers(self, *, object_id: int) -> frozenset[int]:
+    def heap_readers(self, *, object_id: int) -> FrozensetInt:
         """Return node identities that may read an abstract object.
 
         Args:
-            object_id: Abstract allocation identity from ``points_to``.
+            object_id (int): Abstract allocation identity from ``points_to``.
 
         Returns:
-            Syntax identities of recorded heap-location reads.
+            FrozensetInt: Syntax identities of recorded heap-location reads.
 
         """
         interpreter: AbstractInterpreter = self.evaluate()
         return frozenset(interpreter.heap_readers.get(object_id, ()))
 
-    def heap_writers(self, *, object_id: int) -> frozenset[int]:
+    def heap_writers(self, *, object_id: int) -> FrozensetInt:
         """Return node identities that may mutate an abstract object.
 
         Args:
-            object_id: Abstract allocation identity from ``points_to``.
+            object_id (int): Abstract allocation identity from ``points_to``.
 
         Returns:
-            Syntax identities of recorded heap-location writes.
+            FrozensetInt: Syntax identities of recorded heap-location writes.
 
         """
         interpreter: AbstractInterpreter = self.evaluate()
@@ -989,10 +1018,11 @@ class SemanticAnalyzer:
         """Find the semantic producer edges of an AST expression.
 
         Args:
-            node: Consumer expression.
+            node (AST): Consumer expression.
 
         Returns:
-            Direct incoming semantic dependency edges.
+            tuple[DependencyEdge, ...]: Direct incoming semantic dependency
+                edges.
 
         """
         self.evaluate()
@@ -1004,10 +1034,10 @@ class SemanticAnalyzer:
         """Find AST consumers affected by a node.
 
         Args:
-            node: Producer expression.
+            node (AST): Producer expression.
 
         Returns:
-            Direct dependent edges.
+            tuple[DependencyEdge, ...]: Direct dependent edges.
 
         """
         self.evaluate()
@@ -1015,7 +1045,7 @@ class SemanticAnalyzer:
             node_id=self.identities.node_id(node=node),
         )
 
-    def affected_by(self, *, node: AST) -> frozenset[int]:
+    def affected_by(self, *, node: AST) -> FrozensetInt:
         """Compute the transitive semantic invalidation closure.
 
         Scope-resolution edges are visible through ``dependencies`` and
@@ -1024,10 +1054,10 @@ class SemanticAnalyzer:
         invalidation.
 
         Args:
-            node: Mutated producer AST node.
+            node (AST): Mutated producer AST node.
 
         Returns:
-            All affected syntax identities.
+            FrozensetInt: All affected syntax identities.
 
         """
         self.evaluate()
@@ -1045,11 +1075,12 @@ class SemanticAnalyzer:
         """Explain inference by walking its recorded semantic dependency graph.
 
         Args:
-            node: Value-producing node to explain.
-            max_nodes: Maximum visited proof nodes before truncation.
+            node (AST): Value-producing node to explain.
+            max_nodes (int): Maximum visited proof nodes before truncation.
 
         Returns:
-            Deterministic proof with exact value and each producer edge.
+            tuple[str, ...]: Deterministic proof with exact value and each
+                producer edge.
 
         """
         result: InferenceResult = self.infer_node(node=node)
@@ -1059,7 +1090,7 @@ class SemanticAnalyzer:
             f"Result [{result.status}]: {result.value!r}",
             *result.trace,
         ]
-        visited: set[int] = set()
+        visited: SetInt = set()
         pending: list[tuple[int, int]] = [(start, 0)]
         while pending and len(visited) < max_nodes:
             identity, depth = pending.pop()
@@ -1092,12 +1123,135 @@ class SemanticAnalyzer:
             lines.append("Explanation truncated at analysis node budget.")
         return tuple(lines)
 
+    def bind_references(self, *, bindings: Mapping[Name, int]) -> None:
+        """Bind native read nodes to existing symbols in one atomic batch.
+
+        Owned reads keep their identities. Fresh nodes are validated against
+        the module namespace and enter the index when attached to this tree.
+        Every owned read is checked for lexical capture before any mutation.
+
+        Args:
+            bindings (Mapping[Name, int]): Native read node to target symbol
+                identity.
+
+        Raises:
+            KeyError: A target symbol does not exist in this module.
+            ValueError: A node is not a read or the target would be captured.
+
+        """
+        self.refresh()
+        changes: list[tuple[Name, str]] = []
+        for node, symbol_id in bindings.items():
+            target: Symbol = self.scopes.symbols[symbol_id]
+            if isinstance(node, TokenAwareMixin):
+                owner: TokenProvider | None = node.token_provider()
+                if not isinstance(owner, Module) or owner is not self.root:
+                    msg: str = "Reference belongs to a foreign source graph."
+                    raise ValueError(msg)
+            identity: int | None = read_attribute(
+                node=node,
+                name="node_id",
+                kind=int,
+            )
+            if (
+                identity is not None
+                and self.scopes.node_index.get(identity) is not node
+            ):
+                msg = (
+                    "A reference belongs to a different "
+                    "or detached source graph."
+                )
+                raise ValueError(msg)
+            occurrence: Occurrence | None = (
+                self.scopes.occurrences.get(identity)
+                if identity is not None
+                else None
+            )
+            scope: int = (
+                occurrence.scope_id
+                if occurrence is not None
+                else self.scopes.root_id
+            )
+            if (
+                not isinstance(node.ctx, Load)
+                or self.scopes.resolve(
+                    name=target.name,
+                    scope_id=scope,
+                )
+                != target.id
+            ):
+                msg = (
+                    "Binding would capture a symbol or mutate a non-read node."
+                )
+                raise ValueError(msg)
+            changes.append((node, target.name))
+        for node, name in changes:
+            node.id = name
+        self.refresh()
+
+    def rebind(
+        self,
+        *,
+        symbol_id: int,
+        target_id: int,
+        within: AST | None = None,
+    ) -> int:
+        """Redirect a resolved symbol's reads to another native symbol.
+
+        Args:
+            symbol_id (int): Source lexical identity, independent of its
+                spelling.
+            target_id (int): Existing target identity in the same module.
+            within (AST | None): Optional owned subtree restricting the
+                selected reads.
+
+        Returns:
+            int: Number of native read nodes rebound
+                without changing definitions.
+
+        Raises:
+            KeyError: A source or target symbol does not exist.
+            ValueError: The target would be captured at a selected read.
+
+        """
+        self.refresh()
+        _ = self.scopes.symbols[symbol_id]
+        _ = self.scopes.symbols[target_id]
+        if within is not None:
+            identity: int | None = read_attribute(
+                node=within,
+                name="node_id",
+                kind=int,
+            )
+            if (
+                identity is None
+                or self.scopes.node_index.get(identity) is not within
+            ):
+                msg: str = (
+                    "Reference selection must belong to this source graph."
+                )
+                raise ValueError(msg)
+        selected: SetInt | None = (
+            {id(node) for node in walk(node=within)}
+            if within is not None
+            else None
+        )
+        bindings: dict[Name, int] = {
+            node: target_id
+            for node in self.scopes.references(symbol_id=symbol_id)
+            if isinstance(node, Name)
+            and (selected is None or id(node) in selected)
+        }
+        self.bind_references(bindings=bindings)
+        return len(bindings)
+
     def rename(self, *, symbol_id: int, new_name: str) -> None:
         """Rename a lexical symbol across its references and definitions.
 
         Args:
-            symbol_id: Symbol to rename, preserving lexical identity.
-            new_name: Valid Python identifier not shadowing another local.
+            symbol_id (int): Symbol to rename, preserving lexical identity.
+            new_name (str): Valid Python identifier not shadowing another
+                local.
 
         Raises:
             ValueError: If renamed spelling is invalid or collides in scope.
@@ -1113,6 +1267,11 @@ class SemanticAnalyzer:
             old=old,
             new_name=new_name,
         )
+        keywords: tuple[keyword, ...] = self._parameter_keyword_references(
+            symbol_id=symbol_id,
+            old=old,
+            new_name=new_name,
+        )
         self._update_references_and_definitions(
             symbol_id=symbol_id,
             new_name=new_name,
@@ -1122,7 +1281,65 @@ class SemanticAnalyzer:
             old=old,
             new_name=new_name,
         )
+        for item in keywords:
+            item.arg = new_name
         self.refresh()
+
+    def _parameter_keyword_references(
+        self,
+        *,
+        symbol_id: int,
+        old: Symbol,
+        new_name: str,
+    ) -> tuple[keyword, ...]:
+        """Resolve keyword labels through their native parameter contracts.
+
+        Args:
+            symbol_id (int): Parameter identity being renamed.
+            old (Symbol): Its original lexical record.
+            new_name (str): Validated replacement spelling.
+
+        Returns:
+            tuple[keyword, ...]: Keyword nodes bound to this exact parameter
+                declaration.
+
+        Raises:
+            ValueError: Keyword expansion or an existing label is ambiguous.
+
+        """
+        declarations: SetInt = {
+            id(node)
+            for node in self.scopes.definitions(symbol_id=symbol_id)
+            if isinstance(node, arg)
+        }
+        if not declarations:
+            return ()
+        calls: list[Call] = [
+            node
+            for node in self.scopes.node_index.values()
+            if isinstance(node, Call)
+            and any(item.arg in {None, old.name} for item in node.keywords)
+        ]
+        result: list[keyword] = []
+        for call, binding in zip(
+            calls,
+            self.bind_calls(nodes=calls),
+            strict=True,
+        ):
+            if binding is None or not any(
+                id(parameter.declaration) in declarations
+                for parameter in binding.signature.parameters
+            ):
+                continue
+            if any(item.arg in {None, new_name} for item in call.keywords):
+                msg: str = (
+                    "Rename collides with a keyword or unknown expansion."
+                )
+                raise ValueError(msg)
+            result.extend(
+                item for item in call.keywords if item.arg == old.name
+            )
+        return tuple(result)
 
     def symbol_origin(self, *, symbol_id: int) -> int | None:
         """Return the predecessor symbol after a cross-scope relocation.
@@ -1132,10 +1349,10 @@ class SemanticAnalyzer:
         callers can follow the lineage across repeated moves.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Previous-revision symbol identity, or None.
+            int | None: Previous-revision symbol identity, or None.
 
         """
         self.refresh()
@@ -1150,13 +1367,13 @@ class SemanticAnalyzer:
         interpreter is rebuilt lazily on the next query instead.
 
         Args:
-            symbol_id: Stable symbol identity to invalidate.
+            symbol_id (int): Stable symbol identity to invalidate.
 
         """
         self.refresh()
         if symbol_id not in self.scopes.symbols:
             return
-        seeds: set[int] = set(
+        seeds: SetInt = set(
             self.scopes.symbol_references.get(symbol_id, ()),
         )
         seeds.update(self.scopes.symbol_definitions.get(symbol_id, ()))
@@ -1165,7 +1382,7 @@ class SemanticAnalyzer:
             for binding in self.scopes.symbol_bindings.get(symbol_id, ())
             if binding in self.scopes.bindings
         )
-        affected: set[int] = set()
+        affected: SetInt = set()
         for seed in seeds:
             affected.update(
                 self.scopes.graph.affected_by(
@@ -1197,13 +1414,16 @@ class SemanticAnalyzer:
         """Climb the syntax parent chain to the enclosing lexical scope.
 
         Args:
-            node_id: Node identity supplied as int for this operation.
-            node_scopes: Occurrence-node to scope map of one revision.
-            parents: Node to parent map of one revision.
-            scopes: Scope identity set of one revision.
+            node_id (int): Node identity supplied as int for this operation.
+            node_scopes (dict[int, int]): Occurrence-node to scope map of one
+                revision.
+            parents (dict[int, int | None]): Node to parent map of one
+                revision.
+            scopes (dict[int, Scope]): Scope identity set of one revision.
 
         Returns:
-            Owning scope identity, or None when the chain is exhausted.
+            int | None:
+                Owning scope identity, or None when the chain is exhausted.
 
         """
         parent: int | None = parents.get(node_id)
@@ -1221,21 +1441,24 @@ class SemanticAnalyzer:
         *,
         old: dict[int, FingerprintRecord],
         new: dict[int, FingerprintRecord],
-        moved: set[int],
+        moved: SetInt,
         previous: ScopeGraph,
         updated: ScopeGraph,
     ) -> tuple[MutationEvent, ...]:
         """Classify each differing node identity into a mutation event.
 
         Args:
-            moved: Node identities whose containment path changed.
-            new: Fingerprint records for the current revision.
-            old: Fingerprint records for the previous revision.
-            previous: Scope graph of the earlier revision.
-            updated: Scope graph of the current revision.
+            moved (SetInt): Node identities whose containment path changed.
+            new (dict[int, FingerprintRecord]): Fingerprint records for the
+                current revision.
+            old (dict[int, FingerprintRecord]): Fingerprint records for the
+                previous revision.
+            previous (ScopeGraph): Scope graph of the earlier revision.
+            updated (ScopeGraph): Scope graph of the current revision.
 
         Returns:
-            Ordered mutation events for this revision.
+            tuple[MutationEvent, ...]: Ordered mutation events for this
+                revision.
 
         """
         events: list[MutationEvent] = []
@@ -1283,7 +1506,7 @@ class SemanticAnalyzer:
         events: tuple[MutationEvent, ...],
         previous: ScopeGraph,
         updated: ScopeGraph,
-    ) -> set[int]:
+    ) -> SetInt:
         """Expand mutation events through both revisions' dependency graphs.
 
         Scope-resolution edges describe lexical structure, not value flow:
@@ -1291,15 +1514,16 @@ class SemanticAnalyzer:
         so they are excluded from the closure here.
 
         Args:
-            events: Mutation events from this revision's diff.
-            previous: Scope graph of the earlier revision.
-            updated: Scope graph of the current revision.
+            events (tuple[MutationEvent, ...]): Mutation events from this
+                revision's diff.
+            previous (ScopeGraph): Scope graph of the earlier revision.
+            updated (ScopeGraph): Scope graph of the current revision.
 
         Returns:
-            Node identities whose cached results cannot be trusted.
+            SetInt: Node identities whose cached results cannot be trusted.
 
         """
-        invalidated: set[int] = set()
+        invalidated: SetInt = set()
         for event in events:
             invalidated.update(
                 previous.graph.affected_by(
@@ -1323,10 +1547,11 @@ class SemanticAnalyzer:
         """Group same-scope read occurrences by their owning scope.
 
         Args:
-            graph: Scope graph whose occurrences are grouped.
+            graph (ScopeGraph): Scope graph whose occurrences are grouped.
 
         Returns:
-            Read occurrences keyed by owning scope identity.
+            dict[int, list[Occurrence]]: Read occurrences keyed by owning scope
+                identity.
 
         """
         by_scope: dict[int, list[Occurrence]] = {}
@@ -1343,7 +1568,7 @@ class SemanticAnalyzer:
         self,
         *,
         events: tuple[MutationEvent, ...],
-        moved: set[int],
+        moved: SetInt,
         same_identities: bool,
         previous: ScopeGraph,
         updated: ScopeGraph,
@@ -1351,14 +1576,16 @@ class SemanticAnalyzer:
         """Decide whether statement-level incremental evaluation applies.
 
         Args:
-            events: Mutation events from this revision's diff.
-            moved: Node identities whose containment path changed.
-            previous: Scope graph of the earlier revision.
-            same_identities: Whether the revision kept every node identity.
-            updated: Scope graph of the current revision.
+            events (tuple[MutationEvent, ...]): Mutation events from this
+                revision's diff.
+            moved (SetInt): Node identities whose containment path changed.
+            previous (ScopeGraph): Scope graph of the earlier revision.
+            same_identities (bool): Whether the revision kept every node
+                identity.
+            updated (ScopeGraph): Scope graph of the current revision.
 
         Returns:
-            True when the revision only changed node content in place.
+            bool: True when the revision only changed node content in place.
 
         """
         return (
@@ -1382,15 +1609,17 @@ class SemanticAnalyzer:
     def _dirty_statements(
         self,
         *,
-        changed_ids: frozenset[int],
-    ) -> frozenset[int]:
+        changed_ids: FrozensetInt,
+    ) -> FrozensetInt:
         """Map changed node identities onto top-level statement indexes.
 
         Args:
-            changed_ids: Node identities mutated by this revision.
+            changed_ids (FrozensetInt): Node identities mutated by this
+                revision.
 
         Returns:
-            Indexes into ``self.root.body`` containing a changed node.
+            FrozensetInt:
+                Indexes into ``self.root.body`` containing a changed node.
 
         """
         return frozenset(
@@ -1402,7 +1631,7 @@ class SemanticAnalyzer:
             )
         )
 
-    def _heap_invalidated(self, *, dirty: frozenset[int]) -> set[int]:
+    def _heap_invalidated(self, *, dirty: FrozensetInt) -> SetInt:
         """Invalidate heap accessors sharing objects with changed writes.
 
         Heap mutations flow through abstract locations rather than lexical
@@ -1410,19 +1639,20 @@ class SemanticAnalyzer:
         write the same possible object.
 
         Args:
-            dirty: Top-level statement indexes containing a changed node.
+            dirty (FrozensetInt): Top-level statement indexes containing a
+                changed node.
 
         Returns:
-            Additional node identities to invalidate.
+            SetInt: Additional node identities to invalidate.
 
         """
         if self.interpreter is None or not dirty:
             return set()
-        node_objects: dict[int, set[int]] = {}
+        node_objects: dict[int, SetInt] = {}
         for object_id, writers in self.interpreter.heap_writers.items():
             for writer in writers:
                 node_objects.setdefault(writer, set()).add(object_id)
-        touched: set[int] = set()
+        touched: SetInt = set()
         for index in dirty:
             for item in walk(node=self.root.body[index]):
                 touched.update(
@@ -1431,7 +1661,7 @@ class SemanticAnalyzer:
                         (),
                     ),
                 )
-        invalidated: set[int] = set()
+        invalidated: SetInt = set()
         for object_id in touched:
             invalidated.update(
                 self.interpreter.heap_writers.get(object_id, ()),
@@ -1444,32 +1674,34 @@ class SemanticAnalyzer:
     def _refine_dirty(
         self,
         *,
-        dirty: frozenset[int],
-        invalidated: set[int],
+        dirty: FrozensetInt,
+        invalidated: SetInt,
         previous: ScopeGraph,
-    ) -> tuple[bool, frozenset[int]]:
+    ) -> tuple[bool, FrozensetInt]:
         """Widen the dirty set to callers of edited function bodies.
 
         A function-body edit can leave its definition's abstract value
-        unchanged while changing callers.  The previous semantic graph
+        unchanged while changing callers. The previous semantic graph
         carries CALLS_FUNCTION edges from each call to that definition;
         schedule those consumers even when the function binding stays the
-        same.  Class-body edits are not incrementally modeled, so a dirty
+        same. Class-body edits are not incrementally modeled, so a dirty
         class statement disables eligibility entirely.
 
         Args:
-            dirty: Top-level statement indexes containing a changed node.
-            invalidated: Node identities already invalidated.
-            previous: Scope graph of the earlier revision.
+            dirty (FrozensetInt): Top-level statement indexes containing a
+                changed node.
+            invalidated (SetInt): Node identities already invalidated.
+            previous (ScopeGraph): Scope graph of the earlier revision.
 
         Returns:
-            Updated eligibility flag and widened dirty statement indexes.
+            tuple[bool, FrozensetInt]: Updated eligibility flag and widened
+                dirty statement indexes.
 
         """
         eligible: bool = all(
             not isinstance(self.root.body[index], ClassDef) for index in dirty
         )
-        dependent_ids: set[int] = set(invalidated)
+        dependent_ids: SetInt = set(invalidated)
         for index in dirty:
             owner: stmt = self.root.body[index]
             if isinstance(owner, (FunctionDef, AsyncFunctionDef)):
@@ -1479,7 +1711,7 @@ class SemanticAnalyzer:
                         exclude=frozenset({"DEPENDS_ON_SCOPE"}),
                     ),
                 )
-        widened: frozenset[int] = frozenset(
+        widened: FrozensetInt = frozenset(
             index
             for index, statement in enumerate(iterable=self.root.body)
             if index in dirty
@@ -1496,26 +1728,29 @@ class SemanticAnalyzer:
         *,
         old: dict[int, FingerprintRecord],
         new: dict[int, FingerprintRecord],
-        relocated: set[int],
+        relocated: SetInt,
     ) -> RevisionDiff:
         """Summarize fingerprint changes for incremental reindexing.
 
         Args:
-            new: Identity to ``(parent, kind, fields)`` entries now.
-            old: Identity to ``(parent, kind, fields)`` entries before.
-            relocated: Python object identities whose tree path moved.
+            new (dict[int, FingerprintRecord]): Identity to
+                ``(parent, kind, fields)`` entries now.
+            old (dict[int, FingerprintRecord]): Identity to
+                ``(parent, kind, fields)`` entries before.
+            relocated (SetInt): Python object identities whose tree path moved.
 
         Returns:
-            Changed and structural identity sets plus both parent maps.
+            RevisionDiff:
+                Changed and structural identity sets plus both parent maps.
 
         """
-        moved_nodes: set[int] = {
+        moved_nodes: SetInt = {
             self.identities.node_id(node=node)
             for node in self.identities.all_nodes()
             if id(node) in relocated
         }
-        changed: set[int] = set()
-        structural: set[int] = set()
+        changed: SetInt = set()
+        structural: SetInt = set()
         for identity in old.keys() | new.keys():
             before_entry: FingerprintRecord | None = old.get(
                 identity,
@@ -1564,15 +1799,18 @@ class SemanticAnalyzer:
         nodes, while a structurally altered suite is rebuilt completely.
 
         Args:
-            events: Mutation events from this revision's diff.
-            graph: Freshly indexed scope graph to refine in place.
-            previous: Scope graph of the earlier revision, for scope lookup
-                of removed nodes.
-            diff: Node-level change summary supplying parent maps so that
+            events (tuple[MutationEvent, ...]): Mutation events from this
+                revision's diff.
+            graph (ScopeGraph): Freshly indexed scope graph to refine in place.
+            previous (ScopeGraph | None): Scope graph of the earlier revision,
+                for scope lookup of removed nodes.
+            diff (RevisionDiff | None): Node-level change summary supplying
+                parent maps so that
                 non-occurrence nodes can be attributed to a lexical scope.
 
         Returns:
-            Control-flow graphs built during refinement, keyed by owner.
+            dict[int, ControlFlowGraph]: Control-flow graphs built during
+                refinement, keyed by owner.
 
         """
         content_kinds: frozenset[str] = frozenset(
@@ -1582,10 +1820,10 @@ class SemanticAnalyzer:
                 "NODE_CONTENT_CHANGED",
             },
         )
-        changed_ids: frozenset[int] = frozenset(
+        changed_ids: FrozensetInt = frozenset(
             event.node_id for event in events
         )
-        structural_ids: frozenset[int] = frozenset(
+        structural_ids: FrozensetInt = frozenset(
             event.node_id
             for event in events
             if event.kind not in content_kinds
@@ -1625,7 +1863,7 @@ class SemanticAnalyzer:
                 )
             cfgs[scope.owner_node_id] = cfg
             node_statements: dict[int, stmt] = {}
-            statement_bindings: dict[int, dict[int, set[int]]] = (
+            statement_bindings: dict[int, dict[int, SetInt]] = (
                 self._statement_maps(
                     cfg=cfg,
                     graph=graph,
@@ -1633,7 +1871,7 @@ class SemanticAnalyzer:
                 )
             )
             if reused:
-                dirty_blocks: frozenset[int] = frozenset(
+                dirty_blocks: FrozensetInt = frozenset(
                     cfg.statement_blocks[
                         self.identities.node_id(node=statement)
                     ]
@@ -1667,27 +1905,29 @@ class SemanticAnalyzer:
         cfg: ControlFlowGraph,
         graph: ScopeGraph,
         node_statements: dict[int, stmt],
-    ) -> dict[int, dict[int, set[int]]]:
+    ) -> dict[int, dict[int, SetInt]]:
         """Index CFG blocks by member node and by binding they contain.
 
         Args:
-            cfg: Control-flow graph to index.
-            graph: Scope graph supplying binding records.
-            node_statements: Output map from member node identity to the
+            cfg (ControlFlowGraph): Control-flow graph to index.
+            graph (ScopeGraph): Scope graph supplying binding records.
+            node_statements (dict[int, stmt]): Output map from member node
+                identity to the
                 statement that contains it; filled in place.
 
         Returns:
-            Map from statement identity to the binding nodes it contains,
-            grouped per symbol.
+            dict[int, dict[int, SetInt]]: Map from statement identity to the
+                binding
+                nodes it contains, grouped per symbol.
 
         """
-        statement_bindings: dict[int, dict[int, set[int]]] = {}
+        statement_bindings: dict[int, dict[int, SetInt]] = {}
         for block_id in sorted(cfg.blocks):
             statement: stmt | None = cfg.blocks[block_id].statement
             if statement is None:
                 continue
             statement_id: int = self.identities.node_id(node=statement)
-            members: set[int] = {
+            members: SetInt = {
                 self.identities.node_id(node=item)
                 for item in walk(node=statement)
             }
@@ -1710,16 +1950,19 @@ class SemanticAnalyzer:
         cfg: ControlFlowGraph,
         occurrences: list[Occurrence],
         node_statements: dict[int, stmt],
-        statement_bindings: dict[int, dict[int, set[int]]],
+        statement_bindings: dict[int, dict[int, SetInt]],
     ) -> None:
         """Replace one scope's REACHES_DEFINITION edges with precise ones.
 
         Args:
-            cfg: Solved control-flow graph for the scope.
-            graph: Scope graph refined in place.
-            node_statements: Member node to containing statement map.
-            occurrences: Read occurrences owned by this scope.
-            statement_bindings: Binding nodes per statement per symbol.
+            cfg (ControlFlowGraph): Solved control-flow graph for the scope.
+            graph (ScopeGraph): Scope graph refined in place.
+            node_statements (dict[int, stmt]): Member node to containing
+                statement map.
+            occurrences (list[Occurrence]): Read occurrences owned by this
+                scope.
+            statement_bindings (dict[int, dict[int, SetInt]]): Binding nodes
+                per statement per symbol.
 
         """
         for occurrence in occurrences:
@@ -1731,7 +1974,7 @@ class SemanticAnalyzer:
                 at=statement,
                 symbol_id=symbol_id,
             )
-            producers: set[int] = {
+            producers: SetInt = {
                 graph.bindings[binding].node_id
                 for binding in reaching.binding_ids
                 if binding in graph.bindings
@@ -1773,13 +2016,15 @@ class SemanticAnalyzer:
         then through the previous revision when the node is gone.
 
         Args:
-            diff: Revision parent maps, when incremental data exists.
-            graph: Current scope graph.
-            node_id: Syntax identity to attribute.
-            previous: Earlier scope graph for removed nodes.
+            diff (RevisionDiff | None): Revision parent maps, when incremental
+                data exists.
+            graph (ScopeGraph): Current scope graph.
+            node_id (int): Syntax identity to attribute.
+            previous (ScopeGraph | None): Earlier scope graph for removed
+                nodes.
 
         Returns:
-            Owning scope identity, or None when unattributable.
+            int | None: Owning scope identity, or None when unattributable.
 
         """
         found: int | None = graph.node_scopes.get(node_id)
@@ -1826,12 +2071,13 @@ class SemanticAnalyzer:
         """Build an identity-preserving structural signature.
 
         Returns:
-            tuple[FingerprintEntry, ...] produced by this operation.
+            tuple[FingerprintEntry, ...]: tuple[FingerprintEntry, ...] produced
+                by this operation.
 
         """
         result: list[FingerprintEntry] = []
         pending: list[tuple[AST, int | None]] = [(self.root, None)]
-        visited: set[int] = set()
+        visited: SetInt = set()
         node_id: Callable[..., int] = self.identities.node_id
         while pending:
             node, parent = pending.pop()
@@ -1874,15 +2120,19 @@ class SemanticAnalyzer:
         """Validate the new name is an identifier without collisions.
 
         Args:
-            new_name: Identifier of the new being resolved.
-            old: Old supplied as Symbol for this operation.
+            new_name (str): Identifier of the new being resolved.
+            old (Symbol): Old supplied as Symbol for this operation.
 
         Raises:
             ValueError: If this operation cannot satisfy its documented
                 contract.
 
         """
-        if not new_name.isidentifier() or iskeyword(new_name):
+        if (
+            not new_name.isidentifier()
+            or iskeyword(new_name)
+            or normalize("NFKC", new_name) != new_name
+        ):
             msg: str = (
                 "Renamed symbol must be a valid non-keyword Python identifier."
             )
@@ -1904,9 +2154,9 @@ class SemanticAnalyzer:
         """Check that renaming won't capture an existing nested reference.
 
         Args:
-            new_name: Identifier of the new being resolved.
-            old: Old supplied as Symbol for this operation.
-            symbol_id: Symbol id supplied as int for this operation.
+            new_name (str): Identifier of the new being resolved.
+            old (Symbol): Old supplied as Symbol for this operation.
+            symbol_id (int): Symbol id supplied as int for this operation.
 
         Raises:
             ValueError: If this operation cannot satisfy its documented
@@ -1940,8 +2190,8 @@ class SemanticAnalyzer:
         """Update all references and definitions of the symbol.
 
         Args:
-            new_name: Identifier of the new being resolved.
-            symbol_id: Symbol id supplied as int for this operation.
+            new_name (str): Identifier of the new being resolved.
+            symbol_id (int): Symbol id supplied as int for this operation.
 
         """
         targets: tuple[AST, ...] = (
@@ -1971,9 +2221,9 @@ class SemanticAnalyzer:
         """Update global and nonlocal statements referencing the symbol.
 
         Args:
-            new_name: Identifier of the new being resolved.
-            old: Old supplied as Symbol for this operation.
-            symbol_id: Symbol id supplied as int for this operation.
+            new_name (str): Identifier of the new being resolved.
+            old (Symbol): Old supplied as Symbol for this operation.
+            symbol_id (int): Symbol id supplied as int for this operation.
 
         """
         for statement in self.scopes.node_index.values():
@@ -2000,14 +2250,15 @@ class SymbolRegistry:
 
     Delegates to one ``SemanticAnalyzer`` so callers use the registry
     abstraction without touching scope internals.
+
     """
 
     def __init__(self, *, analyzer: SemanticAnalyzer) -> None:
         """Bind the facade to a single analyzer.
 
         Args:
-            analyzer: Analyzer supplied as SemanticAnalyzer for this
-                operation.
+            analyzer (SemanticAnalyzer): Analyzer supplied as SemanticAnalyzer
+                for this operation.
 
         """
         self._analyzer: SemanticAnalyzer = analyzer
@@ -2016,10 +2267,10 @@ class SymbolRegistry:
         """Return the symbol record for one identity.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Symbol record, or None for unknown identities.
+            Symbol | None: Symbol record, or None for unknown identities.
 
         """
         self._analyzer.refresh()
@@ -2034,11 +2285,12 @@ class SymbolRegistry:
         """Resolve a lexical name within a scope.
 
         Args:
-            name: Name to resolve.
-            scope: AST or scope identity, defaulting to the module.
+            name (str): Name to resolve.
+            scope (AST | int | None): AST or scope identity, defaulting to the
+                module.
 
         Returns:
-            Symbol record, or None for unknown names.
+            Symbol | None: Symbol record, or None for unknown names.
 
         """
         return self._analyzer.resolve(name=name, scope=scope)
@@ -2047,10 +2299,10 @@ class SymbolRegistry:
         """Return read occurrences of a lexical symbol.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Ordered individual referencing AST nodes.
+            tuple[AST, ...]: Ordered individual referencing AST nodes.
 
         """
         return self._analyzer.references(symbol_id=symbol_id)
@@ -2059,10 +2311,10 @@ class SymbolRegistry:
         """Return definition occurrences of a lexical symbol.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Ordered definition AST nodes.
+            tuple[AST, ...]: Ordered definition AST nodes.
 
         """
         return self._analyzer.definitions(symbol_id=symbol_id)
@@ -2071,10 +2323,10 @@ class SymbolRegistry:
         """Return all stored bindings for a lexical symbol.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Binding records, possibly empty.
+            tuple[Binding, ...]: Binding records, possibly empty.
 
         """
         return self._analyzer.bindings(symbol_id=symbol_id)
@@ -2083,10 +2335,10 @@ class SymbolRegistry:
         """Return the predecessor symbol after a cross-scope relocation.
 
         Args:
-            symbol_id: Stable symbol identity.
+            symbol_id (int): Stable symbol identity.
 
         Returns:
-            Previous-revision symbol identity, or None.
+            int | None: Previous-revision symbol identity, or None.
 
         """
         return self._analyzer.symbol_origin(symbol_id=symbol_id)
@@ -2095,17 +2347,53 @@ class SymbolRegistry:
         """Rename a lexical symbol across references and definitions.
 
         Args:
-            symbol_id: Symbol to rename, preserving lexical identity.
-            new_name: Valid Python identifier not shadowing another local.
+            symbol_id (int): Symbol to rename, preserving lexical identity.
+            new_name (str): Valid Python identifier not shadowing another
+                local.
 
         """
         self._analyzer.rename(symbol_id=symbol_id, new_name=new_name)
+
+    def bind_references(self, *, bindings: Mapping[Name, int]) -> None:
+        """Bind native read nodes to symbol identities without source edits.
+
+        Args:
+            bindings (Mapping[Name, int]): Native references mapped to existing
+                target identities.
+
+        """
+        self._analyzer.bind_references(bindings=bindings)
+
+    def rebind(
+        self,
+        *,
+        symbol_id: int,
+        target_id: int,
+        within: AST | None = None,
+    ) -> int:
+        """Redirect all reads of a symbol, optionally within one subtree.
+
+        Args:
+            symbol_id (int): Source lexical identity.
+            target_id (int): Target lexical identity.
+            within (AST | None): Optional subtree selecting references to
+                redirect.
+
+        Returns:
+            int: Number of updated native reference nodes.
+
+        """
+        return self._analyzer.rebind(
+            symbol_id=symbol_id,
+            target_id=target_id,
+            within=within,
+        )
 
     def invalidate(self, *, symbol_id: int) -> None:
         """Discard cached inference for a symbol and its dependents.
 
         Args:
-            symbol_id: Stable symbol identity to invalidate.
+            symbol_id (int): Stable symbol identity to invalidate.
 
         """
         self._analyzer.invalidate(symbol_id=symbol_id)

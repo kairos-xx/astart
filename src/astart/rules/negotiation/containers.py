@@ -4,6 +4,7 @@
 is. That holds only while every use of ``out`` is understood: a use the
 analysis does not recognise (passing it to a function, ``extend``, a closure)
 could add anything, so the container is then reported as escaping.
+
 """
 
 from __future__ import annotations
@@ -55,11 +56,16 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        constructors: Calls that build an empty container, by kind.
-        adders: Method name to the index of the added element, by kind.
-        readers: Methods that never add an element, by kind.
-        pure_calls: Builtins that only read their arguments.
-        scopes: Node types that open a scope element flow must not cross.
+        constructors (Final[dict[str, str]]): Calls that build an empty
+            container, by kind.
+        adders (Final[dict[str, dict[str, int]]]): Method name to the index of
+            the added element, by kind.
+        readers (Final[dict[str, frozenset[str]]]): Methods that never add an
+            element, by kind.
+        pure_calls (Final[frozenset[str]]): Builtins that only read their
+            arguments.
+        scopes (Final[tuple[type[AST], ...]]): Node types that open a scope
+            element flow must not cross.
 
     """
 
@@ -120,12 +126,12 @@ def empty_kind(*, value: expr, counts: Mapping[str, int]) -> str | None:
     """Tell whether an expression builds an empty list or set.
 
     Args:
-        value: The assigned expression.
-        counts: Module binding counts, to see that ``list``/``set`` are the
-            builtins.
+        value (expr): The assigned expression.
+        counts (Mapping[str, int]): Module binding counts, to see that
+            ``list`` /``set`` are the builtins.
 
     Returns:
-        ``"list"`` or ``"set"``, or ``None``.
+        str | None: ``"list"`` or ``"set"``, or ``None``.
 
     """
     if isinstance(value, List) and not value.elts:
@@ -146,11 +152,11 @@ def literal_kind(*, value: expr) -> str | None:
     """Tell whether an expression builds a non-empty list, set or dict.
 
     Args:
-        value: The assigned expression.
+        value (expr): The assigned expression.
 
     Returns:
-        ``"list"``, ``"set"`` or ``"dict"`` for a literal or comprehension,
-        or ``None``.
+        str | None: ``"list"``, ``"set"`` or ``"dict"`` for
+            a literal or comprehension, or ``None``.
 
     """
     if isinstance(value, (List, ListComp)) and not (
@@ -170,10 +176,10 @@ def _parents(*, function: Function) -> dict[int, AST]:
     """Map each node of a function to its parent.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        Parent node by child identity.
+        dict[int, AST]: Parent node by child identity.
 
     """
     found: dict[int, AST] = {}
@@ -193,14 +199,15 @@ def _read_only(
     """Tell whether a use of the container cannot add an element.
 
     Args:
-        name: The use.
-        parent: Its parent node.
-        parents: Parent map of the function.
-        counts: Module binding counts.
+        name (AST): The use.
+        parent (AST): Its parent node.
+        parents (Mapping[int, AST]): Parent map of the function.
+        counts (Mapping[str, int]): Module binding counts.
 
     Returns:
-        ``True`` for iteration, tests, subscript reads, returns (also inside a
-        returned tuple) and the builtins that only read their argument.
+        bool: ``True`` for iteration, tests, subscript reads,
+            returns (also inside a returned tuple) and
+            the builtins that only read their argument.
 
     """
     if isinstance(parent, (For, comprehension)):
@@ -237,14 +244,15 @@ def fillings(
     """List the elements added to a container, or report that it escapes.
 
     Args:
-        function: Function whose body holds the container.
-        name: The local's name.
-        kind: ``"list"`` or ``"set"``.
-        counts: Module binding counts.
+        function (Function): Function whose body holds the container.
+        name (str): The local's name.
+        kind (str): ``"list"`` or ``"set"``.
+        counts (Mapping[str, int]): Module binding counts.
 
     Returns:
-        The added element expressions in source order, or ``None`` when some
-        use of the container is not understood.
+        tuple[expr, ...] | None:
+            The added element expressions in source order, or ``None``
+            when some use of the container is not understood.
 
     """
     parents: dict[int, AST] = _parents(function=function)
@@ -292,12 +300,12 @@ def _inside_other_scope(
     """Tell whether a use sits in a nested function, lambda or class.
 
     Args:
-        node: The use.
-        parents: Parent map of the function.
-        function: The enclosing function.
+        node (AST): The use.
+        parents (dict[int, AST]): Parent map of the function.
+        function (Function): The enclosing function.
 
     Returns:
-        ``True`` when a scope other than the function lies between them.
+        bool: ``True`` when a scope other than the function lies between them.
 
     """
     current: AST | None = parents.get(id(node))
@@ -317,13 +325,14 @@ def _method_use(
     """Judge one ``container.method`` use.
 
     Args:
-        attribute: The attribute access on the container.
-        parents: Parent map of the function.
-        kind: ``"list"`` or ``"set"``.
+        attribute (Attribute): The attribute access on the container.
+        parents (dict[int, AST]): Parent map of the function.
+        kind (str): ``"list"`` or ``"set"``.
 
     Returns:
-        The added element expression, ``None`` for a method that adds
-        nothing, or ``False`` when the use is not understood.
+        expr | bool | None:
+            The added element expression, ``None`` for a method that
+            adds nothing, or ``False`` when the use is not understood.
 
     """
     call: AST | None = parents.get(id(attribute))
@@ -341,12 +350,12 @@ def _unpacked(*, name: AST, parent: AST) -> bool:
     """Tell whether a use only unpacks the container into something else.
 
     Args:
-        name: The use.
-        parent: Its parent node.
+        name (AST): The use.
+        parent (AST): Its parent node.
 
     Returns:
-        ``True`` for ``*name`` and ``**name`` in a call, and ``**name`` or
-        ``*name`` in a display; unpacking reads the container.
+        bool: ``True`` for ``*name`` and ``**name`` in a call, and ``**name``
+            or ``*name`` in a display; unpacking reads the container.
 
     """
     if isinstance(parent, Starred):
@@ -375,13 +384,14 @@ def attribute_risky(
     keep a container type when this returns ``False`` for every method.
 
     Args:
-        function: A method of the class.
-        receiver: Name of the instance parameter.
-        attribute: The attribute name.
-        counts: Module binding counts.
+        function (Function): A method of the class.
+        receiver (str): Name of the instance parameter.
+        attribute (str): The attribute name.
+        counts (Mapping[str, int]): Module binding counts.
 
     Returns:
-        ``True`` when some load of the attribute is not a recognised read.
+        bool: ``True`` when some load of the attribute is not a recognised
+            read.
 
     """
     parents: dict[int, AST] = _parents(function=function)

@@ -1,0 +1,31 @@
+import builtins
+import collections.abc
+import typing
+
+import google.protobuf.descriptor
+import google.protobuf.internal.containers
+import google.protobuf.message
+
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+@typing.final
+class RecvBufRespExtra(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    TENSOR_CONTENT_FIELD_NUMBER: builtins.int
+    @property
+    def tensor_content(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[
+        builtins.bytes
+    ]: ...
+    def __init__(
+        self,
+        *,
+        tensor_content: collections.abc.Iterable[builtins.bytes] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["tensor_content", b"tensor_content"],
+    ) -> None: ...
+
+global___RecvBufRespExtra = RecvBufRespExtra

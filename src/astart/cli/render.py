@@ -19,9 +19,10 @@ class FileReport:
     """Findings, or the reason there are none, for one file.
 
     Attributes:
-        path: File name as given on the command line.
-        findings: Findings in source order.
-        error: Why the file could not be analysed, if it could not.
+        path (str): File name as given on the command line.
+        findings (tuple[Finding, ...]): Findings in source order.
+        error (str | None): Why the file could not be analysed, if it could
+            not.
 
     """
 
@@ -34,10 +35,10 @@ def _text(*, value: JsonValue) -> str:
     """Spell an evidence value for a message.
 
     Args:
-        value: Evidence value.
+        value (JsonValue): Evidence value.
 
     Returns:
-        The value, with lists joined by commas.
+        str: The value, with lists joined by commas.
 
     """
     if isinstance(value, list):
@@ -49,11 +50,11 @@ def render_message(*, rule: Rule, finding: Finding) -> str:
     """Fill a rule's message template from a finding's evidence.
 
     Args:
-        rule: Rule whose template is used.
-        finding: Finding that provides the evidence.
+        rule (Rule): Rule whose template is used.
+        finding (Finding): Finding that provides the evidence.
 
     Returns:
-        The message text.
+        str: The message text.
 
     """
     values: Mapping[str, str] = {
@@ -62,15 +63,32 @@ def render_message(*, rule: Rule, finding: Finding) -> str:
     return rule.message.format_map(values)
 
 
+def render_evidence(*, finding: Finding) -> str:
+    """Render a finding's evidence as ``key: value`` lines.
+
+    Args:
+        finding (Finding): Finding whose evidence is rendered.
+
+    Returns:
+        str: One ``key: value`` line per evidence slot, each
+            newline-terminated.
+
+    """
+    return "".join(
+        f"{key}: {_text(value=value)}\n"
+        for key, value in finding.evidence.items()
+    )
+
+
 def render_text(*, finding: Finding, catalog: Catalog) -> str:
     """Render one finding as ``path:line:col: CODE severity message``.
 
     Args:
-        finding: Finding to render.
-        catalog: Catalog that owns the finding's rule.
+        finding (Finding): Finding to render.
+        catalog (Catalog): Catalog that owns the finding's rule.
 
     Returns:
-        A single line.
+        str: A single line.
 
     """
     rule: Rule = catalog.rule(key=finding.rule_key)
@@ -86,11 +104,11 @@ def render_json(*, results: Sequence[FileReport], catalog: Catalog) -> str:
     """Render reports as a JSON array with sorted keys.
 
     Args:
-        results: One report per file.
-        catalog: Catalog that owns the findings' rules.
+        results (Sequence[FileReport]): One report per file.
+        catalog (Catalog): Catalog that owns the findings' rules.
 
     Returns:
-        The JSON text.
+        str: The JSON text.
 
     """
     document: list[dict[str, JsonValue]] = []

@@ -1,0 +1,10 @@
+from typing import Any
+
+from _typeshed import FileDescriptorOrPath
+
+def main(
+    template: FileDescriptorOrPath,
+    data: FileDescriptorOrPath | None = None,
+    **kwargs: Any,
+) -> str: ...
+def cli_main() -> None: ...

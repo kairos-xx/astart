@@ -1,0 +1,451 @@
+import builtins
+import typing
+
+import google.protobuf.descriptor
+import google.protobuf.internal.enum_type_wrapper
+
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class _ActionResult:
+    ValueType = typing.NewType("ValueType", builtins.int)
+    type V = ValueType
+
+class _ActionResultEnumTypeWrapper(
+    google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+        _ActionResult.ValueType
+    ],
+    builtins.type,
+):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    Success: _ActionResult.ValueType
+    NotSupported: _ActionResult.ValueType
+    Error: _ActionResult.ValueType
+    CantQueueThatOrder: _ActionResult.ValueType
+    Retry: _ActionResult.ValueType
+    Cooldown: _ActionResult.ValueType
+    QueueIsFull: _ActionResult.ValueType
+    RallyQueueIsFull: _ActionResult.ValueType
+    NotEnoughMinerals: _ActionResult.ValueType
+    NotEnoughVespene: _ActionResult.ValueType
+    NotEnoughTerrazine: _ActionResult.ValueType
+    NotEnoughCustom: _ActionResult.ValueType
+    NotEnoughFood: _ActionResult.ValueType
+    FoodUsageImpossible: _ActionResult.ValueType
+    NotEnoughLife: _ActionResult.ValueType
+    NotEnoughShields: _ActionResult.ValueType
+    NotEnoughEnergy: _ActionResult.ValueType
+    LifeSuppressed: _ActionResult.ValueType
+    ShieldsSuppressed: _ActionResult.ValueType
+    EnergySuppressed: _ActionResult.ValueType
+    NotEnoughCharges: _ActionResult.ValueType
+    CantAddMoreCharges: _ActionResult.ValueType
+    TooMuchMinerals: _ActionResult.ValueType
+    TooMuchVespene: _ActionResult.ValueType
+    TooMuchTerrazine: _ActionResult.ValueType
+    TooMuchCustom: _ActionResult.ValueType
+    TooMuchFood: _ActionResult.ValueType
+    TooMuchLife: _ActionResult.ValueType
+    TooMuchShields: _ActionResult.ValueType
+    TooMuchEnergy: _ActionResult.ValueType
+    MustTargetUnitWithLife: _ActionResult.ValueType
+    MustTargetUnitWithShields: _ActionResult.ValueType
+    MustTargetUnitWithEnergy: _ActionResult.ValueType
+    CantTrade: _ActionResult.ValueType
+    CantSpend: _ActionResult.ValueType
+    CantTargetThatUnit: _ActionResult.ValueType
+    CouldntAllocateUnit: _ActionResult.ValueType
+    UnitCantMove: _ActionResult.ValueType
+    TransportIsHoldingPosition: _ActionResult.ValueType
+    BuildTechRequirementsNotMet: _ActionResult.ValueType
+    CantFindPlacementLocation: _ActionResult.ValueType
+    CantBuildOnThat: _ActionResult.ValueType
+    CantBuildTooCloseToDropOff: _ActionResult.ValueType
+    CantBuildLocationInvalid: _ActionResult.ValueType
+    CantSeeBuildLocation: _ActionResult.ValueType
+    CantBuildTooCloseToCreepSource: _ActionResult.ValueType
+    CantBuildTooCloseToResources: _ActionResult.ValueType
+    CantBuildTooFarFromWater: _ActionResult.ValueType
+    CantBuildTooFarFromCreepSource: _ActionResult.ValueType
+    CantBuildTooFarFromBuildPowerSource: _ActionResult.ValueType
+    CantBuildOnDenseTerrain: _ActionResult.ValueType
+    CantTrainTooFarFromTrainPowerSource: _ActionResult.ValueType
+    CantLandLocationInvalid: _ActionResult.ValueType
+    CantSeeLandLocation: _ActionResult.ValueType
+    CantLandTooCloseToCreepSource: _ActionResult.ValueType
+    CantLandTooCloseToResources: _ActionResult.ValueType
+    CantLandTooFarFromWater: _ActionResult.ValueType
+    CantLandTooFarFromCreepSource: _ActionResult.ValueType
+    CantLandTooFarFromBuildPowerSource: _ActionResult.ValueType
+    CantLandTooFarFromTrainPowerSource: _ActionResult.ValueType
+    CantLandOnDenseTerrain: _ActionResult.ValueType
+    AddOnTooFarFromBuilding: _ActionResult.ValueType
+    MustBuildRefineryFirst: _ActionResult.ValueType
+    BuildingIsUnderConstruction: _ActionResult.ValueType
+    CantFindDropOff: _ActionResult.ValueType
+    CantLoadOtherPlayersUnits: _ActionResult.ValueType
+    NotEnoughRoomToLoadUnit: _ActionResult.ValueType
+    CantUnloadUnitsThere: _ActionResult.ValueType
+    CantWarpInUnitsThere: _ActionResult.ValueType
+    CantLoadImmobileUnits: _ActionResult.ValueType
+    CantRechargeImmobileUnits: _ActionResult.ValueType
+    CantRechargeUnderConstructionUnits: _ActionResult.ValueType
+    CantLoadThatUnit: _ActionResult.ValueType
+    NoCargoToUnload: _ActionResult.ValueType
+    LoadAllNoTargetsFound: _ActionResult.ValueType
+    NotWhileOccupied: _ActionResult.ValueType
+    CantAttackWithoutAmmo: _ActionResult.ValueType
+    CantHoldAnyMoreAmmo: _ActionResult.ValueType
+    TechRequirementsNotMet: _ActionResult.ValueType
+    MustLockdownUnitFirst: _ActionResult.ValueType
+    MustTargetUnit: _ActionResult.ValueType
+    MustTargetInventory: _ActionResult.ValueType
+    MustTargetVisibleUnit: _ActionResult.ValueType
+    MustTargetVisibleLocation: _ActionResult.ValueType
+    MustTargetWalkableLocation: _ActionResult.ValueType
+    MustTargetPawnableUnit: _ActionResult.ValueType
+    YouCantControlThatUnit: _ActionResult.ValueType
+    YouCantIssueCommandsToThatUnit: _ActionResult.ValueType
+    MustTargetResources: _ActionResult.ValueType
+    RequiresHealTarget: _ActionResult.ValueType
+    RequiresRepairTarget: _ActionResult.ValueType
+    NoItemsToDrop: _ActionResult.ValueType
+    CantHoldAnyMoreItems: _ActionResult.ValueType
+    CantHoldThat: _ActionResult.ValueType
+    TargetHasNoInventory: _ActionResult.ValueType
+    CantDropThisItem: _ActionResult.ValueType
+    CantMoveThisItem: _ActionResult.ValueType
+    CantPawnThisUnit: _ActionResult.ValueType
+    MustTargetCaster: _ActionResult.ValueType
+    CantTargetCaster: _ActionResult.ValueType
+    MustTargetOuter: _ActionResult.ValueType
+    CantTargetOuter: _ActionResult.ValueType
+    MustTargetYourOwnUnits: _ActionResult.ValueType
+    CantTargetYourOwnUnits: _ActionResult.ValueType
+    MustTargetFriendlyUnits: _ActionResult.ValueType
+    CantTargetFriendlyUnits: _ActionResult.ValueType
+    MustTargetNeutralUnits: _ActionResult.ValueType
+    CantTargetNeutralUnits: _ActionResult.ValueType
+    MustTargetEnemyUnits: _ActionResult.ValueType
+    CantTargetEnemyUnits: _ActionResult.ValueType
+    MustTargetAirUnits: _ActionResult.ValueType
+    CantTargetAirUnits: _ActionResult.ValueType
+    MustTargetGroundUnits: _ActionResult.ValueType
+    CantTargetGroundUnits: _ActionResult.ValueType
+    MustTargetStructures: _ActionResult.ValueType
+    CantTargetStructures: _ActionResult.ValueType
+    MustTargetLightUnits: _ActionResult.ValueType
+    CantTargetLightUnits: _ActionResult.ValueType
+    MustTargetArmoredUnits: _ActionResult.ValueType
+    CantTargetArmoredUnits: _ActionResult.ValueType
+    MustTargetBiologicalUnits: _ActionResult.ValueType
+    CantTargetBiologicalUnits: _ActionResult.ValueType
+    MustTargetHeroicUnits: _ActionResult.ValueType
+    CantTargetHeroicUnits: _ActionResult.ValueType
+    MustTargetRoboticUnits: _ActionResult.ValueType
+    CantTargetRoboticUnits: _ActionResult.ValueType
+    MustTargetMechanicalUnits: _ActionResult.ValueType
+    CantTargetMechanicalUnits: _ActionResult.ValueType
+    MustTargetPsionicUnits: _ActionResult.ValueType
+    CantTargetPsionicUnits: _ActionResult.ValueType
+    MustTargetMassiveUnits: _ActionResult.ValueType
+    CantTargetMassiveUnits: _ActionResult.ValueType
+    MustTargetMissile: _ActionResult.ValueType
+    CantTargetMissile: _ActionResult.ValueType
+    MustTargetWorkerUnits: _ActionResult.ValueType
+    CantTargetWorkerUnits: _ActionResult.ValueType
+    MustTargetEnergyCapableUnits: _ActionResult.ValueType
+    CantTargetEnergyCapableUnits: _ActionResult.ValueType
+    MustTargetShieldCapableUnits: _ActionResult.ValueType
+    CantTargetShieldCapableUnits: _ActionResult.ValueType
+    MustTargetFlyers: _ActionResult.ValueType
+    CantTargetFlyers: _ActionResult.ValueType
+    MustTargetBuriedUnits: _ActionResult.ValueType
+    CantTargetBuriedUnits: _ActionResult.ValueType
+    MustTargetCloakedUnits: _ActionResult.ValueType
+    CantTargetCloakedUnits: _ActionResult.ValueType
+    MustTargetUnitsInAStasisField: _ActionResult.ValueType
+    CantTargetUnitsInAStasisField: _ActionResult.ValueType
+    MustTargetUnderConstructionUnits: _ActionResult.ValueType
+    CantTargetUnderConstructionUnits: _ActionResult.ValueType
+    MustTargetDeadUnits: _ActionResult.ValueType
+    CantTargetDeadUnits: _ActionResult.ValueType
+    MustTargetRevivableUnits: _ActionResult.ValueType
+    CantTargetRevivableUnits: _ActionResult.ValueType
+    MustTargetHiddenUnits: _ActionResult.ValueType
+    CantTargetHiddenUnits: _ActionResult.ValueType
+    CantRechargeOtherPlayersUnits: _ActionResult.ValueType
+    MustTargetHallucinations: _ActionResult.ValueType
+    CantTargetHallucinations: _ActionResult.ValueType
+    MustTargetInvulnerableUnits: _ActionResult.ValueType
+    CantTargetInvulnerableUnits: _ActionResult.ValueType
+    MustTargetDetectedUnits: _ActionResult.ValueType
+    CantTargetDetectedUnits: _ActionResult.ValueType
+    CantTargetUnitWithEnergy: _ActionResult.ValueType
+    CantTargetUnitWithShields: _ActionResult.ValueType
+    MustTargetUncommandableUnits: _ActionResult.ValueType
+    CantTargetUncommandableUnits: _ActionResult.ValueType
+    MustTargetPreventDefeatUnits: _ActionResult.ValueType
+    CantTargetPreventDefeatUnits: _ActionResult.ValueType
+    MustTargetPreventRevealUnits: _ActionResult.ValueType
+    CantTargetPreventRevealUnits: _ActionResult.ValueType
+    MustTargetPassiveUnits: _ActionResult.ValueType
+    CantTargetPassiveUnits: _ActionResult.ValueType
+    MustTargetStunnedUnits: _ActionResult.ValueType
+    CantTargetStunnedUnits: _ActionResult.ValueType
+    MustTargetSummonedUnits: _ActionResult.ValueType
+    CantTargetSummonedUnits: _ActionResult.ValueType
+    MustTargetUser1: _ActionResult.ValueType
+    CantTargetUser1: _ActionResult.ValueType
+    MustTargetUnstoppableUnits: _ActionResult.ValueType
+    CantTargetUnstoppableUnits: _ActionResult.ValueType
+    MustTargetResistantUnits: _ActionResult.ValueType
+    CantTargetResistantUnits: _ActionResult.ValueType
+    MustTargetDazedUnits: _ActionResult.ValueType
+    CantTargetDazedUnits: _ActionResult.ValueType
+    CantLockdown: _ActionResult.ValueType
+    CantMindControl: _ActionResult.ValueType
+    MustTargetDestructibles: _ActionResult.ValueType
+    CantTargetDestructibles: _ActionResult.ValueType
+    MustTargetItems: _ActionResult.ValueType
+    CantTargetItems: _ActionResult.ValueType
+    NoCalldownAvailable: _ActionResult.ValueType
+    WaypointListFull: _ActionResult.ValueType
+    MustTargetRace: _ActionResult.ValueType
+    CantTargetRace: _ActionResult.ValueType
+    MustTargetSimilarUnits: _ActionResult.ValueType
+    CantTargetSimilarUnits: _ActionResult.ValueType
+    CantFindEnoughTargets: _ActionResult.ValueType
+    AlreadySpawningLarva: _ActionResult.ValueType
+    CantTargetExhaustedResources: _ActionResult.ValueType
+    CantUseMinimap: _ActionResult.ValueType
+    CantUseInfoPanel: _ActionResult.ValueType
+    OrderQueueIsFull: _ActionResult.ValueType
+    CantHarvestThatResource: _ActionResult.ValueType
+    HarvestersNotRequired: _ActionResult.ValueType
+    AlreadyTargeted: _ActionResult.ValueType
+    CantAttackWeaponsDisabled: _ActionResult.ValueType
+    CouldntReachTarget: _ActionResult.ValueType
+    TargetIsOutOfRange: _ActionResult.ValueType
+    TargetIsTooClose: _ActionResult.ValueType
+    TargetIsOutOfArc: _ActionResult.ValueType
+    CantFindTeleportLocation: _ActionResult.ValueType
+    InvalidItemClass: _ActionResult.ValueType
+    CantFindCancelOrder: _ActionResult.ValueType
+
+class ActionResult(_ActionResult, metaclass=_ActionResultEnumTypeWrapper): ...
+
+Success: ActionResult.ValueType
+NotSupported: ActionResult.ValueType
+Error: ActionResult.ValueType
+CantQueueThatOrder: ActionResult.ValueType
+Retry: ActionResult.ValueType
+Cooldown: ActionResult.ValueType
+QueueIsFull: ActionResult.ValueType
+RallyQueueIsFull: ActionResult.ValueType
+NotEnoughMinerals: ActionResult.ValueType
+NotEnoughVespene: ActionResult.ValueType
+NotEnoughTerrazine: ActionResult.ValueType
+NotEnoughCustom: ActionResult.ValueType
+NotEnoughFood: ActionResult.ValueType
+FoodUsageImpossible: ActionResult.ValueType
+NotEnoughLife: ActionResult.ValueType
+NotEnoughShields: ActionResult.ValueType
+NotEnoughEnergy: ActionResult.ValueType
+LifeSuppressed: ActionResult.ValueType
+ShieldsSuppressed: ActionResult.ValueType
+EnergySuppressed: ActionResult.ValueType
+NotEnoughCharges: ActionResult.ValueType
+CantAddMoreCharges: ActionResult.ValueType
+TooMuchMinerals: ActionResult.ValueType
+TooMuchVespene: ActionResult.ValueType
+TooMuchTerrazine: ActionResult.ValueType
+TooMuchCustom: ActionResult.ValueType
+TooMuchFood: ActionResult.ValueType
+TooMuchLife: ActionResult.ValueType
+TooMuchShields: ActionResult.ValueType
+TooMuchEnergy: ActionResult.ValueType
+MustTargetUnitWithLife: ActionResult.ValueType
+MustTargetUnitWithShields: ActionResult.ValueType
+MustTargetUnitWithEnergy: ActionResult.ValueType
+CantTrade: ActionResult.ValueType
+CantSpend: ActionResult.ValueType
+CantTargetThatUnit: ActionResult.ValueType
+CouldntAllocateUnit: ActionResult.ValueType
+UnitCantMove: ActionResult.ValueType
+TransportIsHoldingPosition: ActionResult.ValueType
+BuildTechRequirementsNotMet: ActionResult.ValueType
+CantFindPlacementLocation: ActionResult.ValueType
+CantBuildOnThat: ActionResult.ValueType
+CantBuildTooCloseToDropOff: ActionResult.ValueType
+CantBuildLocationInvalid: ActionResult.ValueType
+CantSeeBuildLocation: ActionResult.ValueType
+CantBuildTooCloseToCreepSource: ActionResult.ValueType
+CantBuildTooCloseToResources: ActionResult.ValueType
+CantBuildTooFarFromWater: ActionResult.ValueType
+CantBuildTooFarFromCreepSource: ActionResult.ValueType
+CantBuildTooFarFromBuildPowerSource: ActionResult.ValueType
+CantBuildOnDenseTerrain: ActionResult.ValueType
+CantTrainTooFarFromTrainPowerSource: ActionResult.ValueType
+CantLandLocationInvalid: ActionResult.ValueType
+CantSeeLandLocation: ActionResult.ValueType
+CantLandTooCloseToCreepSource: ActionResult.ValueType
+CantLandTooCloseToResources: ActionResult.ValueType
+CantLandTooFarFromWater: ActionResult.ValueType
+CantLandTooFarFromCreepSource: ActionResult.ValueType
+CantLandTooFarFromBuildPowerSource: ActionResult.ValueType
+CantLandTooFarFromTrainPowerSource: ActionResult.ValueType
+CantLandOnDenseTerrain: ActionResult.ValueType
+AddOnTooFarFromBuilding: ActionResult.ValueType
+MustBuildRefineryFirst: ActionResult.ValueType
+BuildingIsUnderConstruction: ActionResult.ValueType
+CantFindDropOff: ActionResult.ValueType
+CantLoadOtherPlayersUnits: ActionResult.ValueType
+NotEnoughRoomToLoadUnit: ActionResult.ValueType
+CantUnloadUnitsThere: ActionResult.ValueType
+CantWarpInUnitsThere: ActionResult.ValueType
+CantLoadImmobileUnits: ActionResult.ValueType
+CantRechargeImmobileUnits: ActionResult.ValueType
+CantRechargeUnderConstructionUnits: ActionResult.ValueType
+CantLoadThatUnit: ActionResult.ValueType
+NoCargoToUnload: ActionResult.ValueType
+LoadAllNoTargetsFound: ActionResult.ValueType
+NotWhileOccupied: ActionResult.ValueType
+CantAttackWithoutAmmo: ActionResult.ValueType
+CantHoldAnyMoreAmmo: ActionResult.ValueType
+TechRequirementsNotMet: ActionResult.ValueType
+MustLockdownUnitFirst: ActionResult.ValueType
+MustTargetUnit: ActionResult.ValueType
+MustTargetInventory: ActionResult.ValueType
+MustTargetVisibleUnit: ActionResult.ValueType
+MustTargetVisibleLocation: ActionResult.ValueType
+MustTargetWalkableLocation: ActionResult.ValueType
+MustTargetPawnableUnit: ActionResult.ValueType
+YouCantControlThatUnit: ActionResult.ValueType
+YouCantIssueCommandsToThatUnit: ActionResult.ValueType
+MustTargetResources: ActionResult.ValueType
+RequiresHealTarget: ActionResult.ValueType
+RequiresRepairTarget: ActionResult.ValueType
+NoItemsToDrop: ActionResult.ValueType
+CantHoldAnyMoreItems: ActionResult.ValueType
+CantHoldThat: ActionResult.ValueType
+TargetHasNoInventory: ActionResult.ValueType
+CantDropThisItem: ActionResult.ValueType
+CantMoveThisItem: ActionResult.ValueType
+CantPawnThisUnit: ActionResult.ValueType
+MustTargetCaster: ActionResult.ValueType
+CantTargetCaster: ActionResult.ValueType
+MustTargetOuter: ActionResult.ValueType
+CantTargetOuter: ActionResult.ValueType
+MustTargetYourOwnUnits: ActionResult.ValueType
+CantTargetYourOwnUnits: ActionResult.ValueType
+MustTargetFriendlyUnits: ActionResult.ValueType
+CantTargetFriendlyUnits: ActionResult.ValueType
+MustTargetNeutralUnits: ActionResult.ValueType
+CantTargetNeutralUnits: ActionResult.ValueType
+MustTargetEnemyUnits: ActionResult.ValueType
+CantTargetEnemyUnits: ActionResult.ValueType
+MustTargetAirUnits: ActionResult.ValueType
+CantTargetAirUnits: ActionResult.ValueType
+MustTargetGroundUnits: ActionResult.ValueType
+CantTargetGroundUnits: ActionResult.ValueType
+MustTargetStructures: ActionResult.ValueType
+CantTargetStructures: ActionResult.ValueType
+MustTargetLightUnits: ActionResult.ValueType
+CantTargetLightUnits: ActionResult.ValueType
+MustTargetArmoredUnits: ActionResult.ValueType
+CantTargetArmoredUnits: ActionResult.ValueType
+MustTargetBiologicalUnits: ActionResult.ValueType
+CantTargetBiologicalUnits: ActionResult.ValueType
+MustTargetHeroicUnits: ActionResult.ValueType
+CantTargetHeroicUnits: ActionResult.ValueType
+MustTargetRoboticUnits: ActionResult.ValueType
+CantTargetRoboticUnits: ActionResult.ValueType
+MustTargetMechanicalUnits: ActionResult.ValueType
+CantTargetMechanicalUnits: ActionResult.ValueType
+MustTargetPsionicUnits: ActionResult.ValueType
+CantTargetPsionicUnits: ActionResult.ValueType
+MustTargetMassiveUnits: ActionResult.ValueType
+CantTargetMassiveUnits: ActionResult.ValueType
+MustTargetMissile: ActionResult.ValueType
+CantTargetMissile: ActionResult.ValueType
+MustTargetWorkerUnits: ActionResult.ValueType
+CantTargetWorkerUnits: ActionResult.ValueType
+MustTargetEnergyCapableUnits: ActionResult.ValueType
+CantTargetEnergyCapableUnits: ActionResult.ValueType
+MustTargetShieldCapableUnits: ActionResult.ValueType
+CantTargetShieldCapableUnits: ActionResult.ValueType
+MustTargetFlyers: ActionResult.ValueType
+CantTargetFlyers: ActionResult.ValueType
+MustTargetBuriedUnits: ActionResult.ValueType
+CantTargetBuriedUnits: ActionResult.ValueType
+MustTargetCloakedUnits: ActionResult.ValueType
+CantTargetCloakedUnits: ActionResult.ValueType
+MustTargetUnitsInAStasisField: ActionResult.ValueType
+CantTargetUnitsInAStasisField: ActionResult.ValueType
+MustTargetUnderConstructionUnits: ActionResult.ValueType
+CantTargetUnderConstructionUnits: ActionResult.ValueType
+MustTargetDeadUnits: ActionResult.ValueType
+CantTargetDeadUnits: ActionResult.ValueType
+MustTargetRevivableUnits: ActionResult.ValueType
+CantTargetRevivableUnits: ActionResult.ValueType
+MustTargetHiddenUnits: ActionResult.ValueType
+CantTargetHiddenUnits: ActionResult.ValueType
+CantRechargeOtherPlayersUnits: ActionResult.ValueType
+MustTargetHallucinations: ActionResult.ValueType
+CantTargetHallucinations: ActionResult.ValueType
+MustTargetInvulnerableUnits: ActionResult.ValueType
+CantTargetInvulnerableUnits: ActionResult.ValueType
+MustTargetDetectedUnits: ActionResult.ValueType
+CantTargetDetectedUnits: ActionResult.ValueType
+CantTargetUnitWithEnergy: ActionResult.ValueType
+CantTargetUnitWithShields: ActionResult.ValueType
+MustTargetUncommandableUnits: ActionResult.ValueType
+CantTargetUncommandableUnits: ActionResult.ValueType
+MustTargetPreventDefeatUnits: ActionResult.ValueType
+CantTargetPreventDefeatUnits: ActionResult.ValueType
+MustTargetPreventRevealUnits: ActionResult.ValueType
+CantTargetPreventRevealUnits: ActionResult.ValueType
+MustTargetPassiveUnits: ActionResult.ValueType
+CantTargetPassiveUnits: ActionResult.ValueType
+MustTargetStunnedUnits: ActionResult.ValueType
+CantTargetStunnedUnits: ActionResult.ValueType
+MustTargetSummonedUnits: ActionResult.ValueType
+CantTargetSummonedUnits: ActionResult.ValueType
+MustTargetUser1: ActionResult.ValueType
+CantTargetUser1: ActionResult.ValueType
+MustTargetUnstoppableUnits: ActionResult.ValueType
+CantTargetUnstoppableUnits: ActionResult.ValueType
+MustTargetResistantUnits: ActionResult.ValueType
+CantTargetResistantUnits: ActionResult.ValueType
+MustTargetDazedUnits: ActionResult.ValueType
+CantTargetDazedUnits: ActionResult.ValueType
+CantLockdown: ActionResult.ValueType
+CantMindControl: ActionResult.ValueType
+MustTargetDestructibles: ActionResult.ValueType
+CantTargetDestructibles: ActionResult.ValueType
+MustTargetItems: ActionResult.ValueType
+CantTargetItems: ActionResult.ValueType
+NoCalldownAvailable: ActionResult.ValueType
+WaypointListFull: ActionResult.ValueType
+MustTargetRace: ActionResult.ValueType
+CantTargetRace: ActionResult.ValueType
+MustTargetSimilarUnits: ActionResult.ValueType
+CantTargetSimilarUnits: ActionResult.ValueType
+CantFindEnoughTargets: ActionResult.ValueType
+AlreadySpawningLarva: ActionResult.ValueType
+CantTargetExhaustedResources: ActionResult.ValueType
+CantUseMinimap: ActionResult.ValueType
+CantUseInfoPanel: ActionResult.ValueType
+OrderQueueIsFull: ActionResult.ValueType
+CantHarvestThatResource: ActionResult.ValueType
+HarvestersNotRequired: ActionResult.ValueType
+AlreadyTargeted: ActionResult.ValueType
+CantAttackWeaponsDisabled: ActionResult.ValueType
+CouldntReachTarget: ActionResult.ValueType
+TargetIsOutOfRange: ActionResult.ValueType
+TargetIsTooClose: ActionResult.ValueType
+TargetIsOutOfArc: ActionResult.ValueType
+CantFindTeleportLocation: ActionResult.ValueType
+InvalidItemClass: ActionResult.ValueType
+CantFindCancelOrder: ActionResult.ValueType
+global___ActionResult = ActionResult

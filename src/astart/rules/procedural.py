@@ -2,8 +2,9 @@
 
 Detectors in this package inspect a parsed module and yield
 :class:`Candidate` records — a span plus evidence — without being wired
-into a catalog or registry yet.  Registry and catalog entries adapt each
+into a catalog or registry yet. Registry and catalog entries adapt each
 ``find_*`` function to the engine's procedure calling convention.
+
 """
 
 from __future__ import annotations
@@ -25,8 +26,8 @@ class Candidate:
     """One detector hit, before it becomes a catalog finding.
 
     Attributes:
-        span: Source range the rule flags.
-        evidence: Values for the rule's evidence slots.
+        span (Span): Source range the rule flags.
+        evidence (dict[str, JsonValue]): Values for the rule's evidence slots.
 
     """
 
@@ -38,11 +39,11 @@ def span_of(*, node: AST, filename: str) -> Span:
     """Locate an AST node for a candidate.
 
     Args:
-        node: Node carrying line and column attributes.
-        filename: Name used in the span.
+        node (AST): Node carrying line and column attributes.
+        filename (str): Name used in the span.
 
     Returns:
-        The node's source range.
+        Span: The node's source range.
 
     """
     return Span(

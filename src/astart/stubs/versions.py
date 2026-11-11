@@ -13,7 +13,7 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        comment: Character that starts a comment line.
+        comment (Final[str]): Character that starts a comment line.
 
     """
 
@@ -24,10 +24,10 @@ def _version(*, text: str) -> Version:
     """Read ``3.11`` as ``(3, 11)``.
 
     Args:
-        text: A version such as ``3.9``.
+        text (str): A version such as ``3.9``.
 
     Returns:
-        The version tuple.
+        Version: The version tuple.
 
     """
     major, _, minor = text.strip().partition(".")
@@ -38,12 +38,13 @@ def parse_versions(*, text: str) -> dict[str, Span]:
     """Parse typeshed's ``stdlib/VERSIONS`` file.
 
     Args:
-        text: File contents: ``module: 3.9-3.12`` lines, the upper bound
+        text (str): File contents: ``module: 3.9-3.12`` lines, the upper bound
             optional.
 
     Returns:
-        For each module, the first version that has it and the first that
-        no longer has it (``None`` when it still exists).
+        dict[str, Span]: For each module, the first version that has it and the
+            first
+            that no longer has it (``None`` when it still exists).
 
     """
     table: dict[str, Span] = {}
@@ -71,12 +72,12 @@ def module_available(
     A submodule inherits the entry of its nearest listed parent.
 
     Args:
-        table: The parsed ``VERSIONS``.
-        module: Dotted module name.
-        version: The Python version asked about.
+        table (dict[str, Span]): The parsed ``VERSIONS``.
+        module (str): Dotted module name.
+        version (Version): The Python version asked about.
 
     Returns:
-        ``True`` when listed for that version, or not listed at all.
+        bool: ``True`` when listed for that version, or not listed at all.
 
     """
     parts: list[str] = module.split(sep=".")

@@ -1,0 +1,31 @@
+import builtins
+import typing
+
+import google.protobuf.descriptor
+import google.protobuf.message
+import tensorflow.tsl.protobuf.error_codes_pb2
+
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+@typing.final
+class StatusProto(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    CODE_FIELD_NUMBER: builtins.int
+    MESSAGE_FIELD_NUMBER: builtins.int
+    code: tensorflow.tsl.protobuf.error_codes_pb2.Code.ValueType
+    """Status code as defined in tensorflow/tsl/protobuf/error_codes.proto."""
+    message: builtins.str
+    """Detail error message."""
+    def __init__(
+        self,
+        *,
+        code: tensorflow.tsl.protobuf.error_codes_pb2.Code.ValueType
+        | None = ...,
+        message: builtins.str | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal["code", b"code", "message", b"message"],
+    ) -> None: ...
+
+global___StatusProto = StatusProto

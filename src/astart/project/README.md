@@ -14,6 +14,7 @@ Whole-project analysis: imports, call graph, libraries and versions.
 - [`naming.py`](naming.py) — Map filesystem paths to dotted Python module names.
 - [`scan.py`](scan.py) — Extract one module's definitions, imports, exports and call records.
 - [`table.py`](table.py) — Resolve names across a project's modules.
+- [`typeshed_client.py`](typeshed_client.py) — Optional ``typeshed_client`` backend for external stub lookup.
 - [`versions.py`](versions.py) — Python-version awareness for emitted syntax.
 
 ### Subdirectories

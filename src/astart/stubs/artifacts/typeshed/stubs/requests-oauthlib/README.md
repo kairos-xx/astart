@@ -1,0 +1,16 @@
+# `requests-oauthlib/`
+
+Provide init pyi content.
+
+<!-- exactus:inventory:start -->
+## Directory contents
+
+### Files
+
+No direct files besides this README.
+
+### Subdirectories
+
+- [`requests_oauthlib/`](requests_oauthlib/README.md) — Provide init pyi content.
+
+<!-- exactus:inventory:end -->

@@ -1,8 +1,9 @@
 """Persist and apply finding baselines.
 
 A baseline is a JSON document of finding fingerprints plus file-level
-errors.  Findings whose fingerprint is in the baseline are suppressed
+errors. Findings whose fingerprint is in the baseline are suppressed
 when a run reapplies the baseline, so only new findings surface.
+
 """
 
 from __future__ import annotations
@@ -23,10 +24,10 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        version: Baseline document version emitted.
-        version_key: JSON key for the version.
-        fingerprints_key: JSON key for the fingerprint list.
-        errors_key: JSON key for the file-error list.
+        version (Final[int]): Baseline document version emitted.
+        version_key (Final[str]): JSON key for the version.
+        fingerprints_key (Final[str]): JSON key for the fingerprint list.
+        errors_key (Final[str]): JSON key for the file-error list.
 
     """
 
@@ -45,12 +46,12 @@ def save_baseline(*, results: Sequence[FileReport], path: Path) -> None:
     """Write every fingerprint and file error to a baseline file.
 
     Args:
-        results: Reports to capture.
-        path: Destination JSON file.
+        results (Sequence[FileReport]): Reports to capture.
+        path (Path): Destination JSON file.
 
     """
     fingerprints: list[str] = sorted(
-        finding.fingerprint
+        _key(report=report, fingerprint=finding.fingerprint)
         for report in results
         for finding in report.findings
     )
@@ -75,10 +76,10 @@ def load_baseline(*, path: Path) -> frozenset[str]:
     """Read a baseline file into a fingerprint set.
 
     Args:
-        path: The baseline JSON file.
+        path (Path): The baseline JSON file.
 
     Returns:
-        The fingerprints it captured.
+        frozenset[str]: The fingerprints it captured.
 
     Raises:
         BaselineError: If the document is malformed.
@@ -113,11 +114,11 @@ def apply_baseline(
     """Drop findings whose fingerprint is in the baseline.
 
     Args:
-        results: Reports to filter.
-        fingerprints: Baselined fingerprints.
+        results (Sequence[FileReport]): Reports to filter.
+        fingerprints (frozenset[str]): Baselined fingerprints.
 
     Returns:
-        Reports with baselined findings removed.
+        tuple[FileReport, ...]: Reports with baselined findings removed.
 
     """
     return tuple(
@@ -126,8 +127,24 @@ def apply_baseline(
             findings=tuple(
                 finding
                 for finding in report.findings
-                if finding.fingerprint not in fingerprints
+                if _key(report=report, fingerprint=finding.fingerprint)
+                not in fingerprints
             ),
         )
         for report in results
     )
+
+
+def _key(*, report: FileReport, fingerprint: str) -> str:
+    """Build the baseline key for one finding.
+
+    Args:
+        report (FileReport): Report the finding belongs to.
+        fingerprint (str): The finding's stable fingerprint.
+
+    Returns:
+        str: ``path#fingerprint`` so identical findings in different files
+            never share a baseline entry.
+
+    """
+    return f"{report.path}#{fingerprint}"

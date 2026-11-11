@@ -20,14 +20,19 @@ class HeapObject:
     """Immutable snapshot of one mutable abstract heap allocation.
 
     Attributes:
-        allocation_node_id: Syntax identity of the allocation site, or 0
+        allocation_node_id (int): Syntax identity of the allocation site, or 0
             when the object has no modeled origin.
-        id: Unique abstract allocation identity.
-        kind: List, dictionary, set, or user-created object.
-        elements: Ordered abstract list elements, if known.
-        attributes: Known key and value pairs for modeled members.
-        unknown_content: True if other mutations may have changed the object.
-        summary: True if one abstract allocation represents multiple objects.
+        id (int): Unique abstract allocation identity.
+        kind (Literal['list', 'dict', 'set', 'object']): List, dictionary, set,
+            or user-created object.
+        elements (tuple[AbstractValue, ...]): Ordered abstract list elements,
+            if known.
+        attributes (tuple[tuple[AbstractValue, AbstractValue], ...]): Known key
+            and value pairs for modeled members.
+        unknown_content (bool): True if other mutations may have changed the
+            object.
+        summary (bool): True if one abstract allocation represents multiple
+            objects.
 
     """
 
@@ -48,7 +53,7 @@ class AbstractHeap:
         """Initialize empty object snapshots with monotonic identities.
 
         Args:
-            max_objects: Maximum distinct abstract allocations before new
+            max_objects (int): Maximum distinct abstract allocations before new
                 sites collapse into one shared summary object.
 
         """
@@ -63,11 +68,11 @@ class AbstractHeap:
         """Test possible overlap of abstract object identities.
 
         Args:
-            left: First object reference.
-            right: Second object reference.
+            left (AbstractValue): First object reference.
+            right (AbstractValue): Second object reference.
 
         Returns:
-            True when the references share a possible allocation.
+            bool: True when the references share a possible allocation.
 
         """
         return (
@@ -86,12 +91,12 @@ class AbstractHeap:
         """Read from a known built-in abstract collection, without user calls.
 
         Args:
-            reference: Potentially aliased object references.
-            index: Index or dictionary key.
-            objects: Current path-local heap snapshots.
+            reference (ObjectReference): Potentially aliased object references.
+            index (AbstractValue): Index or dictionary key.
+            objects (dict[int, HeapObject]): Current path-local heap snapshots.
 
         Returns:
-            Exact, union, or unknown value.
+            AbstractValue: Exact, union, or unknown value.
 
         """
         result: AbstractValue | None = None
@@ -134,10 +139,10 @@ class AbstractHeap:
         """Apply strong or conservative weak updates to an abstract location.
 
         Args:
-            reference: Mutated reference.
-            index: Abstract element index.
-            value: Written abstract value.
-            objects: Path-local heap snapshots.
+            reference (ObjectReference): Mutated reference.
+            index (AbstractValue): Abstract element index.
+            value (AbstractValue): Written abstract value.
+            objects (dict[int, HeapObject]): Path-local heap snapshots.
 
         """
         unique: bool = len(reference.object_ids) == 1
@@ -204,8 +209,10 @@ class AbstractHeap:
         """Invalidate known contents after an unanalyzable mutation.
 
         Args:
-            reference: Objects potentially affected by an external call.
-            objects: Path-local abstract heap snapshots.
+            reference (ObjectReference): Objects potentially affected by an
+                external call.
+            objects (dict[int, HeapObject]): Path-local abstract heap
+                snapshots.
 
         """
         for identity in reference.object_ids:
@@ -231,14 +238,17 @@ class AbstractHeap:
         """Allocate or reuse one abstract site for a call context.
 
         Args:
-            node_id: Originating Python AST node identity.
-            context_id: Function or call-site context identity.
-            kind: Abstract object kind.
-            elements: Initial sequence elements.
-            attributes: Initial mapping/attribute pairs.
+            node_id (int): Originating Python AST node identity.
+            context_id (int): Function or call-site context identity.
+            kind (Literal['list', 'dict', 'set', 'object']): Abstract object
+                kind.
+            elements (tuple[AbstractValue, ...]): Initial sequence elements.
+            attributes (tuple[tuple[AbstractValue,AbstractValue],...]): Initial
+                mapping/attribute pairs.
 
         Returns:
-            Abstract reference; a reused site is marked summarized.
+            ObjectReference: Abstract reference; a reused site is marked
+                summarized.
 
         """
         key: tuple[int, int] = (node_id, context_id)
@@ -295,10 +305,10 @@ class AbstractHeap:
         """Return the allocation site of an abstract object, when modeled.
 
         Args:
-            object_id: Abstract allocation identity.
+            object_id (int): Abstract allocation identity.
 
         Returns:
-            Syntax identity of the allocation site, or None.
+            int | None: Syntax identity of the allocation site, or None.
 
         """
         found: HeapObject | None = self.objects.get(object_id)
@@ -312,11 +322,11 @@ class AbstractHeap:
         """Prove both references denote one unique unsummarized allocation.
 
         Args:
-            left: First object reference.
-            right: Second object reference.
+            left (AbstractValue): First object reference.
+            right (AbstractValue): Second object reference.
 
         Returns:
-            True only for provable must-alias relationships.
+            bool: True only for provable must-alias relationships.
 
         """
         if not isinstance(left, ObjectReference) or not isinstance(

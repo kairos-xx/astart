@@ -1,0 +1,4 @@
+def discover_devices(
+    timeout: int = 30,
+    debug: bool = False,
+) -> dict[str | None, str]: ...

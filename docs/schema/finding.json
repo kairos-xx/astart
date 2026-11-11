@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astart.dev/schema/finding.json",
+  "title": "astart finding",
+  "description": "One rule violation inside a file report's `findings` array, as emitted by `astart check --format json`.",
+  "type": "object",
+  "required": [
+    "rule",
+    "code",
+    "severity",
+    "line",
+    "column",
+    "message",
+    "fingerprint",
+    "fixes"
+  ],
+  "properties": {
+    "rule": {
+      "type": "string",
+      "description": "Rule key, e.g. `typing.no-any`."
+    },
+    "code": {
+      "type": "string",
+      "description": "Stable rule code, e.g. `TYP001`."
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["error", "warning", "info"]
+    },
+    "line": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-based start line."
+    },
+    "column": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "0-based start column."
+    },
+    "message": {
+      "type": "string",
+      "description": "Rendered rule message with evidence substituted."
+    },
+    "fingerprint": {
+      "type": "string",
+      "description": "Stable identity that ignores line numbers."
+    },
+    "fixes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Keys of fix offers that apply to this finding."
+    }
+  },
+  "additionalProperties": false
+}

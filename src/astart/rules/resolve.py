@@ -40,10 +40,10 @@ def _class_level_ids(*, module: Module) -> frozenset[int]:
     """Collect nodes that bind names directly in a class body.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Identities of the defining nodes and target names.
+        frozenset[int]: Identities of the defining nodes and target names.
 
     """
     ids: set[int] = set()
@@ -66,10 +66,10 @@ def _bound_name(*, node: AST) -> str | None:
     """Name the identifier a node binds, if it binds one.
 
     Args:
-        node: Any syntax node.
+        node (AST): Any syntax node.
 
     Returns:
-        The bound name, or ``None``.
+        str | None: The bound name, or ``None``.
 
     """
     match node:
@@ -99,10 +99,10 @@ def binding_counts(*, module: Module) -> dict[str, int]:
     shadow module-level names.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Binding counts by name.
+        dict[str, int]: Binding counts by name.
 
     """
     skipped: frozenset[int] = _class_level_ids(module=module)
@@ -134,10 +134,10 @@ def constructor_key(*, name: str) -> str:
     a bound name.
 
     Args:
-        name: Imported class name.
+        name (str): Imported class name.
 
     Returns:
-        The key under which ``binding_counts`` records the constructor.
+        str: The key under which ``binding_counts`` records the constructor.
 
     """
     return f"@constructor:{name}"
@@ -147,10 +147,10 @@ def root_name(*, node: expr) -> str | None:
     """Find the leftmost name of a callee expression.
 
     Args:
-        node: Callee expression.
+        node (expr): Callee expression.
 
     Returns:
-        The name, or ``None`` when the callee is not a name path.
+        str | None: The name, or ``None`` when the callee is not a name path.
 
     """
     while isinstance(node, Attribute):
@@ -162,10 +162,10 @@ def definition_is_plain(*, declaration: AST) -> bool:
     """Report whether a definition keeps the signature it declares.
 
     Args:
-        declaration: Function or class definition.
+        declaration (AST): Function or class definition.
 
     Returns:
-        Whether it has no decorator that could rewrite its signature.
+        bool: Whether it has no decorator that could rewrite its signature.
 
     """
     match declaration:
@@ -193,12 +193,13 @@ def trusted_binding(
     definition must have no decorator that could change its signature.
 
     Args:
-        bound: Binding reported by the semantic analyzer.
-        call: Call expression.
-        counts: Binding counts from :func:`binding_counts`.
+        bound (BoundCall | None): Binding reported by the semantic analyzer.
+        call (Call): Call expression.
+        counts (Mapping[str, int]): Binding counts from :func:`binding_counts`.
 
     Returns:
-        The binding, or ``None`` when the callee cannot be trusted.
+        BoundCall | None:
+            The binding, or ``None`` when the callee cannot be trusted.
 
     """
     if bound is None or bound.signature.source_path is not None:
@@ -221,6 +222,7 @@ class CallBindings:
     Binding calls one at a time re-checks the whole tree every time; this
     binds every call of the module once, on first use, and answers from the
     cache. The cache describes the tree as it was at that moment.
+
     """
 
     def __init__(
@@ -232,8 +234,9 @@ class CallBindings:
         """Remember the module; nothing is computed yet.
 
         Args:
-            module: Parsed module.
-            counts: Binding counts from :func:`binding_counts`.
+            module (CommentedModule): Parsed module.
+            counts (Mapping[str, int]): Binding counts from
+                :func:`binding_counts`.
 
         """
         self._module: CommentedModule = module
@@ -244,10 +247,10 @@ class CallBindings:
         """Return the trusted binding of a call.
 
         Args:
-            call: Call expression of the module.
+            call (Call): Call expression of the module.
 
         Returns:
-            The binding, or ``None``.
+            BoundCall | None: The binding, or ``None``.
 
         """
         if self._cache is None:
@@ -285,13 +288,13 @@ def _is_plain_dataclass_call(
     """Tell whether a call builds a simple dataclass the analyzer bound.
 
     Args:
-        item: Call expression.
-        bound: Binding reported by the analyzer, if any.
-        counts: Binding counts from :func:`binding_counts`.
+        item (Call): Call expression.
+        bound (BoundCall | None): Binding reported by the analyzer, if any.
+        counts (Mapping[str, int]): Binding counts from :func:`binding_counts`.
 
     Returns:
-        ``True`` when the callee is a module-level name bound once to a
-        dataclass whose generated parameters match the analyzer's.
+        bool: ``True`` when the callee is a module-level name bound once to a
+            dataclass whose generated parameters match the analyzer's.
 
     """
     if (
@@ -320,13 +323,13 @@ def _vet(
     """Decide which binding of one call to trust.
 
     Args:
-        item: Call expression.
-        bound: Binding reported by the analyzer, if any.
-        methods: Method facts of the module.
-        counts: Binding counts from :func:`binding_counts`.
+        item (Call): Call expression.
+        bound (BoundCall | None): Binding reported by the analyzer, if any.
+        methods (MethodIndex): Method facts of the module.
+        counts (Mapping[str, int]): Binding counts from :func:`binding_counts`.
 
     Returns:
-        The trusted binding, or ``None``.
+        BoundCall | None: The trusted binding, or ``None``.
 
     """
     if not methods.callee_allowed(call=item):
@@ -375,12 +378,13 @@ def resolved_call(
     Prefer :class:`CallBindings` when binding many calls.
 
     Args:
-        module: Parsed module.
-        counts: Binding counts from :func:`binding_counts`.
-        call: Call expression.
+        module (CommentedModule): Parsed module.
+        counts (Mapping[str, int]): Binding counts from :func:`binding_counts`.
+        call (Call): Call expression.
 
     Returns:
-        The bound call, or ``None`` when the callee cannot be trusted.
+        BoundCall | None:
+            The bound call, or ``None`` when the callee cannot be trusted.
 
     """
     return trusted_binding(

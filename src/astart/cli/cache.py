@@ -5,6 +5,7 @@ run, the tool itself (its code and rule catalog), the type checker, the
 formatter and the project's configuration files. All of those are folded into
 one key, so a hit is a result that would be recomputed identically. Entries
 are small JSON files; anything unreadable is a miss.
+
 """
 
 from __future__ import annotations
@@ -24,10 +25,14 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        directory: Default cache directory, relative to the working directory.
-        schema: Entry layout version; bump it to invalidate old entries.
-        suffixes: Package files that change what the tool does.
-        configs: Project files that change the formatter or the checker.
+        directory (Final[str]): Default cache directory, relative to the
+            working directory.
+        schema (Final[int]): Entry layout version; bump it to invalidate old
+            entries.
+        suffixes (Final[tuple[str, ...]]): Package files that change what the
+            tool does.
+        configs (Final[tuple[str, ...]]): Project files that change the
+            formatter or the checker.
 
     """
 
@@ -49,10 +54,10 @@ class CachedFix:
     """What a run produced for one file.
 
     Attributes:
-        after: The fixed (and formatted) text.
-        applied: Number of fixes applied.
-        skipped: Descriptions of fixes that were not applied.
-        note: Formatter note, empty when there is none.
+        after (str): The fixed (and formatted) text.
+        applied (int): Number of fixes applied.
+        skipped (tuple[str, ...]): Descriptions of fixes that were not applied.
+        note (str): Formatter note, empty when there is none.
 
     """
 
@@ -66,11 +71,11 @@ class _Entry(TypedDict):
     """Fields of one stored cache entry.
 
     Attributes:
-        schema: Entry layout version.
-        after: The fixed (and formatted) text.
-        applied: Number of fixes applied.
-        skipped: Descriptions of fixes that were not applied.
-        note: Formatter note, empty when there is none.
+        schema (int): Entry layout version.
+        after (str): The fixed (and formatted) text.
+        applied (int): Number of fixes applied.
+        skipped (list[str]): Descriptions of fixes that were not applied.
+        note (str): Formatter note, empty when there is none.
 
     """
 
@@ -85,12 +90,12 @@ def tool_fingerprint(*, environment: str, root: Path) -> str:
     """Hash everything besides the file that decides a fix result.
 
     Args:
-        environment: Text describing the run's options, checker and
+        environment (str): Text describing the run's options, checker and
             formatter version.
-        root: Directory whose configuration files count.
+        root (Path): Directory whose configuration files count.
 
     Returns:
-        A hex digest.
+        str: A hex digest.
 
     """
     digest: HASH = sha256()
@@ -116,8 +121,8 @@ class FixCache:
         """Remember where entries live and what they are valid for.
 
         Args:
-            directory: Cache directory; created on first store.
-            fingerprint: Digest from :func:`tool_fingerprint`.
+            directory (Path): Cache directory; created on first store.
+            fingerprint (str): Digest from :func:`tool_fingerprint`.
 
         """
         self._directory: Path = directory
@@ -127,11 +132,11 @@ class FixCache:
         """Locate the entry for one file and text.
 
         Args:
-            path: The file.
-            source: Its current text.
+            path (Path): The file.
+            source (str): Its current text.
 
         Returns:
-            The entry's path.
+            Path: The entry's path.
 
         """
         digest: HASH = sha256()
@@ -144,11 +149,12 @@ class FixCache:
         """Return the stored result for a file, if there is a valid one.
 
         Args:
-            path: The file.
-            source: Its current text.
+            path (Path): The file.
+            source (str): Its current text.
 
         Returns:
-            The result, or ``None`` on a miss or an unreadable entry.
+            CachedFix | None:
+                The result, or ``None`` on a miss or an unreadable entry.
 
         """
         try:
@@ -172,9 +178,9 @@ class FixCache:
         """Save a result; failures to write are ignored.
 
         Args:
-            path: The file.
-            source: Its text before fixing.
-            entry: The result to remember.
+            path (Path): The file.
+            source (str): Its text before fixing.
+            entry (CachedFix): The result to remember.
 
         """
         target: Path = self._entry(path=path, source=source)
@@ -196,3 +202,22 @@ class FixCache:
             _ = temporary.replace(target=target)
         except OSError:
             return
+
+
+def clear_cache(*, root: Path) -> int:
+    """Delete every cached fix result under ``root``.
+
+    Args:
+        root (Path): Directory containing the ``.astart_cache`` directory.
+
+    Returns:
+        int: Number of entry files removed; ``0`` when no cache exists.
+
+    """
+    directory: Path = root / Constants.directory
+    if not directory.is_dir():
+        return 0
+    entries: list[Path] = sorted(directory.glob(pattern="*.json"))
+    for entry in entries:
+        entry.unlink()
+    return len(entries)

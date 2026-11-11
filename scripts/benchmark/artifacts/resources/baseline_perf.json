@@ -1,0 +1,20 @@
+{
+  "buckets": {
+    "1000": {
+      "actual_lines": 1184,
+      "lines": 1000,
+      "median_seconds": 2.454
+    },
+    "12000": {
+      "actual_lines": 11983,
+      "lines": 12000,
+      "median_seconds": 126.915
+    },
+    "4000": {
+      "actual_lines": 4106,
+      "lines": 4000,
+      "median_seconds": 16.87
+    }
+  },
+  "python": "3.13.9"
+}

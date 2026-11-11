@@ -1,0 +1,3 @@
+from PyInstaller.isolated._parent import Python as Python
+from PyInstaller.isolated._parent import call as call
+from PyInstaller.isolated._parent import decorate as decorate

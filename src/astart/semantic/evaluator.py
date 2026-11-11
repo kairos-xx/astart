@@ -2,11 +2,11 @@
 
 Analyzed source is never executed. All supported operations are modeled through
 explicit transfer functions over known immutable Python built-in values.
+
 """
 
 from __future__ import annotations
 
-import operator
 from ast import (
     AST,
     Add,
@@ -106,15 +106,11 @@ from ast import (
 )
 from collections import deque
 from dataclasses import dataclass, field
+from operator import __dict__
 from time import monotonic
 from typing import TYPE_CHECKING, Final, Literal, final
 
-from astart._graph.dispatch import handler_names
-from astart.node_attributes import (
-    clear_attribute,
-    read_attribute,
-    write_attribute,
-)
+from astart.graph.dispatch import handler_names
 from astart.semantic.functions import CallSummaryCache, FunctionSummary
 from astart.semantic.heap import AbstractHeap, HeapObject
 from astart.semantic.values import (
@@ -139,6 +135,13 @@ from astart.semantic.values import (
     proof_status,
     truth_value,
 )
+from astart.source.node_attributes import (
+    clear_attribute,
+    read_attribute,
+    write_attribute,
+)
+
+type ListFlow = list[Flow]
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -160,16 +163,21 @@ def arithmetic_function(
     """Return the ``operator`` function called ``name`` for two primitives.
 
     Args:
-        name: Attribute of the :mod:`operator` module, such as ``"add"``.
+        name (str): Attribute of the :mod:`operator` module, such as ``"add"``.
 
     Returns:
-        The binary arithmetic function.
+        Callable[[Primitive, Primitive], Primitive]: The binary arithmetic
+            function.
+
+    Raises:
+        AttributeError: If the operator namespace has no such name.
 
     """
-    handler: Callable[[Primitive, Primitive], Primitive] = getattr(
-        operator,
-        name,
-    )
+    try:
+        handler: Callable[[Primitive, Primitive], Primitive] = __dict__[name]
+    except KeyError:
+        msg: str = f"module 'operator' has no attribute {name!r}"
+        raise AttributeError(msg) from None
     return handler
 
 
@@ -180,13 +188,20 @@ def comparison_function(
     """Return the ``operator`` comparison called ``name``.
 
     Args:
-        name: Attribute of the :mod:`operator` module, such as ``"lt"``.
+        name (str): Attribute of the :mod:`operator` module, such as ``"lt"``.
 
     Returns:
-        The binary comparison function.
+        Callable[[Primitive, Primitive], bool]: The binary comparison function.
+
+    Raises:
+        AttributeError: If the operator namespace has no such name.
 
     """
-    handler: Callable[[Primitive, Primitive], bool] = getattr(operator, name)
+    try:
+        handler: Callable[[Primitive, Primitive], bool] = __dict__[name]
+    except KeyError:
+        msg: str = f"module 'operator' has no attribute {name!r}"
+        raise AttributeError(msg) from None
     return handler
 
 
@@ -194,13 +209,20 @@ def unary_function(*, name: str) -> Callable[[Primitive], Primitive]:
     """Return the ``operator`` unary function called ``name``.
 
     Args:
-        name: Attribute of the :mod:`operator` module, such as ``"neg"``.
+        name (str): Attribute of the :mod:`operator` module, such as ``"neg"``.
 
     Returns:
-        The unary function.
+        Callable[[Primitive], Primitive]: The unary function.
+
+    Raises:
+        AttributeError: If the operator namespace has no such name.
 
     """
-    handler: Callable[[Primitive], Primitive] = getattr(operator, name)
+    try:
+        handler: Callable[[Primitive], Primitive] = __dict__[name]
+    except KeyError:
+        msg: str = f"module 'operator' has no attribute {name!r}"
+        raise AttributeError(msg) from None
     return handler
 
 
@@ -209,25 +231,36 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        arithmetic: Grouped module constant.
-        orderings: Grouped module constant.
-        power: Grouped module constant.
-        left_shift: Grouped module constant.
-        right_shift: Grouped module constant.
-        contains: Grouped module constant.
-        positive: Grouped module constant.
-        negative: Grouped module constant.
-        invert: Grouped module constant.
-        conversion_repr: Grouped module constant.
-        conversion_str: Grouped module constant.
-        conversion_ascii: Grouped module constant.
-        max_integer_bits: Grouped module constant.
-        max_sequence_size: Grouped module constant.
-        max_range_arguments: Grouped module constant.
-        max_materialized_items: Grouped module constant.
-        max_exponent: Grouped module constant.
-        max_shift: Grouped module constant.
-        known_exceptions: Grouped module constant.
+        arithmetic: Final[
+                dict[type[AST], Callable[[Primitive, Primitive], Primitive]]
+            ]: Grouped module constant.
+        orderings: Final[
+                dict[type[AST], Callable[[Primitive, Primitive], bool]]
+            ]: Grouped module constant.
+        power (Final[Callable[[Primitive, Primitive], Primitive]]): Grouped
+            module constant.
+        left_shift (Final[Callable[[Primitive,Primitive],Primitive]]): Grouped
+            module constant.
+        right_shift (Final[Callable[[Primitive,Primitive],Primitive]]): Grouped
+            module constant.
+        contains (Final[Callable[[Primitive, Primitive], bool]]): Grouped
+            module constant.
+        positive (Final[Callable[[Primitive], Primitive]]): Grouped module
+            constant.
+        negative (Final[Callable[[Primitive], Primitive]]): Grouped module
+            constant.
+        invert (Final[Callable[[Primitive], Primitive]]): Grouped module
+            constant.
+        conversion_repr (Final[int]): Grouped module constant.
+        conversion_str (Final[int]): Grouped module constant.
+        conversion_ascii (Final[int]): Grouped module constant.
+        max_integer_bits (Final[int]): Grouped module constant.
+        max_sequence_size (Final[int]): Grouped module constant.
+        max_range_arguments (Final[int]): Grouped module constant.
+        max_materialized_items (Final[int]): Grouped module constant.
+        max_exponent (Final[int]): Grouped module constant.
+        max_shift (Final[int]): Grouped module constant.
+        known_exceptions (Final[frozenset[str]]): Grouped module constant.
 
     """
 
@@ -307,11 +340,11 @@ def operation_for[T](*, table: dict[type[AST], T], op: AST) -> T | None:
     """Return the handler registered for ``op`` or one of its base classes.
 
     Args:
-        table: Operator classes mapped to their handlers.
-        op: Operator node being evaluated.
+        table (dict[type[AST], T]): Operator classes mapped to their handlers.
+        op (AST): Operator node being evaluated.
 
     Returns:
-        The matching handler, or ``None`` when ``op`` is unsupported.
+        T | None: The matching handler, or ``None`` when ``op`` is unsupported.
 
     """
     for kind, handler in table.items():
@@ -329,12 +362,12 @@ def _arithmetic_refusal(
     """Explain why exact arithmetic is not attempted, if it is not.
 
     Args:
-        a: A supplied as Primitive for this operation.
-        b: B supplied as Primitive for this operation.
-        op: Op supplied as AST for this operation.
+        a (Primitive): A supplied as Primitive for this operation.
+        b (Primitive): B supplied as Primitive for this operation.
+        op (AST): Op supplied as AST for this operation.
 
     Returns:
-        UnknownValue | None produced by this operation.
+        UnknownValue | None: UnknownValue | None produced by this operation.
 
     """
     kinds: tuple[
@@ -385,12 +418,13 @@ def _arithmetic_handler(
     """Pick the operator function for ``op`` within the resource limits.
 
     Args:
-        b: B supplied as Primitive for this operation.
-        op: Op supplied as AST for this operation.
+        b (Primitive): B supplied as Primitive for this operation.
+        op (AST): Op supplied as AST for this operation.
 
     Returns:
-        Callable[[Primitive, Primitive], Primitive] | None produced by this
-        operation.
+        Callable[[Primitive, Primitive], Primitive] | None:
+            Callable[[Primitive, Primitive], Primitive]
+            | None produced by this operation.
 
     """
     handler: Callable[[Primitive, Primitive], Primitive] | None = (
@@ -421,10 +455,10 @@ def _arithmetic_failure(*, error: Exception) -> AbstractValue:
     """Model the abstract outcome of a failed built-in operation.
 
     Args:
-        error: Error supplied as Exception for this operation.
+        error (Exception): Error supplied as Exception for this operation.
 
     Returns:
-        AbstractValue produced by this operation.
+        AbstractValue: AbstractValue produced by this operation.
 
     """
     if isinstance(error, ZeroDivisionError):
@@ -448,11 +482,12 @@ def _exception_name_match(
     """Decide whether a raised built-in is caught by the listed names.
 
     Args:
-        names: Names supplied as tuple[str, ...] for this operation.
-        raised: Raised supplied as str for this operation.
+        names (tuple[str, ...]): Names supplied as tuple[str, ...] for this
+            operation.
+        raised (str): Raised supplied as str for this operation.
 
     Returns:
-        bool | None produced by this operation.
+        bool | None: bool | None produced by this operation.
 
     """
     if raised in names or "BaseException" in names:
@@ -481,9 +516,10 @@ class ActualArguments:
     """Abstract positional and named arguments of one call.
 
     Attributes:
-        named: Named retained as dict[str, AbstractValue] by this instance.
-        positional: Positional retained as tuple[AbstractValue, ...] by this
-            instance.
+        named (dict[str, AbstractValue]): Named retained as dict[str,
+            AbstractValue] by this instance.
+        positional (tuple[AbstractValue, ...]): Positional retained as
+            tuple[AbstractValue, ...] by this instance.
 
     """
 
@@ -497,8 +533,10 @@ class State:
     """Path-local mutable analysis state, not mutable program objects.
 
     Attributes:
-        values: Abstract values currently bound to lexical symbols.
-        heap: Immutable heap-object snapshots indexed by object identity.
+        values (dict[int, AbstractValue]): Abstract values currently bound to
+            lexical symbols.
+        heap (dict[int, HeapObject]): Immutable heap-object snapshots indexed
+            by object identity.
 
     """
 
@@ -509,7 +547,7 @@ class State:
         """Isolate a potential control-flow path.
 
         Returns:
-            State produced by this operation.
+            State: State produced by this operation.
 
         """
         return State(values=dict(self.values), heap=dict(self.heap))
@@ -518,11 +556,11 @@ class State:
         """Compute conservative union of two possible execution states.
 
         Args:
-            other: Alternative execution state.
-            limit: Maximum abstract-value alternatives.
+            other (State): Alternative execution state.
+            limit (int): Maximum abstract-value alternatives.
 
         Returns:
-            Conservatively merged symbolic environment and heap.
+            State: Conservatively merged symbolic environment and heap.
 
         """
         values: dict[int, AbstractValue] = {
@@ -607,9 +645,9 @@ class Flow:
     """One possible normal, return, loop-control, or exceptional path.
 
     Attributes:
-        state: Resulting environment and heap snapshot.
-        control: How this path exits the last executed statement.
-        value: Return value or raised object approximation.
+        state (State): Resulting environment and heap snapshot.
+        control (Control): How this path exits the last executed statement.
+        value (AbstractValue): Return value or raised object approximation.
 
     """
 
@@ -626,18 +664,19 @@ class AnalysisBudgets:
     """Upper bounds protecting analysis from unbounded specialization.
 
     Attributes:
-        context_sensitivity: Call-context keying policy: ``full`` keys on
-            function, caller, and argument values; ``caller`` shares one
+        context_sensitivity (Literal['full', 'caller', 'none']): Call-context
+            keying policy: ``full`` keys on function,
+            caller, and argument values; ``caller`` shares one
             context per call site; ``none`` shares one per function.
-        max_recursion: Maximum nested source-defined function calls.
-        max_contexts: Maximum distinct evaluated call contexts.
-        max_union: Maximum alternatives in a joined abstract value.
-        max_iterations: Maximum loop unrolling/fixed-point steps.
-        max_paths: Maximum independently tracked control-flow paths.
-        max_operations: Maximum total interpreter operations.
-        max_symbolic_operations: Maximum composite expression operations.
-        max_heap_objects: Maximum distinct abstract heap allocations.
-        max_seconds: Wall-clock analysis deadline; 0 disables it.
+        max_recursion (int): Maximum nested source-defined function calls.
+        max_contexts (int): Maximum distinct evaluated call contexts.
+        max_union (int): Maximum alternatives in a joined abstract value.
+        max_iterations (int): Maximum loop unrolling/fixed-point steps.
+        max_paths (int): Maximum independently tracked control-flow paths.
+        max_operations (int): Maximum total interpreter operations.
+        max_symbolic_operations (int): Maximum composite expression operations.
+        max_heap_objects (int): Maximum distinct abstract heap allocations.
+        max_seconds (float): Wall-clock analysis deadline; 0 disables it.
 
     """
 
@@ -659,9 +698,9 @@ class StepFrame:
     """Locals shared by the ``step_`` handlers of ``_step``.
 
     Attributes:
-        context_id: Context id retained as int by this instance.
-        identity: Identity retained as int by this instance.
-        state: State retained as State by this instance.
+        context_id (int): Context id retained as int by this instance.
+        identity (int): Identity retained as int by this instance.
+        state (State): State retained as State by this instance.
 
     """
 
@@ -676,9 +715,10 @@ class MatchPatternFrame:
     """Locals shared by the ``match_pattern_`` handlers.
 
     Attributes:
-        context_id: Context id retained as int by this instance.
-        state: State retained as State by this instance.
-        subject: Subject retained as AbstractValue by this instance.
+        context_id (int): Context id retained as int by this instance.
+        state (State): State retained as State by this instance.
+        subject (AbstractValue): Subject retained as AbstractValue by this
+            instance.
 
     """
 
@@ -701,9 +741,10 @@ class AbstractInterpreter:
         """Create a fresh analysis without executing Python source.
 
         Args:
-            root: Mutable Python module tree.
-            scopes: Lexically resolved symbol index.
-            budgets: Explicit configurable analysis budgets.
+            root (AST): Mutable Python module tree.
+            scopes (ScopeGraph): Lexically resolved symbol index.
+            budgets (AnalysisBudgets | None): Explicit configurable analysis
+                budgets.
 
         """
         self.root: AST = root
@@ -750,7 +791,7 @@ class AbstractInterpreter:
         self.incremental_reexecuted: tuple[int, ...] = ()
         self.incremental_reused: tuple[int, ...] = ()
         body: list[stmt] = getattr(root, "body", [])
-        results: list[Flow] = self._execute_suite(
+        results: ListFlow = self._execute_suite(
             body=body,
             paths=[Flow(state=State())],
             context_id=0,
@@ -780,14 +821,14 @@ class AbstractInterpreter:
         """Alias of ``eval_yield`` for YieldFrom.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while alias of ``eval_yield`` for
-                YieldFrom.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Yield | YieldFrom | GeneratorExp | ListComp): The node
+                examined while alias of ``eval_yield`` for YieldFrom.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         return cls.eval_yield(node, state, context_id, identity)
@@ -804,14 +845,15 @@ class AbstractInterpreter:
         """Alias of ``eval_yield`` for GeneratorExp.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while alias of ``eval_yield`` for
-                GeneratorExp.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Yield | YieldFrom | GeneratorExp | ListComp): The node
+                examined while alias of
+                ``eval_yield`` for GeneratorExp.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         return cls.eval_yield(node, state, context_id, identity)
@@ -828,13 +870,14 @@ class AbstractInterpreter:
         """Alias of ``eval_yield`` for ListComp.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while alias of ``eval_yield`` for ListComp.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Yield | YieldFrom | GeneratorExp | ListComp): The node
+                examined while alias of ``eval_yield`` for ListComp.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         return cls.eval_yield(node, state, context_id, identity)
@@ -848,10 +891,12 @@ class AbstractInterpreter:
         """Model ``int`` of a known primitive.
 
         Args:
-            args: Collection of args supplied for this operation.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
 
         Returns:
-            AbstractValue | None produced by this operation.
+            AbstractValue | None:
+                AbstractValue | None produced by this operation.
 
         """
         return cls._convert(name="int", args=args)
@@ -865,10 +910,12 @@ class AbstractInterpreter:
         """Model ``str`` of a known primitive.
 
         Args:
-            args: Collection of args supplied for this operation.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
 
         Returns:
-            AbstractValue | None produced by this operation.
+            AbstractValue | None:
+                AbstractValue | None produced by this operation.
 
         """
         return cls._convert(name="str", args=args)
@@ -882,10 +929,12 @@ class AbstractInterpreter:
         """Model ``bool`` of a known primitive.
 
         Args:
-            args: Collection of args supplied for this operation.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
 
         Returns:
-            AbstractValue | None produced by this operation.
+            AbstractValue | None:
+                AbstractValue | None produced by this operation.
 
         """
         return cls._convert(name="bool", args=args)
@@ -899,10 +948,12 @@ class AbstractInterpreter:
         """Fold a known sequence with exact addition.
 
         Args:
-            args: Collection of args supplied for this operation.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
 
         Returns:
-            AbstractValue | None produced by this operation.
+            AbstractValue | None:
+                AbstractValue | None produced by this operation.
 
         """
         if len(args) != 1 or not isinstance(args[0], SequenceValue):
@@ -918,15 +969,16 @@ class AbstractInterpreter:
         node: Pass | Global | Nonlocal,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_pass`` for Global.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_pass`` for Global.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Pass | Global | Nonlocal): The node examined while alias of
+                ``step_pass`` for Global.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return cls.step_pass(node, frame)
@@ -937,15 +989,16 @@ class AbstractInterpreter:
         node: Pass | Global | Nonlocal,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_pass`` for Nonlocal.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_pass`` for Nonlocal.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Pass | Global | Nonlocal): The node examined while alias of
+                ``step_pass`` for Nonlocal.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return cls.step_pass(node, frame)
@@ -961,13 +1014,14 @@ class AbstractInterpreter:
         """Infer Constant for ``_eval``.
 
         Args:
-            _context_id: Context id supplied as int for this operation.
-            _identity: Identity supplied as int for this operation.
-            _state: State supplied as State for this operation.
-            node: The node examined while infer Constant for ``_eval``.
+            _context_id (int): Context id supplied as int for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            _state (State): State supplied as State for this operation.
+            node (Constant): The node examined while infer Constant for
+                ``_eval``.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         UnknownValue(reason=f"unsupported {type(node).__name__}")
@@ -985,13 +1039,14 @@ class AbstractInterpreter:
         """Infer Yield (and kin) for ``_eval``.
 
         Args:
-            _context_id: Context id supplied as int for this operation.
-            _identity: Identity supplied as int for this operation.
-            _state: State supplied as State for this operation.
-            node: The node examined while infer Yield (and kin) for ``_eval``.
+            _context_id (int): Context id supplied as int for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            _state (State): State supplied as State for this operation.
+            node (Yield | YieldFrom | GeneratorExp | ListComp): The node
+                examined while infer Yield (and kin) for ``_eval``.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         UnknownValue(reason=f"unsupported {type(node).__name__}")
@@ -1005,10 +1060,12 @@ class AbstractInterpreter:
         """Model ``len`` of a known sequence or string.
 
         Args:
-            args: Collection of args supplied for this operation.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
 
         Returns:
-            AbstractValue | None produced by this operation.
+            AbstractValue | None:
+                AbstractValue | None produced by this operation.
 
         """
         if len(args) != 1:
@@ -1031,10 +1088,12 @@ class AbstractInterpreter:
         """Model ``abs`` of a known number.
 
         Args:
-            args: Collection of args supplied for this operation.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
 
         Returns:
-            AbstractValue | None produced by this operation.
+            AbstractValue | None:
+                AbstractValue | None produced by this operation.
 
         """
         if (
@@ -1054,10 +1113,12 @@ class AbstractInterpreter:
         """Materialize a small ``range`` of known integers.
 
         Args:
-            args: Collection of args supplied for this operation.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
 
         Returns:
-            AbstractValue | None produced by this operation.
+            AbstractValue | None:
+                AbstractValue | None produced by this operation.
 
         """
         if not (
@@ -1086,29 +1147,29 @@ class AbstractInterpreter:
         return None
 
     @staticmethod
-    def step_break(_node: Break, frame: StepFrame, /) -> list[Flow]:
+    def step_break(_node: Break, frame: StepFrame, /) -> ListFlow:
         """Handle Break in ``_step``.
 
         Args:
-            _node: Node supplied as Break for this operation.
-            frame: Frame supplied as StepFrame for this operation.
+            _node (Break): Node supplied as Break for this operation.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return [Flow(state=frame.state, control="break")]
 
     @staticmethod
-    def step_continue(_node: Continue, frame: StepFrame, /) -> list[Flow]:
+    def step_continue(_node: Continue, frame: StepFrame, /) -> ListFlow:
         """Handle Continue in ``_step``.
 
         Args:
-            _node: Node supplied as Continue for this operation.
-            frame: Frame supplied as StepFrame for this operation.
+            _node (Continue): Node supplied as Continue for this operation.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return [Flow(state=frame.state, control="continue")]
@@ -1118,16 +1179,16 @@ class AbstractInterpreter:
         _node: Pass | Global | Nonlocal,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle Pass or Global or Nonlocal in ``_step``.
 
         Args:
-            _node: Node supplied as Pass | Global | Nonlocal for this
-                operation.
-            frame: Frame supplied as StepFrame for this operation.
+            _node (Pass | Global | Nonlocal): Node supplied as Pass | Global |
+                Nonlocal for this operation.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return [Flow(state=frame.state)]
@@ -1141,11 +1202,13 @@ class AbstractInterpreter:
         """Handle MatchSingleton in ``_match_pattern``.
 
         Args:
-            frame: Frame supplied as MatchPatternFrame for this operation.
-            pattern: Pattern supplied as MatchSingleton for this operation.
+            frame (MatchPatternFrame): Frame supplied as MatchPatternFrame for
+                this operation.
+            pattern (MatchSingleton): Pattern supplied as MatchSingleton for
+                this operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         if isinstance(frame.subject, LiteralValue):
@@ -1161,8 +1224,10 @@ class AbstractInterpreter:
         """Handle MatchClass in ``_match_pattern``.
 
         Args:
-            _frame: Frame supplied as MatchPatternFrame for this operation.
-            _pattern: Pattern supplied as MatchClass for this operation.
+            _frame (MatchPatternFrame): Frame supplied as MatchPatternFrame for
+                this operation.
+            _pattern (MatchClass): Pattern supplied as MatchClass for this
+                operation.
 
         Returns:
             bool | None produced by this operation.
@@ -1181,13 +1246,13 @@ class AbstractInterpreter:
         """Infer Name for ``_eval``.
 
         Args:
-            _context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while infer Name for ``_eval``.
-            state: State supplied as State for this operation.
+            _context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Name): The node examined while infer Name for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1229,13 +1294,14 @@ class AbstractInterpreter:
         """Infer List or Set for ``_eval``.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while infer List or Set for ``_eval``.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (List | Set): The node examined while infer List or Set for
+                ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1266,13 +1332,14 @@ class AbstractInterpreter:
         """Alias of ``eval_list`` for Set.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while alias of ``eval_list`` for Set.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (List | Set): The node examined while alias of ``eval_list``
+                for Set.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         return self.eval_list(node, state, context_id, identity)
@@ -1288,13 +1355,13 @@ class AbstractInterpreter:
         """Infer Tuple for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer Tuple for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (Tuple): The node examined while infer Tuple for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         UnknownValue(reason=f"unsupported {type(node).__name__}")
@@ -1316,13 +1383,13 @@ class AbstractInterpreter:
         """Infer Dict for ``_eval``.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while infer Dict for ``_eval``.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Dict): The node examined while infer Dict for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1360,13 +1427,14 @@ class AbstractInterpreter:
         """Infer BinOp or UnaryOp for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer BinOp or UnaryOp for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (BinOp | UnaryOp): The node examined while infer BinOp or
+                UnaryOp for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1420,13 +1488,14 @@ class AbstractInterpreter:
         """Alias of ``eval_binop`` for UnaryOp.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while alias of ``eval_binop`` for UnaryOp.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (BinOp | UnaryOp): The node examined while alias of
+                ``eval_binop`` for UnaryOp.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         return self.eval_binop(node, state, context_id, identity)
@@ -1442,13 +1511,13 @@ class AbstractInterpreter:
         """Infer BoolOp for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer BoolOp for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (BoolOp): The node examined while infer BoolOp for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1498,13 +1567,13 @@ class AbstractInterpreter:
         """Infer IfExp for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer IfExp for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (IfExp): The node examined while infer IfExp for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1559,13 +1628,14 @@ class AbstractInterpreter:
         """Infer Compare for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer Compare for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (Compare): The node examined while infer Compare for ``_eval``
+                .
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         UnknownValue(reason=f"unsupported {type(node).__name__}")
@@ -1606,13 +1676,14 @@ class AbstractInterpreter:
         """Infer Subscript for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer Subscript for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (Subscript): The node examined while infer Subscript for
+                ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1675,13 +1746,14 @@ class AbstractInterpreter:
         """Infer Attribute for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer Attribute for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (Attribute): The node examined while infer Attribute for
+                ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1722,13 +1794,13 @@ class AbstractInterpreter:
         """Infer Call for ``_eval``.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while infer Call for ``_eval``.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Call): The node examined while infer Call for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1753,13 +1825,14 @@ class AbstractInterpreter:
         """Infer NamedExpr for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer NamedExpr for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (NamedExpr): The node examined while infer NamedExpr for
+                ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1789,14 +1862,15 @@ class AbstractInterpreter:
         """Infer JoinedStr or FormattedValue for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer JoinedStr or FormattedValue for
-                ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (JoinedStr | FormattedValue): The node examined while infer
+                JoinedStr
+                or FormattedValue for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -1868,14 +1942,14 @@ class AbstractInterpreter:
         """Alias of ``eval_joinedstr`` for FormattedValue.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while alias of ``eval_joinedstr`` for
-                FormattedValue.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (JoinedStr | FormattedValue): The node examined while alias of
+                ``eval_joinedstr`` for FormattedValue.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         return self.eval_joinedstr(node, state, context_id, identity)
@@ -1891,13 +1965,14 @@ class AbstractInterpreter:
         """Infer Lambda (and kin) for ``_eval``.
 
         Args:
-            _context_id: Context id supplied as int for this operation.
-            _state: State supplied as State for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while infer Lambda (and kin) for ``_eval``.
+            _context_id (int): Context id supplied as int for this operation.
+            _state (State): State supplied as State for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Lambda | FunctionDef | AsyncFunctionDef): The node examined
+                while infer Lambda (and kin) for ``_eval``.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         UnknownValue(reason=f"unsupported {type(node).__name__}")
@@ -1915,14 +1990,15 @@ class AbstractInterpreter:
         """Alias of ``eval_lambda`` for FunctionDef.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while alias of ``eval_lambda`` for
-                FunctionDef.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Lambda | FunctionDef | AsyncFunctionDef): The node examined
+                while alias of
+                ``eval_lambda`` for FunctionDef.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         return self.eval_lambda(node, state, context_id, identity)
@@ -1938,14 +2014,15 @@ class AbstractInterpreter:
         """Alias of ``eval_lambda`` for AsyncFunctionDef.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            identity: Identity supplied as int for this operation.
-            node: The node examined while alias of ``eval_lambda`` for
-                AsyncFunctionDef.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
+            node (Lambda | FunctionDef | AsyncFunctionDef): The node examined
+                while alias of
+                ``eval_lambda`` for AsyncFunctionDef.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         return self.eval_lambda(node, state, context_id, identity)
@@ -1961,13 +2038,13 @@ class AbstractInterpreter:
         """Infer Await for ``_eval``.
 
         Args:
-            _identity: Identity supplied as int for this operation.
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while infer Await for ``_eval``.
-            state: State supplied as State for this operation.
+            _identity (int): Identity supplied as int for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (Await): The node examined while infer Await for ``_eval``.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         result: AbstractValue = UnknownValue(
@@ -2011,14 +2088,15 @@ class AbstractInterpreter:
         """Analyze an internal call in isolation and propagate effects.
 
         Args:
-            arguments: Collection of arguments supplied for this operation.
-            awaited: Awaited supplied as bool for this operation.
-            caller_id: Caller id supplied as int for this operation.
-            function_id: Function id supplied as int for this operation.
-            state: State supplied as State for this operation.
+            arguments (ActualArguments): Collection of arguments supplied for
+                this operation.
+            awaited (bool): Awaited supplied as bool for this operation.
+            caller_id (int): Caller id supplied as int for this operation.
+            function_id (int): Function id supplied as int for this operation.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         args: tuple[AbstractValue, ...] = arguments.positional
@@ -2070,7 +2148,7 @@ class AbstractInterpreter:
             caller_id=caller_id,
             environment=environment,
         )
-        paths: list[Flow] = self._execute_call(
+        paths: ListFlow = self._execute_call(
             function=function,
             environment=environment,
             call_context=call_context,
@@ -2123,19 +2201,20 @@ class AbstractInterpreter:
     ) -> tuple[int, ...] | None:
         """Reexecute changed module statements until abstract states stabilize.
 
-        Only existing top-level statement identities are supported here.  The
+        Only existing top-level statement identities are supported here. The
         caller must request a full rebuild for altered lexical scopes, changed
         function/class bodies, or any changed statement ordering.
 
         Returns:
-            Statement IDs actually reexecuted, or None if a full rebuild is
-            required for a structural change.
-
-
+            tuple[int, ...] | None:
+                Statement IDs actually reexecuted, or None if a
+                full rebuild is required for a structural change.
 
         Args:
-            dirty: Dirty supplied as frozenset[int] for this operation.
-            scopes: Collection of scopes supplied for this operation.
+            dirty (frozenset[int]): Dirty supplied as frozenset[int] for this
+                operation.
+            scopes (ScopeGraph): Collection of scopes supplied for this
+                operation.
 
         """
         body: list[stmt] = getattr(self.root, "body", [])
@@ -2160,7 +2239,7 @@ class AbstractInterpreter:
             if not 0 <= index < len(body):
                 return None
             statement: stmt = body[index]
-            inputs: list[Flow] = (
+            inputs: ListFlow = (
                 [Flow(state=State())]
                 if index == 0
                 else list(
@@ -2205,16 +2284,17 @@ class AbstractInterpreter:
         node: FunctionDef | AsyncFunctionDef,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle FunctionDef or AsyncFunctionDef in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle FunctionDef or
-                AsyncFunctionDef in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (FunctionDef | AsyncFunctionDef): The node examined while
+                handle FunctionDef
+                or AsyncFunctionDef in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         self.function_nodes[frame.identity] = node
@@ -2240,16 +2320,17 @@ class AbstractInterpreter:
         node: FunctionDef | AsyncFunctionDef,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_functiondef`` for AsyncFunctionDef.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_functiondef`` for
-                AsyncFunctionDef.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (FunctionDef | AsyncFunctionDef): The node examined while
+                alias of
+                ``step_functiondef`` for AsyncFunctionDef.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self.step_functiondef(node, frame)
@@ -2259,16 +2340,16 @@ class AbstractInterpreter:
         node: Assign | AnnAssign,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle Assign or AnnAssign in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Assign or AnnAssign in
-                ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Assign | AnnAssign): The node examined while handle
+                Assign or AnnAssign in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         expression: AST | None = node.value
@@ -2299,16 +2380,16 @@ class AbstractInterpreter:
         node: Assign | AnnAssign,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_assign`` for AnnAssign.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_assign`` for
-                AnnAssign.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Assign | AnnAssign): The node examined while alias of
+                ``step_assign`` for AnnAssign.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self.step_assign(node, frame)
@@ -2318,15 +2399,16 @@ class AbstractInterpreter:
         node: AugAssign,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle AugAssign in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle AugAssign in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (AugAssign): The node examined while handle AugAssign in
+                ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         previous: AbstractValue = self._eval(
@@ -2354,15 +2436,15 @@ class AbstractInterpreter:
         )
         return [Flow(state=frame.state)]
 
-    def step_expr(self, node: Expr, frame: StepFrame, /) -> list[Flow]:
+    def step_expr(self, node: Expr, frame: StepFrame, /) -> ListFlow:
         """Handle Expr in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Expr in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Expr): The node examined while handle Expr in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         value: AbstractValue = self._eval(
@@ -2378,15 +2460,15 @@ class AbstractInterpreter:
             ),
         ]
 
-    def step_return(self, node: Return, frame: StepFrame, /) -> list[Flow]:
+    def step_return(self, node: Return, frame: StepFrame, /) -> ListFlow:
         """Handle Return in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Return in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Return): The node examined while handle Return in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         value: AbstractValue = self._eval(
@@ -2402,15 +2484,15 @@ class AbstractInterpreter:
             ),
         ]
 
-    def step_raise(self, node: Raise, frame: StepFrame, /) -> list[Flow]:
+    def step_raise(self, node: Raise, frame: StepFrame, /) -> ListFlow:
         """Handle Raise in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Raise in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Raise): The node examined while handle Raise in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         if isinstance(node.exc, Call) and isinstance(node.exc.func, Name):
@@ -2455,15 +2537,15 @@ class AbstractInterpreter:
             ),
         ]
 
-    def step_if(self, node: If, frame: StepFrame, /) -> list[Flow]:
+    def step_if(self, node: If, frame: StepFrame, /) -> ListFlow:
         """Handle If in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle If in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (If): The node examined while handle If in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         condition: AbstractValue = self._eval(
@@ -2472,7 +2554,7 @@ class AbstractInterpreter:
             context_id=frame.context_id,
         )
         truth: bool | None = truth_value(value=condition)
-        paths: list[Flow] = []
+        paths: ListFlow = []
         if truth is not False:
             paths.extend(
                 self._execute_suite(
@@ -2496,16 +2578,16 @@ class AbstractInterpreter:
         node: While | For | AsyncFor,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle While or For or AsyncFor in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle While or For or AsyncFor in
-                ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (While | For | AsyncFor): The node examined while handle While
+                or For or AsyncFor in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self._loop(
@@ -2519,15 +2601,16 @@ class AbstractInterpreter:
         node: While | For | AsyncFor,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_while`` for For.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_while`` for For.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (While | For | AsyncFor): The node examined while alias of
+                ``step_while`` for For.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self.step_while(node, frame)
@@ -2537,28 +2620,30 @@ class AbstractInterpreter:
         node: While | For | AsyncFor,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_while`` for AsyncFor.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_while`` for AsyncFor.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (While | For | AsyncFor): The node examined while alias of
+                ``step_while`` for AsyncFor.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self.step_while(node, frame)
 
-    def step_try(self, node: Try | TryStar, frame: StepFrame, /) -> list[Flow]:
+    def step_try(self, node: Try | TryStar, frame: StepFrame, /) -> ListFlow:
         """Handle Try or TryStar in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Try or TryStar in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Try | TryStar): The node examined while handle Try or TryStar
+                in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self._try(
@@ -2572,15 +2657,16 @@ class AbstractInterpreter:
         node: Try | TryStar,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_try`` for TryStar.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_try`` for TryStar.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Try | TryStar): The node examined while alias of ``step_try``
+                for TryStar.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self.step_try(node, frame)
@@ -2590,16 +2676,16 @@ class AbstractInterpreter:
         node: With | AsyncWith,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle With or AsyncWith in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle With or AsyncWith in
-                ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (With | AsyncWith): The node examined while handle With or
+                AsyncWith in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         for item in node.items:
@@ -2622,7 +2708,7 @@ class AbstractInterpreter:
                     write=True,
                 )
                 self.heap.havoc(reference=receiver, objects=frame.state.heap)
-        result: list[Flow] = self._execute_suite(
+        result: ListFlow = self._execute_suite(
             body=node.body,
             paths=[Flow(state=frame.state)],
             context_id=frame.context_id,
@@ -2634,28 +2720,29 @@ class AbstractInterpreter:
         node: With | AsyncWith,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_with`` for AsyncWith.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_with`` for AsyncWith.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (With | AsyncWith): The node examined while alias of
+                ``step_with`` for AsyncWith.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self.step_with(node, frame)
 
-    def step_delete(self, node: Delete, frame: StepFrame, /) -> list[Flow]:
+    def step_delete(self, node: Delete, frame: StepFrame, /) -> ListFlow:
         """Handle Delete in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Delete in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Delete): The node examined while handle Delete in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         for target in node.targets:
@@ -2679,16 +2766,16 @@ class AbstractInterpreter:
         node: Import | ImportFrom,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle Import or ImportFrom in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Import or ImportFrom in
-                ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Import | ImportFrom): The node examined while handle
+                Import or ImportFrom in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         for part in node.names:
@@ -2706,29 +2793,29 @@ class AbstractInterpreter:
         node: Import | ImportFrom,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Alias of ``step_import`` for ImportFrom.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while alias of ``step_import`` for
-                ImportFrom.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Import | ImportFrom): The node examined while alias of
+                ``step_import`` for ImportFrom.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         return self.step_import(node, frame)
 
-    def step_assert(self, node: Assert, frame: StepFrame, /) -> list[Flow]:
+    def step_assert(self, node: Assert, frame: StepFrame, /) -> ListFlow:
         """Handle Assert in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Assert in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Assert): The node examined while handle Assert in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         condition: AbstractValue = self._eval(
@@ -2745,15 +2832,15 @@ class AbstractInterpreter:
             ]
         return [Flow(state=frame.state)]
 
-    def step_match(self, node: Match, frame: StepFrame, /) -> list[Flow]:
+    def step_match(self, node: Match, frame: StepFrame, /) -> ListFlow:
         """Handle Match in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle Match in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (Match): The node examined while handle Match in ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         subject: AbstractValue = self._eval(
@@ -2761,10 +2848,10 @@ class AbstractInterpreter:
             state=frame.state,
             context_id=frame.context_id,
         )
-        remaining: list[Flow] = [Flow(state=frame.state.clone())]
-        matched: list[Flow] = []
+        remaining: ListFlow = [Flow(state=frame.state.clone())]
+        matched: ListFlow = []
         for case in node.cases:
-            next_remaining: list[Flow] = []
+            next_remaining: ListFlow = []
             for path in remaining:
                 branch_state: State = path.state.clone()
                 decision: bool | None = self._match_pattern(
@@ -2805,15 +2892,16 @@ class AbstractInterpreter:
         node: TypeAlias,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle TypeAlias in ``_step``.
 
         Args:
-            frame: Frame supplied as StepFrame for this operation.
-            node: The node examined while handle TypeAlias in ``_step``.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
+            node (TypeAlias): The node examined while handle TypeAlias in
+                ``_step``.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         self._assign(
@@ -2829,15 +2917,15 @@ class AbstractInterpreter:
         _node: ClassDef,
         frame: StepFrame,
         /,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Handle ClassDef in ``_step``.
 
         Args:
-            _node: Node supplied as ClassDef for this operation.
-            frame: Frame supplied as StepFrame for this operation.
+            _node (ClassDef): Node supplied as ClassDef for this operation.
+            frame (StepFrame): Frame supplied as StepFrame for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         occurrence: Occurrence | None = self.scopes.occurrences.get(
@@ -2858,11 +2946,12 @@ class AbstractInterpreter:
         """Handle MatchAs in ``_match_pattern``.
 
         Args:
-            frame: Frame supplied as MatchPatternFrame for this operation.
-            pattern: Pattern supplied as MatchAs for this operation.
+            frame (MatchPatternFrame): Frame supplied as MatchPatternFrame for
+                this operation.
+            pattern (MatchAs): Pattern supplied as MatchAs for this operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         if pattern.pattern is not None:
@@ -2891,11 +2980,13 @@ class AbstractInterpreter:
         """Handle MatchStar in ``_match_pattern``.
 
         Args:
-            frame: Frame supplied as MatchPatternFrame for this operation.
-            pattern: Pattern supplied as MatchStar for this operation.
+            frame (MatchPatternFrame): Frame supplied as MatchPatternFrame for
+                this operation.
+            pattern (MatchStar): Pattern supplied as MatchStar for this
+                operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         if pattern.name is not None:
@@ -2915,11 +3006,13 @@ class AbstractInterpreter:
         """Handle MatchValue in ``_match_pattern``.
 
         Args:
-            frame: Frame supplied as MatchPatternFrame for this operation.
-            pattern: Pattern supplied as MatchValue for this operation.
+            frame (MatchPatternFrame): Frame supplied as MatchPatternFrame for
+                this operation.
+            pattern (MatchValue): Pattern supplied as MatchValue for this
+                operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         expected: AbstractValue = self._eval(
@@ -2938,11 +3031,13 @@ class AbstractInterpreter:
         """Handle MatchSequence in ``_match_pattern``.
 
         Args:
-            frame: Frame supplied as MatchPatternFrame for this operation.
-            pattern: Pattern supplied as MatchSequence for this operation.
+            frame (MatchPatternFrame): Frame supplied as MatchPatternFrame for
+                this operation.
+            pattern (MatchSequence): Pattern supplied as MatchSequence for this
+                operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         elements: tuple[AbstractValue, ...] | None = self._sequence_elements(
@@ -3002,11 +3097,12 @@ class AbstractInterpreter:
         """Handle MatchOr in ``_match_pattern``.
 
         Args:
-            frame: Frame supplied as MatchPatternFrame for this operation.
-            pattern: Pattern supplied as MatchOr for this operation.
+            frame (MatchPatternFrame): Frame supplied as MatchPatternFrame for
+                this operation.
+            pattern (MatchOr): Pattern supplied as MatchOr for this operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         possibilities: list[State] = []
@@ -3043,8 +3139,10 @@ class AbstractInterpreter:
         """Handle MatchMapping in ``_match_pattern``.
 
         Args:
-            frame: Frame supplied as MatchPatternFrame for this operation.
-            pattern: Pattern supplied as MatchMapping for this operation.
+            frame (MatchPatternFrame): Frame supplied as MatchPatternFrame for
+                this operation.
+            pattern (MatchMapping): Pattern supplied as MatchMapping for this
+                operation.
 
         Returns:
             bool | None produced by this operation.
@@ -3096,12 +3194,14 @@ class AbstractInterpreter:
         """Compare safe immutable built-ins without unsafe identity claims.
 
         Args:
-            left: Left supplied as AbstractValue for this operation.
-            op: Op supplied as AST for this operation.
-            right: Right supplied as AbstractValue for this operation.
+            left (AbstractValue): Left supplied as AbstractValue for this
+                operation.
+            op (AST): Op supplied as AST for this operation.
+            right (AbstractValue): Right supplied as AbstractValue for this
+                operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         if not isinstance(left, LiteralValue) or not isinstance(
@@ -3132,11 +3232,12 @@ class AbstractInterpreter:
         """Evaluate a small built-in whitelist on trusted abstract inputs.
 
         Args:
-            args: Collection of args supplied for this operation.
-            name: Identifier of the name being resolved.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
+            name (str): Identifier of the name being resolved.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         handler: Callable[..., AbstractValue | None] | None = getattr(
@@ -3163,11 +3264,13 @@ class AbstractInterpreter:
         """Match only known built-in exception names; never run handlers.
 
         Args:
-            exception: Exception supplied as AbstractValue for this operation.
-            handler: Handler supplied as ExceptHandler for this operation.
+            exception (AbstractValue): Exception supplied as AbstractValue for
+                this operation.
+            handler (ExceptHandler): Handler supplied as ExceptHandler for this
+                operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         if handler.type is None:
@@ -3190,12 +3293,14 @@ class AbstractInterpreter:
         """Compute exact arithmetic only for approved primitive operands.
 
         Args:
-            left: Left supplied as AbstractValue for this operation.
-            op: Op supplied as AST for this operation.
-            right: Right supplied as AbstractValue for this operation.
+            left (AbstractValue): Left supplied as AbstractValue for this
+                operation.
+            op (AST): Op supplied as AST for this operation.
+            right (AbstractValue): Right supplied as AbstractValue for this
+                operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         if not isinstance(left, LiteralValue) or not isinstance(
@@ -3227,12 +3332,12 @@ class AbstractInterpreter:
         """Perform safe known built-in unary operations.
 
         Args:
-            op: Op supplied as AST for this operation.
-            value: The value examined while perform safe known built-in unary
-                operations.
+            op (AST): Op supplied as AST for this operation.
+            value (AbstractValue): The value examined while perform safe
+                known built-in unary operations.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         if isinstance(op, Not):
@@ -3261,12 +3366,12 @@ class AbstractInterpreter:
         """Decide ``is`` / ``is not`` only when ``None`` is involved.
 
         Args:
-            a: A supplied as Primitive for this operation.
-            b: B supplied as Primitive for this operation.
-            op: Op supplied as AST for this operation.
+            a (Primitive): A supplied as Primitive for this operation.
+            b (Primitive): B supplied as Primitive for this operation.
+            op (AST): Op supplied as AST for this operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         if a is None or b is None:
@@ -3284,12 +3389,12 @@ class AbstractInterpreter:
         """Decide ordering and ``in`` / ``not in`` for primitive operands.
 
         Args:
-            a: A supplied as Primitive for this operation.
-            b: B supplied as Primitive for this operation.
-            op: Op supplied as AST for this operation.
+            a (Primitive): A supplied as Primitive for this operation.
+            b (Primitive): B supplied as Primitive for this operation.
+            op (AST): Op supplied as AST for this operation.
 
         Returns:
-            bool | None produced by this operation.
+            bool | None: bool | None produced by this operation.
 
         """
         ordering: Callable[[Primitive, Primitive], bool] | None = (
@@ -3311,11 +3416,13 @@ class AbstractInterpreter:
         """Model ``int``, ``str`` and ``bool`` of one known primitive.
 
         Args:
-            args: Collection of args supplied for this operation.
-            name: Identifier of the name being resolved.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
+            name (str): Identifier of the name being resolved.
 
         Returns:
-            AbstractValue | None produced by this operation.
+            AbstractValue | None:
+                AbstractValue | None produced by this operation.
 
         """
         if len(args) != 1 or not isinstance(args[0], LiteralValue):
@@ -3340,11 +3447,12 @@ class AbstractInterpreter:
         """Detect suspension in this function, excluding nested scopes.
 
         Args:
-            function: The function examined while detect suspension in this
-                function, excluding nested scopes.
+            function (FunctionDef | AsyncFunctionDef): The function examined
+                while detect suspension
+                in this function, excluding nested scopes.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         pending: list[AST] = list(function.body)
@@ -3360,14 +3468,14 @@ class AbstractInterpreter:
         return False
 
     @staticmethod
-    def _clone_paths(*, paths: list[Flow]) -> tuple[Flow, ...]:
+    def _clone_paths(*, paths: ListFlow) -> tuple[Flow, ...]:
         """Snapshot each path independently for incremental reuse.
 
         Args:
-            paths: Paths supplied as list[Flow] for this operation.
+            paths (ListFlow): Paths supplied as list[Flow] for this operation.
 
         Returns:
-            tuple[Flow, ...] produced by this operation.
+            tuple[Flow, ...]: tuple[Flow, ...] produced by this operation.
 
         """
         return tuple(
@@ -3388,11 +3496,13 @@ class AbstractInterpreter:
         """Known elements of a sequence or an unmodified abstract list.
 
         Args:
-            state: State supplied as State for this operation.
-            subject: Subject supplied as AbstractValue for this operation.
+            state (State): State supplied as State for this operation.
+            subject (AbstractValue): Subject supplied as AbstractValue for this
+                operation.
 
         Returns:
-            tuple[AbstractValue, ...] | None produced by this operation.
+            tuple[AbstractValue, ...] | None:
+                tuple[AbstractValue, ...] | None produced by this operation.
 
         """
         if isinstance(subject, SequenceValue):
@@ -3417,10 +3527,11 @@ class AbstractInterpreter:
         """Plain exception class names an ``except`` clause lists.
 
         Args:
-            handler: Handler supplied as ExceptHandler for this operation.
+            handler (ExceptHandler): Handler supplied as ExceptHandler for this
+                operation.
 
         Returns:
-            tuple[str, ...] produced by this operation.
+            tuple[str, ...]: tuple[str, ...] produced by this operation.
 
         """
         if isinstance(handler.type, Tuple):
@@ -3436,10 +3547,12 @@ class AbstractInterpreter:
         """Collect abstract object identities an inferred value may denote.
 
         Args:
-            value: Inferred value inspected for object references.
+            value (AbstractValue): Inferred value inspected for object
+                references.
 
         Returns:
-            Possible allocation identities reachable without heap reads.
+            frozenset[int]: Possible allocation identities reachable without
+                heap reads.
 
         """
         pending: list[AbstractValue] = [value]
@@ -3465,16 +3578,17 @@ class AbstractInterpreter:
         """Store a proof and node-level value dependencies.
 
         Args:
-            exceptions: Exceptions supplied as tuple[str, ...] for this
+            exceptions (tuple[str, ...]): Exceptions supplied as tuple[str,
+                ...] for this operation.
+            node (AST): The node examined while store a proof
+                and node-level value dependencies.
+            trace (tuple[str, ...]): Trace supplied as tuple[str, ...] for this
                 operation.
-            node: The node examined while store a proof and node-level value
-                dependencies.
-            trace: Trace supplied as tuple[str, ...] for this operation.
-            value: The value examined while store a proof and node-level value
-                dependencies.
+            value (AbstractValue): The value examined while store a proof
+                and node-level value dependencies.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         identity: int = self.identities.node_id(node=node)
@@ -3562,7 +3676,7 @@ class AbstractInterpreter:
         """Check the global operation budget before an expression.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         self._operations += 1
@@ -3574,7 +3688,7 @@ class AbstractInterpreter:
         """Check the composite expression-operation budget.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         self._symbolic_operations += 1
@@ -3592,13 +3706,13 @@ class AbstractInterpreter:
         """Evaluate supported AST syntax using safe explicit transfer rules.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while evaluate supported AST syntax using
-                safe explicit transfer rules.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (AST | None): The node examined while evaluate supported AST
+                syntax using safe explicit transfer rules.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         if node is None:
@@ -3637,11 +3751,11 @@ class AbstractInterpreter:
         """Bind a resolved name and annotate its target node.
 
         Args:
-            state: State supplied as State for this operation.
-            target: The target examined while bind a resolved name and annotate
-                its target node.
-            value: The value examined while bind a resolved name and annotate
-                its target node.
+            state (State): State supplied as State for this operation.
+            target (Name): The target examined while bind a resolved
+                name and annotate its target node.
+            value (AbstractValue): The value examined while bind a resolved
+                name and annotate its target node.
 
         """
         occurrence: Occurrence | None = self.scopes.occurrences.get(
@@ -3669,12 +3783,12 @@ class AbstractInterpreter:
         """Unpack a known sequence value into a tuple or list target.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            state: State supplied as State for this operation.
-            target: The target examined while unpack a known sequence value
-                into a tuple or list target.
-            value: The value examined while unpack a known sequence value into
-                a tuple or list target.
+            context_id (int): Context id supplied as int for this operation.
+            state (State): State supplied as State for this operation.
+            target (Tuple | List): The target examined while unpack a known
+                sequence value into a tuple or list target.
+            value (AbstractValue): The value examined while unpack a known
+                sequence value into a tuple or list target.
 
         """
         items: tuple[AbstractValue, ...] = ()
@@ -3707,12 +3821,13 @@ class AbstractInterpreter:
         """Write through a subscript or attribute into an abstract object.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            state: State supplied as State for this operation.
-            target: The target examined while write through a subscript or
-                attribute into an abstract object.
-            value: The value examined while write through a subscript or
-                attribute into an abstract object.
+            context_id (int): Context id supplied as int for this operation.
+            state (State): State supplied as State for this operation.
+            target (Subscript | Attribute): The target examined while write
+                through a
+                subscript or attribute into an abstract object.
+            value (AbstractValue): The value examined while write through a
+                subscript or attribute into an abstract object.
 
         """
         receiver: AbstractValue = self._eval(
@@ -3745,12 +3860,13 @@ class AbstractInterpreter:
         """Bind a lexical symbol or safely update an abstract heap location.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            state: State supplied as State for this operation.
-            target: The target examined while bind a lexical symbol or safely
-                update an abstract heap location.
-            value: The value examined while bind a lexical symbol or safely
-                update an abstract heap location.
+            context_id (int): Context id supplied as int for this operation.
+            state (State): State supplied as State for this operation.
+            target (AST): The target examined while bind a lexical symbol
+                or safely update an abstract heap location.
+            value (AbstractValue): The value examined while bind a lexical
+                symbol
+                or safely update an abstract heap location.
 
         """
         if isinstance(target, Name):
@@ -3789,16 +3905,18 @@ class AbstractInterpreter:
         """Interpret a call of a known local function or lambda.
 
         Args:
-            arguments: Collection of arguments supplied for this operation.
-            callee: Callee supplied as FunctionValue for this operation.
-            keywords: Keywords supplied as dict[str, AbstractValue] for this
+            arguments (tuple[AbstractValue, ...]): Collection of arguments
+                supplied for this operation.
+            callee (FunctionValue): Callee supplied as FunctionValue for this
                 operation.
-            node: The node examined while interpret a call of a known local
-                function or lambda.
-            state: State supplied as State for this operation.
+            keywords (dict[str, AbstractValue]): Keywords supplied as dict[str,
+                AbstractValue] for this operation.
+            node (Call): The node examined while interpret a call
+                of a known local function or lambda.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         caller_id: int = self.identities.node_id(node=node)
@@ -3844,9 +3962,9 @@ class AbstractInterpreter:
         """Record a heap-location dependency edge for an accessing node.
 
         Args:
-            node: Syntax node performing the heap access.
-            reference: Abstract objects the access may reach.
-            write: True for mutations, False for reads.
+            node (AST): Syntax node performing the heap access.
+            reference (ObjectReference): Abstract objects the access may reach.
+            write (bool): True for mutations, False for reads.
 
         """
         identity: int = self.identities.node_id(node=node)
@@ -3879,10 +3997,12 @@ class AbstractInterpreter:
         """Invalidate heap objects an unanalyzable call may mutate.
 
         Args:
-            arguments: Collection of arguments supplied for this operation.
-            callee: Callee supplied as AbstractValue for this operation.
-            node: Call expression causing the invalidation.
-            state: State supplied as State for this operation.
+            arguments (tuple[AbstractValue, ...]): Collection of arguments
+                supplied for this operation.
+            callee (AbstractValue): Callee supplied as AbstractValue for this
+                operation.
+            node (AST): Call expression causing the invalidation.
+            state (State): State supplied as State for this operation.
 
         """
         for argument in arguments:
@@ -3905,13 +4025,13 @@ class AbstractInterpreter:
         """Interpret a known call or conservatively invalidate effects.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while interpret a known call or
+            context_id (int): Context id supplied as int for this operation.
+            node (Call): The node examined while interpret a known call or
                 conservatively invalidate effects.
-            state: State supplied as State for this operation.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         callee: AbstractValue = self._eval(
@@ -3970,13 +4090,15 @@ class AbstractInterpreter:
         """Model approved list mutations; unknown methods clear the heap.
 
         Args:
-            args: Collection of args supplied for this operation.
-            method: Method supplied as BoundMethodValue for this operation.
-            node: Call expression performing the method access.
-            state: State supplied as State for this operation.
+            args (tuple[AbstractValue, ...]): Collection of args supplied for
+                this operation.
+            method (BoundMethodValue): Method supplied as BoundMethodValue for
+                this operation.
+            node (AST): Call expression performing the method access.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            AbstractValue produced by this operation.
+            AbstractValue: AbstractValue produced by this operation.
 
         """
         self._touch_heap(node=node, reference=method.receiver, write=True)
@@ -4046,11 +4168,12 @@ class AbstractInterpreter:
         """Allocate or find the analysis context of a call, within budgets.
 
         Args:
-            key: Key supplied as tuple[int, int, tuple[AbstractValue, ...]] for
-                this operation.
+            key (tuple[int, int, tuple[AbstractValue, ...]]): Key supplied as
+                tuple[int, int,
+                tuple[AbstractValue, ...]] for this operation.
 
         Returns:
-            int | UnknownValue produced by this operation.
+            int | UnknownValue: int | UnknownValue produced by this operation.
 
         """
         if (
@@ -4083,12 +4206,15 @@ class AbstractInterpreter:
         """Bind actual arguments and defaults to the callee's parameters.
 
         Args:
-            arguments: Collection of arguments supplied for this operation.
-            caller_id: Caller id supplied as int for this operation.
-            environment: Environment supplied as State for this operation.
-            function: The function examined while bind actual arguments and
-                defaults to the callee's parameters.
-            function_id: Function id supplied as int for this operation.
+            arguments (ActualArguments): Collection of arguments supplied for
+                this operation.
+            caller_id (int): Caller id supplied as int for this operation.
+            environment (State): Environment supplied as State for this
+                operation.
+            function (FunctionDef | AsyncFunctionDef | Lambda): The function
+                examined while bind actual arguments
+                and defaults to the callee's parameters.
+            function_id (int): Function id supplied as int for this operation.
 
         """
         args, keywords = (arguments.positional, arguments.named)
@@ -4160,19 +4286,23 @@ class AbstractInterpreter:
         environment: State,
         call_context: int,
         key: tuple[int, int, tuple[AbstractValue, ...]],
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Run a callee body while tracking the active call stack.
 
         Args:
-            call_context: Call context supplied as int for this operation.
-            environment: Environment supplied as State for this operation.
-            function: The function examined while run a callee body while
-                tracking the active call stack.
-            key: Key supplied as tuple[int, int, tuple[AbstractValue, ...]] for
-                this operation.
+            call_context (int): Call context supplied as int for this
+                operation.
+            environment (State): Environment supplied as State for this
+                operation.
+            function (FunctionDef | AsyncFunctionDef | Lambda): The function
+                examined while run a callee
+                body while tracking the active call stack.
+            key (tuple[int, int, tuple[AbstractValue, ...]]): Key supplied as
+                tuple[int, int,
+                tuple[AbstractValue, ...]] for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         self._active_calls.add(key)
@@ -4199,15 +4329,16 @@ class AbstractInterpreter:
     def _join_paths(
         self,
         *,
-        paths: list[Flow],
+        paths: ListFlow,
     ) -> tuple[AbstractValue, State | None]:
         """Join normal returns, falling back to raised values.
 
         Args:
-            paths: Paths supplied as list[Flow] for this operation.
+            paths (ListFlow): Paths supplied as list[Flow] for this operation.
 
         Returns:
-            tuple[AbstractValue, State | None] produced by this operation.
+            tuple[AbstractValue, State | None]: tuple[AbstractValue, State |
+                None] produced by this operation.
 
         """
         result: AbstractValue = NeverValue()
@@ -4259,11 +4390,13 @@ class AbstractInterpreter:
         """Publish changes to globals and closure cells, never to locals.
 
         Args:
-            function_scope_id: Function scope id supplied as int for this
+            function_scope_id (int): Function scope id supplied as int for this
                 operation.
-            input_state: Input state supplied as State for this operation.
-            merged_state: Merged state supplied as State for this operation.
-            state: State supplied as State for this operation.
+            input_state (State): Input state supplied as State for this
+                operation.
+            merged_state (State): Merged state supplied as State for this
+                operation.
+            state (State): State supplied as State for this operation.
 
         """
         state.heap = merged_state.heap
@@ -4286,9 +4419,8 @@ class AbstractInterpreter:
         previously aggregated expression values are not valid evidence in
         this revision, even when the syntax itself did not change.
 
-
         Args:
-            body: Body supplied as list[stmt] for this operation.
+            body (list[stmt]): Body supplied as list[stmt] for this operation.
 
         """
         for statement in body:
@@ -4320,13 +4452,14 @@ class AbstractInterpreter:
         """Whether a statement's reads avoid calls and changed symbols.
 
         Args:
-            changed_symbols: Changed symbols supplied as set[int] for this
-                operation.
-            statement: The statement examined while whether a statement's reads
-                avoid calls and changed symbols.
+            changed_symbols (set[int]): Changed symbols supplied as set[int]
+                for this operation.
+            statement (stmt): The statement examined while whether a
+                statement's
+                reads avoid calls and changed symbols.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         for node in iter_child_nodes(node=statement):
@@ -4358,24 +4491,25 @@ class AbstractInterpreter:
         statement: stmt,
         index: int,
         dirty: frozenset[int],
-        inputs: list[Flow],
+        inputs: ListFlow,
     ) -> set[int] | None:
         """Symbols that changed on entry, or ``None`` if reuse is unsafe.
 
         An unchanged transfer is reused when none of its read dependencies or
         abstract heap locations changed.
 
-
         Args:
-            dirty: Dirty supplied as frozenset[int] for this operation.
-            index: Index identifying a position in the relevant sequence or
-                source.
-            inputs: Inputs supplied as list[Flow] for this operation.
-            statement: The statement examined while symbols that changed on
-                entry, or ``None`` if reuse is unsafe.
+            dirty (frozenset[int]): Dirty supplied as frozenset[int] for this
+                operation.
+            index (int): Index identifying a position in
+                the relevant sequence or source.
+            inputs (ListFlow): Inputs supplied as list[Flow] for this
+                operation.
+            statement (stmt): The statement examined while symbols that changed
+                on entry, or ``None`` if reuse is unsafe.
 
         Returns:
-            set[int] | None produced by this operation.
+            set[int] | None: set[int] | None produced by this operation.
 
         """
         previous_inputs: tuple[Flow, ...] = self._module_inputs[index]
@@ -4420,20 +4554,21 @@ class AbstractInterpreter:
         self,
         *,
         index: int,
-        inputs: list[Flow],
+        inputs: ListFlow,
         changed_symbols: set[int],
     ) -> tuple[Flow, ...]:
         """Carry incoming differences through a statement's cached output.
 
         Args:
-            changed_symbols: Changed symbols supplied as set[int] for this
+            changed_symbols (set[int]): Changed symbols supplied as set[int]
+                for this operation.
+            index (int): Index identifying a position in
+                the relevant sequence or source.
+            inputs (ListFlow): Inputs supplied as list[Flow] for this
                 operation.
-            index: Index identifying a position in the relevant sequence or
-                source.
-            inputs: Inputs supplied as list[Flow] for this operation.
 
         Returns:
-            tuple[Flow, ...] produced by this operation.
+            tuple[Flow, ...]: tuple[Flow, ...] produced by this operation.
 
         """
         cached: Flow = self._module_outputs[index][0]
@@ -4451,17 +4586,18 @@ class AbstractInterpreter:
         self,
         *,
         statement: stmt,
-        inputs: list[Flow],
+        inputs: ListFlow,
     ) -> tuple[Flow, ...]:
         """Clear a statement's cached facts and interpret it again.
 
         Args:
-            inputs: Inputs supplied as list[Flow] for this operation.
-            statement: The statement examined while clear a statement's cached
-                facts and interpret it again.
+            inputs (ListFlow): Inputs supplied as list[Flow] for this
+                operation.
+            statement (stmt): The statement examined while clear a statement's
+                cached facts and interpret it again.
 
         Returns:
-            tuple[Flow, ...] produced by this operation.
+            tuple[Flow, ...]: tuple[Flow, ...] produced by this operation.
 
         """
         nodes: list[AST] = [statement]
@@ -4475,7 +4611,7 @@ class AbstractInterpreter:
                 for accessing in touched.values():
                     accessing.discard(node_id)
             nodes.extend(iter_child_nodes(node=node))
-        outputs: list[Flow] = []
+        outputs: ListFlow = []
         for path in inputs:
             if path.control != "normal":
                 outputs.append(path)
@@ -4489,7 +4625,7 @@ class AbstractInterpreter:
         """Merge the states leaving the last module statement.
 
         Returns:
-            State produced by this operation.
+            State: State produced by this operation.
 
         """
         final: State | None = None
@@ -4509,18 +4645,18 @@ class AbstractInterpreter:
         self,
         *,
         body: list[stmt],
-        paths: list[Flow],
+        paths: ListFlow,
         context_id: int,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Interpret structured statements and snapshot the module dataflow.
 
         Args:
-            body: Body supplied as list[stmt] for this operation.
-            context_id: Context id supplied as int for this operation.
-            paths: Paths supplied as list[Flow] for this operation.
+            body (list[stmt]): Body supplied as list[stmt] for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            paths (ListFlow): Paths supplied as list[Flow] for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         module: bool = context_id == 0 and body is getattr(
@@ -4531,7 +4667,7 @@ class AbstractInterpreter:
         for statement in body:
             if module:
                 self._module_inputs.append(self._clone_paths(paths=paths))
-            new_paths: list[Flow] = []
+            new_paths: ListFlow = []
             for path in paths:
                 if path.control == "normal":
                     new_paths.extend(
@@ -4559,14 +4695,14 @@ class AbstractInterpreter:
                 break
         return paths
 
-    def _limit_paths(self, *, paths: list[Flow]) -> list[Flow]:
+    def _limit_paths(self, *, paths: ListFlow) -> ListFlow:
         """Bound active paths without discarding possible control transfers.
 
         Args:
-            paths: Paths supplied as list[Flow] for this operation.
+            paths (ListFlow): Paths supplied as list[Flow] for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         if len(paths) <= self.budgets.max_paths:
@@ -4594,17 +4730,17 @@ class AbstractInterpreter:
         node: stmt,
         state: State,
         context_id: int,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Execute one statement and return all relevant abstract exits.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while execute one statement and return all
-                relevant abstract exits.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (stmt): The node examined while execute one statement
+                and return all relevant abstract exits.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         identity: int = self.identities.node_id(node=node)
@@ -4637,13 +4773,14 @@ class AbstractInterpreter:
         """Safely model Python match patterns and their capture bindings.
 
         Args:
-            pattern: Python structural pattern node.
-            subject: Abstract subject value.
-            state: State receiving tentative pattern bindings.
-            context_id: Active function call context.
+            pattern (AST): Python structural pattern node.
+            subject (AbstractValue): Abstract subject value.
+            state (State): State receiving tentative pattern bindings.
+            context_id (int): Active function call context.
 
         Returns:
-            True, False, or None if matching cannot be established.
+            bool | None:
+                True, False, or None if matching cannot be established.
 
         """
         frame: MatchPatternFrame = MatchPatternFrame(
@@ -4674,9 +4811,9 @@ class AbstractInterpreter:
         """Bind one statically identified pattern capture to the current state.
 
         Args:
-            pattern: Pattern node owning its capture name.
-            value: Captured subject abstraction.
-            state: Matching branch environment.
+            pattern (AST): Pattern node owning its capture name.
+            value (AbstractValue): Captured subject abstraction.
+            state (State): Matching branch environment.
 
         """
         occurrence: Occurrence | None = self.scopes.occurrences.get(
@@ -4695,13 +4832,14 @@ class AbstractInterpreter:
         """Known elements a ``for`` loop iterates over, if any.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while known elements a ``for`` loop
-                iterates over, if any.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (For | AsyncFor): The node examined while known elements
+                a ``for`` loop iterates over, if any.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            tuple[AbstractValue, ...] | None produced by this operation.
+            tuple[AbstractValue, ...] | None:
+                tuple[AbstractValue, ...] | None produced by this operation.
 
         """
         iterable: AbstractValue = self._eval(
@@ -4730,27 +4868,28 @@ class AbstractInterpreter:
         values: tuple[AbstractValue, ...] | None,
         ordinal: int,
         context_id: int,
-    ) -> tuple[list[Flow], list[Flow], list[Flow]]:
+    ) -> tuple[ListFlow, ListFlow, ListFlow]:
         """Run one loop iteration on a path.
 
         Returns:
-            Paths that left the loop normally, paths that exited abruptly,
-            and paths that continue to the next iteration.
-
-
+            tuple[ListFlow, ListFlow, ListFlow]: Paths that left the loop
+                normally, paths that exited
+                abruptly, and paths that continue to the next iteration.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while run one loop iteration on a path.
-            ordinal: Ordinal supplied as int for this operation.
-            path: Filesystem path identifying the path.
-            values: Values supplied as tuple[AbstractValue, ...] | None for
-                this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (While | For | AsyncFor): The node examined while run one loop
+                iteration on a path.
+            ordinal (int): Ordinal supplied as int for this operation.
+            path (Flow): Filesystem path identifying the path.
+            values (tuple[AbstractValue, ...] | None): Values supplied as
+                tuple[AbstractValue,
+                ...] | None for this operation.
 
         """
-        completed: list[Flow] = []
-        interrupted: list[Flow] = []
-        running: list[Flow] = []
+        completed: ListFlow = []
+        interrupted: ListFlow = []
+        running: ListFlow = []
         if path.control != "normal":
             return (completed, [path], running)
         if isinstance(node, While):
@@ -4790,12 +4929,12 @@ class AbstractInterpreter:
         """Widen loop-carried values and heap objects after the unroll.
 
         Args:
-            prior: Prior supplied as State for this operation.
-            start: Start identifying a position in the relevant sequence or
-                source.
+            prior (State): Prior supplied as State for this operation.
+            start (State): Start identifying a position in
+                the relevant sequence or source.
 
         Returns:
-            State produced by this operation.
+            State: State produced by this operation.
 
         """
         widened: State = start.merge(other=prior, limit=self.budgets.max_union)
@@ -4822,23 +4961,24 @@ class AbstractInterpreter:
         node: While | For | AsyncFor,
         state: State,
         context_id: int,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Unroll bounded loops, preserving break versus natural-else exits.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while unroll bounded loops, preserving
-                break versus natural-else exits.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (While | For | AsyncFor): The node examined while unroll
+                bounded loops,
+                preserving break versus natural-else exits.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         start: State = state.clone()
-        running: list[Flow] = [Flow(state=state)]
-        completed: list[Flow] = []
-        interrupted: list[Flow] = []
+        running: ListFlow = [Flow(state=state)]
+        completed: ListFlow = []
+        interrupted: ListFlow = []
         values: tuple[AbstractValue, ...] | None = None
         steps: int = self.budgets.max_iterations
         if isinstance(node, (For, AsyncFor)):
@@ -4853,7 +4993,7 @@ class AbstractInterpreter:
             else:
                 steps = min(len(values), self.budgets.max_iterations)
         for ordinal in range(steps):
-            next_running: list[Flow] = []
+            next_running: ListFlow = []
             for path in running:
                 done, stopped, advanced = self._advance_path(
                     node=node,
@@ -4894,10 +5034,11 @@ class AbstractInterpreter:
         """Symbol bound by ``except ... as name``, if any.
 
         Args:
-            handler: Handler supplied as ExceptHandler for this operation.
+            handler (ExceptHandler): Handler supplied as ExceptHandler for this
+                operation.
 
         Returns:
-            int | None produced by this operation.
+            int | None: int | None produced by this operation.
 
         """
         if handler.name is None:
@@ -4913,23 +5054,24 @@ class AbstractInterpreter:
         handler: ExceptHandler,
         path: Flow,
         context_id: int,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Run a handler body for one exceptional path.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            handler: Handler supplied as ExceptHandler for this operation.
-            path: Filesystem path identifying the path.
+            context_id (int): Context id supplied as int for this operation.
+            handler (ExceptHandler): Handler supplied as ExceptHandler for this
+                operation.
+            path (Flow): Filesystem path identifying the path.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
         symbol_id: int | None = self._exception_symbol(handler=handler)
         environment: State = path.state.clone()
         if symbol_id is not None:
             environment.values[symbol_id] = path.value
-        outcomes: list[Flow] = self._execute_suite(
+        outcomes: ListFlow = self._execute_suite(
             body=handler.body,
             paths=[Flow(state=environment)],
             context_id=context_id,
@@ -4945,23 +5087,24 @@ class AbstractInterpreter:
         node: Try | TryStar,
         exceptional: Flow,
         context_id: int,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Send one raised path through each handler in order.
 
         Args:
-            context_id: Context id supplied as int for this operation.
-            exceptional: Exceptional supplied as Flow for this operation.
-            node: The node examined while send one raised path through each
-                handler in order.
+            context_id (int): Context id supplied as int for this operation.
+            exceptional (Flow): Exceptional supplied as Flow for this
+                operation.
+            node (Try | TryStar): The node examined while send one raised
+                path through each handler in order.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
-        handled: list[Flow] = []
-        pending: list[Flow] = [exceptional]
+        handled: ListFlow = []
+        pending: ListFlow = [exceptional]
         for handler in node.handlers:
-            remaining: list[Flow] = []
+            remaining: ListFlow = []
             for path in pending:
                 match: bool | None = self._handler_matches(
                     handler=handler,
@@ -4987,29 +5130,29 @@ class AbstractInterpreter:
         node: Try | TryStar,
         state: State,
         context_id: int,
-    ) -> list[Flow]:
+    ) -> ListFlow:
         """Route exceptional paths to matching handlers and honor final exits.
 
         Unknown exceptions and exception-group splitting are kept as possible
         paths rather than being treated as proven successful handling.
 
-
         Args:
-            context_id: Context id supplied as int for this operation.
-            node: The node examined while route exceptional paths to matching
-                handlers and honor final exits.
-            state: State supplied as State for this operation.
+            context_id (int): Context id supplied as int for this operation.
+            node (Try | TryStar): The node examined while route exceptional
+                paths
+                to matching handlers and honor final exits.
+            state (State): State supplied as State for this operation.
 
         Returns:
-            list[Flow] produced by this operation.
+            ListFlow: list[Flow] produced by this operation.
 
         """
-        paths: list[Flow] = self._execute_suite(
+        paths: ListFlow = self._execute_suite(
             body=node.body,
             paths=[Flow(state=state.clone())],
             context_id=context_id,
         )
-        handled: list[Flow] = self._execute_suite(
+        handled: ListFlow = self._execute_suite(
             body=node.orelse,
             paths=[path for path in paths if path.control == "normal"],
             context_id=context_id,
@@ -5027,9 +5170,9 @@ class AbstractInterpreter:
             )
         if not node.finalbody:
             return self._limit_paths(paths=handled)
-        finals: list[Flow] = []
+        finals: ListFlow = []
         for path in handled:
-            outcomes: list[Flow] = self._execute_suite(
+            outcomes: ListFlow = self._execute_suite(
                 body=node.finalbody,
                 paths=[Flow(state=path.state)],
                 context_id=context_id,

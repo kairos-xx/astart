@@ -1,0 +1,7 @@
+def edir_add_members_to_groups(
+    connection,
+    members_dn,
+    groups_dn,
+    fix,
+    transaction,
+): ...

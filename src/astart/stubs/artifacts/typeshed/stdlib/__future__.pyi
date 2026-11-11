@@ -1,0 +1,37 @@
+type _VersionInfo = tuple[int, int, int, str, int]
+
+class _Feature:
+    def __init__(
+        self,
+        optionalRelease: _VersionInfo,
+        mandatoryRelease: _VersionInfo | None,
+        compiler_flag: int,
+    ) -> None: ...
+    def getOptionalRelease(self) -> _VersionInfo: ...
+    def getMandatoryRelease(self) -> _VersionInfo | None: ...
+    compiler_flag: int
+
+absolute_import: _Feature
+division: _Feature
+generators: _Feature
+nested_scopes: _Feature
+print_function: _Feature
+unicode_literals: _Feature
+with_statement: _Feature
+barry_as_FLUFL: _Feature
+generator_stop: _Feature
+annotations: _Feature
+all_feature_names: list[str]
+__all__ = [
+    "absolute_import",
+    "all_feature_names",
+    "annotations",
+    "barry_as_FLUFL",
+    "division",
+    "generator_stop",
+    "generators",
+    "nested_scopes",
+    "print_function",
+    "unicode_literals",
+    "with_statement",
+]

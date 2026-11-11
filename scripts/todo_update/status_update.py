@@ -1,38 +1,48 @@
-"""Keep the status ledger in docs/TODO.md up to date.
+"""Keep the status ledger in docs/planning/TODO.md up to date.
 
 Usage (from the repository root)::
 
-    python scripts/status_update.py render
-    python scripts/status_update.py refresh
-    python -m benchmarks.pair A B --engine --min-confidence 0.5 \
-        | python scripts/status_update.py pair --label "after G-02"
-    python scripts/status_update.py check semantic_run pass --note "15 of 15"
-    python scripts/status_update.py item add "run the semantic equivalence run"
-    python scripts/status_update.py item remove 2
-    python scripts/status_update.py note "what is uncommitted"
+    python -m scripts.todo_update status render
+    python -m scripts.todo_update status refresh
+    python -m scripts.compare.pair A B --engine --min-confidence 0.5
+    python -m scripts.todo_update status pair --label "after G-02"
+    python -m scripts.todo_update status check semantic_run pass
+        --note "15 of 15"
+    python -m scripts.todo_update status item add "run the semantic run"
+    python -m scripts.todo_update status item remove 2
+    python -m scripts.todo_update status note "what is uncommitted"
 
 Every command prints progress bars, the change since the previous update and
 human-readable times (add ``--quiet`` to silence it). State lives in
-docs/status.json; the block between the status markers in docs/TODO.md is
-generated from it and must not be edited by hand.
+docs/planning/status.json; the block between the status markers in
+docs/planning/TODO.md is generated from it and must not be edited by hand.
+
 """
 
 from __future__ import annotations
 
 from argparse import ArgumentParser, Namespace
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import import_module
 from json import dumps, loads
+from os import fsync
 from pathlib import Path
-from sys import stdin, stdout
+from shutil import copymode
+from sys import stderr, stdin, stdout
+from tempfile import NamedTemporaryFile
+from time import sleep, time
 from typing import TYPE_CHECKING, Final, Protocol, final
 
+type ListStr = list[str]
+type DictJson = dict[str, Json]
+
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
     from types import ModuleType
 
-    from scripts.todo_index import Task
+    from scripts.todo_update.todo_index import Task
 
 type Json = dict[str, Json] | list[Json] | str | int | float | bool | None
 
@@ -44,7 +54,7 @@ class _ParserFactory(Protocol):
         """Register one subcommand parser.
 
         Args:
-            name: Subcommand name.
+            name (str): Subcommand name.
 
         Returns:
             The new subcommand parser.
@@ -58,22 +68,34 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        root: Repository root.
-        start: Marker opening the generated block.
-        end: Marker closing the generated block.
-        statuses: Allowed check statuses.
-        check_names: Checks shown first, in this order.
-        target_share: Share of recoverable annotations the contract asks for.
-        bar_width: Width of a progress bar in characters.
-        measures: Label, value key, total key and whether lower is better.
-        history_keys: Numbers copied from the latest history entry.
-        just_now_seconds: Seconds counted as ``just now`` by :func:`ago`.
-        minutes_in_hour: Minutes in one hour, an ``ago`` bucket boundary.
-        two_days_in_hours: Hours in two days, the last ``ago`` hour bucket.
+        root (Final[Path]): Repository root.
+        start (Final[str]): Marker opening the generated block.
+        end (Final[str]): Marker closing the generated block.
+        statuses (Final[tuple[str, ...]]): Allowed check statuses.
+        check_names (Final[tuple[str, ...]]): Checks shown first, in this
+            order.
+        target_share (Final[float]): Share of recoverable annotations the
+            contract asks for.
+        bar_width (Final[int]): Width of a progress bar in characters.
+        measures (Final[tuple[tuple[str, str, str, bool], ...]]): Label, value
+            key, total key and whether lower is better.
+        history_keys (Final[tuple[str, ...]]): Numbers copied from the latest
+            history entry.
+        just_now_seconds (Final[int]): Seconds counted as ``just now`` by
+            :func:`ago`.
+        minutes_in_hour (Final[int]): Minutes in one hour, an ``ago`` bucket
+            boundary.
+        two_days_in_hours (Final[int]): Hours in two days, the last ``ago``
+            hour bucket.
+        lock_attempts (Final[int]): Times lock acquisition is retried before
+            failing.
+        lock_delay_seconds (Final[float]): Seconds slept between lock retries.
+        lock_stale_seconds (Final[int]): Age after which a lock file is taken
+            over.
 
     """
 
-    root: Final[Path] = Path(__file__).resolve().parent.parent
+    root: Final[Path] = Path(__file__).resolve().parent.parent.parent
     start: Final[str] = "<!-- status:start -->"
     end: Final[str] = "<!-- status:end -->"
     statuses: Final[tuple[str, ...]] = ("pass", "fail", "not run")
@@ -106,6 +128,9 @@ class Constants:
     just_now_seconds: Final[int] = 45
     minutes_in_hour: Final[int] = 60
     two_days_in_hours: Final[int] = 48
+    lock_attempts: Final[int] = 50
+    lock_delay_seconds: Final[float] = 0.1
+    lock_stale_seconds: Final[int] = 60
 
 
 @final
@@ -114,11 +139,11 @@ class Row:
     """One line of the progress display.
 
     Attributes:
-        label: What is measured.
-        bar: Progress bar.
-        percent: Share of the total, as text.
-        now: Current value and total, as text.
-        change: Change since the previous update, as text.
+        label (str): What is measured.
+        bar (str): Progress bar.
+        percent (str): Share of the total, as text.
+        now (str): Current value and total, as text.
+        change (str): Change since the previous update, as text.
 
     """
 
@@ -133,10 +158,10 @@ def number(*, value: Json) -> int | None:
     """Read a count from JSON.
 
     Args:
-        value: A JSON value.
+        value (Json): A JSON value.
 
     Returns:
-        The integer, or ``None`` when the value is not an integer.
+        int | None: The integer, or ``None`` when the value is not an integer.
 
     """
     if isinstance(value, int) and not isinstance(value, bool):
@@ -148,11 +173,11 @@ def bar(*, value: int, total: int) -> str:
     """Draw a progress bar.
 
     Args:
-        value: Amount done.
-        total: Amount that means 100 %.
+        value (int): Amount done.
+        total (int): Amount that means 100 %.
 
     Returns:
-        A bar of ``Constants.bar_width`` characters, filled in proportion.
+        str: A bar of ``Constants.bar_width`` characters, filled in proportion.
 
     """
     width: int = Constants.bar_width
@@ -166,11 +191,11 @@ def percent(*, value: int, total: int) -> str:
     """Format a share as a percentage.
 
     Args:
-        value: Amount done.
-        total: Amount that means 100 %.
+        value (int): Amount done.
+        total (int): Amount that means 100 %.
 
     Returns:
-        For example ``"45.9 %"``, or ``"n/a"`` when the total is zero.
+        str: For example ``"45.9 %"``, or ``"n/a"`` when the total is zero.
 
     """
     if total <= 0:
@@ -182,13 +207,13 @@ def delta_text(*, now: int | None, before: int | None, lower: bool) -> str:
     """Describe a change between two updates.
 
     Args:
-        now: Current value.
-        before: Value at the previous update.
-        lower: Whether a lower value is better (for example ``wrong``).
+        now (int | None): Current value.
+        before (int | None): Value at the previous update.
+        lower (bool): Whether a lower value is better (for example ``wrong``).
 
     Returns:
-        ``"n/a"`` without a previous value, ``"no change"``, or a signed
-        difference followed by ``better`` or ``worse``.
+        str: ``"n/a"`` without a previous value, ``"no change"``, or a signed
+            difference followed by ``better`` or ``worse``.
 
     """
     if now is None or before is None:
@@ -205,7 +230,7 @@ def now_iso() -> str:
     """Give the current local time with its offset.
 
     Returns:
-        An ISO 8601 timestamp such as ``2026-11-08T18:37:12+00:00``.
+        str: An ISO 8601 timestamp such as ``2026-11-08T18:37:12+00:00``.
 
     """
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -215,10 +240,10 @@ def human_time(*, iso: str) -> str:
     """Format a timestamp for people.
 
     Args:
-        iso: ISO 8601 timestamp.
+        iso (str): ISO 8601 timestamp.
 
     Returns:
-        For example ``"Sun 08 Nov 2026, 18:37 WET"``.
+        str: For example ``"Sun 08 Nov 2026, 18:37 WET"``.
 
     """
     moment: datetime = datetime.fromisoformat(iso)
@@ -229,10 +254,10 @@ def short_time(*, iso: str) -> str:
     """Format a timestamp compactly for table cells.
 
     Args:
-        iso: ISO 8601 timestamp.
+        iso (str): ISO 8601 timestamp.
 
     Returns:
-        For example ``"08 Nov 2026 18:37"``.
+        str: For example ``"08 Nov 2026 18:37"``.
 
     """
     moment: datetime = datetime.fromisoformat(iso)
@@ -243,12 +268,12 @@ def ago(*, iso: str, reference: datetime | None = None) -> str:
     """Say how long ago a timestamp was.
 
     Args:
-        iso: ISO 8601 timestamp.
-        reference: Time to measure from; now when omitted.
+        iso (str): ISO 8601 timestamp.
+        reference (datetime | None): Time to measure from; now when omitted.
 
     Returns:
-        ``"just now"``, ``"N minutes ago"``, ``"N hours ago"`` or
-        ``"N days ago"``.
+        str: ``"just now"``, ``"N minutes ago"``, ``"N hours ago"`` or
+            ``"N days ago"``.
 
     """
     when: datetime = datetime.fromisoformat(iso)
@@ -265,15 +290,15 @@ def ago(*, iso: str, reference: datetime | None = None) -> str:
     return f"{round(number=hours / 24)} days ago"
 
 
-def _list(*, state: dict[str, Json], key: str) -> list[Json]:
+def _list(*, state: DictJson, key: str) -> list[Json]:
     """Get a list from the state, creating it when absent.
 
     Args:
-        state: The ledger state.
-        key: Key of the list.
+        state (DictJson): The ledger state.
+        key (str): Key of the list.
 
     Returns:
-        The list stored under the key.
+        list[Json]: The list stored under the key.
 
     Raises:
         SystemExit: When the stored value is not a JSON list.
@@ -286,15 +311,15 @@ def _list(*, state: dict[str, Json], key: str) -> list[Json]:
     return value
 
 
-def _dict(*, state: dict[str, Json], key: str) -> dict[str, Json]:
+def _dict(*, state: DictJson, key: str) -> DictJson:
     """Get an object from the state, creating it when absent.
 
     Args:
-        state: The ledger state.
-        key: Key of the object.
+        state (DictJson): The ledger state.
+        key (str): Key of the object.
 
     Returns:
-        The object stored under the key.
+        DictJson: The object stored under the key.
 
     Raises:
         SystemExit: When the stored value is not a JSON object.
@@ -311,14 +336,14 @@ def _task_counts(*, todo: Path) -> tuple[int, int] | None:
     """Count done and total tasks with the dashboard script's parser.
 
     Args:
-        todo: Path of the TODO file.
+        todo (Path): Path of the TODO file.
 
     Returns:
-        ``(done, total)``, or ``None`` when the sibling script cannot be
-        imported or read.
+        tuple[int, int] | None: ``(done, total)``, or ``None`` when the
+            sibling script cannot be imported or read.
 
     """
-    for name in ("todo_index", "scripts.todo_index"):
+    for name in ("todo_index", "scripts.todo_update.todo_index"):
         try:
             parse_tasks: Callable[..., list[Task]] = import_module(
                 name=name,
@@ -332,18 +357,18 @@ def _task_counts(*, todo: Path) -> tuple[int, int] | None:
     return None
 
 
-def chapter_rows(*, todo: Path) -> list[str]:
+def chapter_rows(*, todo: Path) -> ListStr:
     """Draw one progress bar per chapter: done tasks against all tasks.
 
     Args:
-        todo: Path of the TODO file.
+        todo (Path): Path of the TODO file.
 
     Returns:
-        One line per chapter that has tasks, or an empty list when the
-        dashboard script cannot be imported.
+        ListStr: One line per chapter that has tasks, or an empty
+            list when the dashboard script cannot be imported.
 
     """
-    for name in ("todo_index", "scripts.todo_index"):
+    for name in ("todo_index", "scripts.todo_update.todo_index"):
         try:
             module: ModuleType = import_module(name=name)
             tasks: list[Task] = module.parse(
@@ -366,7 +391,7 @@ def chapter_rows(*, todo: Path) -> list[str]:
         if task.done:
             dones[number] = dones.get(number, 0) + 1
     width: int = max(len(title) for _n, title, _p, _s in chapters)
-    rows: list[str] = []
+    rows: ListStr = []
     for chapter in chapters:
         number = chapter[0]
         title: str = chapter[1]
@@ -382,22 +407,22 @@ def chapter_rows(*, todo: Path) -> list[str]:
     return rows
 
 
-def take_snapshot(*, state: dict[str, Json], todo: Path) -> dict[str, Json]:
+def take_snapshot(*, state: DictJson, todo: Path) -> DictJson:
     """Record the numbers that updates are compared on.
 
     Args:
-        state: The ledger state.
-        todo: Path of the TODO file (for the task counts).
+        state (DictJson): The ledger state.
+        todo (Path): Path of the TODO file (for the task counts).
 
     Returns:
-        The latest pair numbers, the task counts and the time.
+        DictJson: The latest pair numbers, the task counts and the time.
 
     """
     history: list[Json] = _list(state=state, key="history")
     last: Json = history[-1] if history else None
-    source: dict[str, Json] = last if isinstance(last, dict) else {}
+    source: DictJson = last if isinstance(last, dict) else {}
     counts: tuple[int, int] | None = _task_counts(todo=todo)
-    snapshot: dict[str, Json] = {"at": now_iso()}
+    snapshot: DictJson = {"at": now_iso()}
     for key in Constants.history_keys:
         snapshot[key] = source.get(key)
     snapshot["tasks_done"] = None if counts is None else counts[0]
@@ -408,17 +433,18 @@ def take_snapshot(*, state: dict[str, Json], todo: Path) -> dict[str, Json]:
 
 def progress_rows(
     *,
-    snapshot: dict[str, Json],
-    previous: dict[str, Json] | None,
+    snapshot: DictJson,
+    previous: DictJson | None,
 ) -> list[Row]:
     """Build the progress display.
 
     Args:
-        snapshot: Current numbers.
-        previous: Numbers at the previous update, or ``None``.
+        snapshot (DictJson): Current numbers.
+        previous (DictJson | None): Numbers at the previous update, or ``None``
+            .
 
     Returns:
-        One row per measure.
+        list[Row]: One row per measure.
 
     """
     rows: list[Row] = []
@@ -453,22 +479,23 @@ def progress_rows(
 
 def _views(
     *,
-    state: dict[str, Json],
+    state: DictJson,
     todo: Path,
-) -> tuple[dict[str, Json], dict[str, Json] | None]:
+) -> tuple[DictJson, DictJson | None]:
     """Pick the current and previous snapshots to display.
 
     Args:
-        state: The ledger state.
-        todo: Path of the TODO file.
+        state (DictJson): The ledger state.
+        todo (Path): Path of the TODO file.
 
     Returns:
-        The stored snapshot (or a live one before the first update) and the
-        previous snapshot, if any.
+        tuple[DictJson, DictJson | None]: The stored snapshot (or a live one
+            before the
+            first update) and the previous snapshot, if any.
 
     """
     stored: Json = state.get("snapshot")
-    current: dict[str, Json] = (
+    current: DictJson = (
         stored
         if isinstance(stored, dict)
         else take_snapshot(state=state, todo=todo)
@@ -477,14 +504,14 @@ def _views(
     return current, before if isinstance(before, dict) else None
 
 
-def _when(*, entry: dict[str, Json]) -> str:
+def _when(*, entry: DictJson) -> str:
     """Show when a history or check entry happened.
 
     Args:
-        entry: An entry with ``at`` (preferred) or ``date``.
+        entry (DictJson): An entry with ``at`` (preferred) or ``date``.
 
     Returns:
-        A compact time, or the plain date for older entries.
+        str: A compact time, or the plain date for older entries.
 
     """
     at: Json = entry.get("at")
@@ -493,15 +520,15 @@ def _when(*, entry: dict[str, Json]) -> str:
     return str(object=entry.get("date", "?"))
 
 
-def render(*, state: dict[str, Json], todo: Path) -> str:
+def render(*, state: DictJson, todo: Path) -> str:
     """Render the ledger as Markdown.
 
     Args:
-        state: The ledger state.
-        todo: Path of the TODO file.
+        state (DictJson): The ledger state.
+        todo (Path): Path of the TODO file.
 
     Returns:
-        Markdown for the block between the status markers.
+        str: Markdown for the block between the status markers.
 
     """
     current, before = _views(state=state, todo=todo)
@@ -515,10 +542,10 @@ def render(*, state: dict[str, Json], todo: Path) -> str:
     previous_at: Json = None if before is None else before.get("at")
     if isinstance(previous_at, str):
         compared = (
-            "change since the previous update on "
+            f"change since the previous update on "
             f"{human_time(iso=previous_at)}"
         )
-    lines: list[str] = [
+    lines: ListStr = [
         f"**Updated {stamp}.** {state.get('working_tree', '')}",
         "",
         f"**Progress** ({compared}):",
@@ -527,8 +554,10 @@ def render(*, state: dict[str, Json], todo: Path) -> str:
         "| --- | --- | --- | --- |",
     ]
     lines.extend(
-        f"| {row.label} | `{row.bar}` {row.percent} | {row.now} | "
-        f"{row.change} |"
+        (
+            f"| {row.label} | `{row.bar}` {row.percent} | {row.now} | "
+            f"{row.change} |"
+        )
         for row in progress_rows(snapshot=current, previous=before)
     )
     lines.extend(
@@ -539,7 +568,7 @@ def render(*, state: dict[str, Json], todo: Path) -> str:
             "| --- | --- | --- | --- |",
         ),
     )
-    last: dict[str, Json] | None = None
+    last: DictJson | None = None
     for entry in _list(state=state, key="history"):
         if not isinstance(entry, dict):
             continue
@@ -563,8 +592,8 @@ def render(*, state: dict[str, Json], todo: Path) -> str:
             f"| target | 90 % exact, 0 wrong | about {goal_p} / 0 | "
             f"about {goal_v} / 0 |",
         )
-    checks: dict[str, Json] = _dict(state=state, key="checks")
-    ordered: list[str] = [n for n in Constants.check_names if n in checks]
+    checks: DictJson = _dict(state=state, key="checks")
+    ordered: ListStr = [n for n in Constants.check_names if n in checks]
     ordered.extend(sorted(n for n in checks if n not in ordered))
     lines.extend(
         ("", "| Check | Status | When | Note |", "| --- | --- | --- | --- |"),
@@ -585,26 +614,28 @@ def render(*, state: dict[str, Json], todo: Path) -> str:
     return "\n".join(lines)
 
 
-def summary(*, state: dict[str, Json], todo: Path) -> str:
+def summary(*, state: DictJson, todo: Path) -> str:
     """Render the terminal summary: bars, deltas and human times.
 
     Args:
-        state: The ledger state.
-        todo: Path of the TODO file.
+        state (DictJson): The ledger state.
+        todo (Path): Path of the TODO file.
 
     Returns:
-        Plain text for the terminal.
+        str: Plain text for the terminal.
 
     """
     current, before = _views(state=state, todo=todo)
     rows: list[Row] = progress_rows(snapshot=current, previous=before)
     width: int = max(len(row.label) for row in rows)
     updated: Json = state.get("updated_at")
-    lines: list[str] = []
+    lines: ListStr = []
     if isinstance(updated, str):
         lines.append(
-            f"Status ledger updated {human_time(iso=updated)} "
-            f"({ago(iso=updated)})",
+            (
+                f"Status ledger updated {human_time(iso=updated)} ("
+                f"{ago(iso=updated)})"
+            ),
         )
     previous_at: Json = None if before is None else before.get("at")
     if isinstance(previous_at, str):
@@ -621,12 +652,12 @@ def summary(*, state: dict[str, Json], todo: Path) -> str:
             f"  {label.ljust(width)}  {row.bar}  {row.percent:>7}  "
             f"{row.now:>12}  {row.change}",
         )
-    chapters: list[str] = chapter_rows(todo=todo)
+    chapters: ListStr = chapter_rows(todo=todo)
     if chapters:
         lines.extend(
             ("", "  Tasks by chapter:", *(f"  {row}" for row in chapters)),
         )
-    checks: dict[str, Json] = _dict(state=state, key="checks")
+    checks: DictJson = _dict(state=state, key="checks")
     tally: dict[str, int] = dict.fromkeys(Constants.statuses, 0)
     for info in checks.values():
         if not isinstance(info, dict):
@@ -651,9 +682,9 @@ def write_block(*, todo: Path, block: str, name: str = "status") -> None:
     """Replace one generated block in the TODO file.
 
     Args:
-        todo: Path of the TODO file.
-        block: New block text.
-        name: Marker name of the block (``status`` or ``progress``).
+        todo (Path): Path of the TODO file.
+        block (str): New block text.
+        name (str): Marker name of the block (``status`` or ``progress``).
 
     Raises:
         SystemExit: When the ``status`` markers are absent from the file.
@@ -675,16 +706,16 @@ def write_block(*, todo: Path, block: str, name: str = "status") -> None:
     )
 
 
-def render_progress(*, state: dict[str, Json], todo: Path) -> str:
+def render_progress(*, state: DictJson, todo: Path) -> str:
     """Render the compact progress block shown at the top of the file.
 
     Args:
-        state: The ledger state.
-        todo: Path of the TODO file.
+        state (DictJson): The ledger state.
+        todo (Path): Path of the TODO file.
 
     Returns:
-        Markdown with the progress bars inside a fenced text block, so the
-        bar characters render in a monospace font in every viewer.
+        str: Markdown with the progress bars inside a fenced text block, so the
+            bar characters render in a monospace font in every viewer.
 
     """
     current, before = _views(state=state, todo=todo)
@@ -696,7 +727,7 @@ def render_progress(*, state: dict[str, Json], todo: Path) -> str:
         if isinstance(updated, str)
         else str(object=state.get("updated", "?"))
     )
-    lines: list[str] = [
+    lines: ListStr = [
         f"Updated {stamp}. The last column is the change since the previous "
         "update; details are in the Status ledger below.",
         "",
@@ -708,7 +739,7 @@ def render_progress(*, state: dict[str, Json], todo: Path) -> str:
             f"{label.ljust(width)}  {row.bar}  {row.percent:>7}  "
             f"{row.now:>12}  {row.change}",
         )
-    chapters: list[str] = chapter_rows(todo=todo)
+    chapters: ListStr = chapter_rows(todo=todo)
     if chapters:
         lines.extend(
             (
@@ -721,16 +752,17 @@ def render_progress(*, state: dict[str, Json], todo: Path) -> str:
     return "\n".join(lines)
 
 
-def same_numbers(*, left: dict[str, Json], right: dict[str, Json]) -> bool:
+def same_numbers(*, left: DictJson, right: DictJson) -> bool:
     """Tell whether two snapshots hold the same measured numbers.
 
     Args:
-        left: One snapshot.
-        right: Another snapshot.
+        left (DictJson): One snapshot.
+        right (DictJson): Another snapshot.
 
     Returns:
-        ``True`` when every measured number is equal (times are ignored), so
-        an update that changed nothing does not hide the last real change.
+        bool: ``True`` when every measured number is equal
+            (times are ignored), so an update that changed
+            nothing does not hide the last real change.
 
     """
     keys: tuple[str, ...] = (
@@ -742,15 +774,15 @@ def same_numbers(*, left: dict[str, Json], right: dict[str, Json]) -> bool:
     return all(left.get(key) == right.get(key) for key in keys)
 
 
-def apply(*, args: Namespace, state: dict[str, Json]) -> bool:
+def apply(*, args: Namespace, state: DictJson) -> bool:
     """Apply one command to the state.
 
     Args:
-        args: Parsed arguments.
-        state: The ledger state, changed in place.
+        args (Namespace): Parsed arguments.
+        state (DictJson): The ledger state, changed in place.
 
     Returns:
-        Whether the state changed (``refresh`` counts as a change).
+        bool: Whether the state changed (``refresh`` counts as a change).
 
     Raises:
         SystemExit: When ``pair`` stdin is not the expected benchmarks JSON.
@@ -760,7 +792,7 @@ def apply(*, args: Namespace, state: dict[str, Json]) -> bool:
     if args.command == "pair":
         report: Json = loads(s=stdin.read())
         if not isinstance(report, dict):
-            msg: str = "stdin: expected the JSON from benchmarks.pair"
+            msg: str = "stdin: expected the JSON from scripts.compare.pair"
             raise SystemExit(msg)
         params: Json = report.get("parameters_and_returns")
         variables: Json = report.get("variables")
@@ -802,26 +834,273 @@ def apply(*, args: Namespace, state: dict[str, Json]) -> bool:
     return args.command == "refresh"
 
 
+def _history_problems(*, value: Json) -> ListStr:
+    """Check the ``history`` list shape.
+
+    Args:
+        value (Json): The stored value.
+
+    Returns:
+        ListStr: Readable problems.
+
+    """
+    if value is not None and not isinstance(value, list):
+        return ["history: expected a JSON list"]
+    if not isinstance(value, list):
+        return []
+    return [
+        f"history[{position}]: expected a JSON object"
+        for position, entry in enumerate(iterable=value)
+        if not isinstance(entry, dict)
+    ]
+
+
+def _checks_problems(*, value: Json) -> ListStr:
+    """Check the ``checks`` object shape and status vocabulary.
+
+    Args:
+        value (Json): The stored value.
+
+    Returns:
+        ListStr: Readable problems.
+
+    """
+    if value is not None and not isinstance(value, dict):
+        return ["checks: expected a JSON object"]
+    if not isinstance(value, dict):
+        return []
+    problems: ListStr = []
+    for name, info in value.items():
+        if not isinstance(info, dict):
+            problems.append(f"checks.{name}: expected a JSON object")
+            continue
+        status: Json = info.get("status")
+        if status not in Constants.statuses:
+            problems.append(
+                f"checks.{name}.status: unknown status {status!r}",
+            )
+    return problems
+
+
+def _items_problems(*, value: Json) -> ListStr:
+    """Check the ``open_items`` list shape.
+
+    Args:
+        value (Json): The stored value.
+
+    Returns:
+        ListStr: Readable problems.
+
+    """
+    if value is not None and not isinstance(value, list):
+        return ["open_items: expected a JSON list"]
+    if not isinstance(value, list):
+        return []
+    return [
+        f"open_items[{position}]: expected a string"
+        for position, item in enumerate(iterable=value)
+        if not isinstance(item, str)
+    ]
+
+
+def _scalar_problems(*, state: DictJson) -> ListStr:
+    """Check snapshot objects and timestamp strings.
+
+    Args:
+        state (DictJson): The ledger state.
+
+    Returns:
+        ListStr: Readable problems.
+
+    """
+    problems: ListStr = []
+    for key in ("snapshot", "previous"):
+        value: Json = state.get(key)
+        if value is not None and not isinstance(value, dict):
+            problems.append(f"{key}: expected a JSON object or null")
+    for key in ("updated", "updated_at", "working_tree"):
+        value = state.get(key)
+        if value is not None and not isinstance(value, str):
+            problems.append(f"{key}: expected a string")
+    return problems
+
+
+def validate_state(*, state: DictJson) -> ListStr:
+    """Check that the ledger state has the expected shape.
+
+    Args:
+        state (DictJson): Parsed ``docs/planning/status.json``.
+
+    Returns:
+        ListStr: Readable problems; empty when the state is trustworthy.
+
+    """
+    return [
+        *(
+            f"missing key: {key}"
+            for key in ("history", "checks", "open_items")
+            if key not in state
+        ),
+        *_history_problems(value=state.get("history")),
+        *_checks_problems(value=state.get("checks")),
+        *_items_problems(value=state.get("open_items")),
+        *_scalar_problems(state=state),
+    ]
+
+
+def _fail_on(*, path: Path, problems: ListStr) -> None:
+    """Stop with exit code 2 when the state file is invalid.
+
+    Args:
+        path (Path): State file, for the message.
+        problems (ListStr): Problems from :func:`validate_state`.
+
+    Raises:
+        SystemExit: Always, when the list is not empty.
+
+    """
+    if not problems:
+        return
+    _ = stderr.write(f"{path}: invalid state\n")
+    for problem in problems:
+        _ = stderr.write(f"  - {problem}\n")
+    raise SystemExit(2)
+
+
+def _load_state(*, path: Path) -> DictJson:
+    """Read and validate the ledger state.
+
+    Args:
+        path (Path): State file.
+
+    Returns:
+        DictJson: The state as a mutable object.
+
+    Raises:
+        SystemExit: When the file is not a valid ledger object.
+
+    """
+    loaded: Json = loads(s=path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict):
+        msg: str = f"{path}: expected a JSON object"
+        raise SystemExit(msg)
+    _fail_on(path=path, problems=validate_state(state=loaded))
+    return loaded
+
+
+def _save_state(*, path: Path, state: DictJson) -> None:
+    """Validate and atomically replace the state file.
+
+    The text lands in a sibling temporary file and is moved over the target
+    with :meth:`Path.replace`, so a reader never sees a half-written file.
+
+    Args:
+        path (Path): State file.
+        state (DictJson): State to persist.
+
+    Raises:
+        SystemExit: When the new state is invalid.
+
+    """
+    _fail_on(path=path, problems=validate_state(state=state))
+    temporary: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            _ = handle.write(
+                (dumps(obj=state, indent=2) + "\n").encode(encoding="utf-8"),
+            )
+            handle.flush()
+            fsync(fd=handle.fileno())
+        if path.exists():
+            copymode(src=path, dst=temporary)
+        _ = temporary.replace(target=path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _lock_stale(*, path: Path) -> bool:
+    """Tell whether a lock file is old enough to take over.
+
+    Args:
+        path (Path): Lock file.
+
+    Returns:
+        bool: Whether the lock is older than ``Constants.lock_stale_seconds``
+            , or ``False`` when it no longer exists.
+
+    """
+    try:
+        return time() - path.stat().st_mtime > Constants.lock_stale_seconds
+    except FileNotFoundError:
+        return False
+
+
+@contextmanager
+def locked(*, path: Path) -> Generator[None]:
+    """Hold an exclusive lock file around one state update.
+
+    The lock is ``<state name>.lock`` created with ``O_CREAT | O_EXCL``
+    semantics (``Path.touch(exist_ok=False)``); two overlapping runs merge
+    instead of overwriting each other.
+
+    Args:
+        path (Path): State file the lock protects.
+
+    Yields:
+        None: Nothing; the lock is held inside the ``with`` body.
+
+    Raises:
+        SystemExit: When the lock cannot be taken in time.
+
+    """
+    lock: Path = path.with_name(name=f"{path.name}.lock")
+    for _attempt in range(Constants.lock_attempts):
+        try:
+            lock.touch(exist_ok=False)
+        except FileExistsError:
+            if _lock_stale(path=lock):
+                _ = stderr.write(f"{lock}: taking over a stale lock\n")
+                lock.unlink(missing_ok=True)
+            else:
+                sleep(Constants.lock_delay_seconds)
+        else:
+            break
+    else:
+        msg: str = f"{lock}: could not take the lock"
+        raise SystemExit(msg)
+    try:
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+
+
 def main() -> int:
     """Run one ledger command.
 
     Returns:
-        Zero.
+        int: Zero.
 
     Raises:
         SystemExit: When the state file does not hold a JSON object.
 
     """
-    parser: ArgumentParser = ArgumentParser(prog="status_update")
+    parser: ArgumentParser = ArgumentParser(prog="todo_update status")
     parser.add_argument(
         "--state",
         type=Path,
-        default=Constants.root / "docs" / "status.json",
+        default=Constants.root / "docs" / "planning" / "status.json",
     )
     parser.add_argument(
         "--todo",
         type=Path,
-        default=Constants.root / "docs" / "TODO.md",
+        default=Constants.root / "docs" / "planning" / "TODO.md",
     )
     parser.add_argument("--quiet", action="store_true")
     commands: _ParserFactory = parser.add_subparsers(
@@ -843,25 +1122,25 @@ def main() -> int:
     note.add_argument("text")
     args: Namespace = parser.parse_args()
     state_path: Path = args.state
-    state_loaded: Json = loads(s=state_path.read_text(encoding="utf-8"))
-    if not isinstance(state_loaded, dict):
-        msg: str = f"{state_path}: expected a JSON object"
-        raise SystemExit(msg)
-    state: dict[str, Json] = state_loaded
-    if apply(args=args, state=state):
-        stored: Json = state.get("snapshot")
-        fresh: dict[str, Json] = take_snapshot(state=state, todo=args.todo)
-        if not (
-            isinstance(stored, dict) and same_numbers(left=stored, right=fresh)
-        ):
-            state["previous"] = stored if isinstance(stored, dict) else None
-            state["snapshot"] = fresh
-        state["updated_at"] = now_iso()
-        state["updated"] = datetime.now().astimezone().date().isoformat()
-        _ = state_path.write_text(
-            data=dumps(obj=state, indent=2) + "\n",
-            encoding="utf-8",
-        )
+    with locked(path=state_path):
+        state: DictJson = _load_state(path=state_path)
+        if apply(args=args, state=state):
+            stored: Json = state.get("snapshot")
+            fresh: DictJson = take_snapshot(
+                state=state,
+                todo=args.todo,
+            )
+            if not (
+                isinstance(stored, dict)
+                and same_numbers(left=stored, right=fresh)
+            ):
+                state["previous"] = (
+                    stored if isinstance(stored, dict) else None
+                )
+                state["snapshot"] = fresh
+            state["updated_at"] = now_iso()
+            state["updated"] = datetime.now().astimezone().date().isoformat()
+            _save_state(path=state_path, state=state)
     write_block(todo=args.todo, block=render(state=state, todo=args.todo))
     write_block(
         todo=args.todo,
@@ -869,7 +1148,9 @@ def main() -> int:
         name="progress",
     )
     if not args.quiet:
-        _ = stdout.write(summary(state=state, todo=args.todo) + "\n")
+        _ = stdout.write(
+            summary(state=state, todo=args.todo) + "\n",
+        )
     return 0
 
 

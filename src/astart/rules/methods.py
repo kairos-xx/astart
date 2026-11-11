@@ -3,11 +3,11 @@
 A call is only trusted when nothing in the module can make it reach another
 signature: the method is defined once, every definition of that name takes the
 same parameters, and no instance attribute of that name is ever assigned.
+
 """
 
 from __future__ import annotations
 
-import builtins
 from ast import (
     AST,
     AnnAssign,
@@ -34,6 +34,7 @@ from ast import (
 from ast import (
     arguments as ast_arguments,
 )
+from builtins import __dict__
 from typing import TYPE_CHECKING, Final, final
 
 from astart.rules.scopes import names_bound_by
@@ -60,19 +61,29 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        neutral_options: ``@dataclass`` options that do not change
-            ``__init__``.
-        init_methods: Method names that replace the generated ``__init__``.
-        name_rebinders: Builtins that can rebind module-level names.
-        name_readers: Dict methods that only read a namespace view.
-        namespace_views: Builtins that return a view of a namespace, which
+        neutral_options (Final[frozenset[str | None]]): ``@dataclass`` options
+            that do not change ``__init__``.
+        init_methods (Final[frozenset[str]]): Method names that replace the
+            generated ``__init__``.
+        name_rebinders (Final[frozenset[str]]): Builtins that can rebind
+            module-level names.
+        name_readers (Final[frozenset[str]]): Dict methods that only read a
+            namespace view.
+        namespace_views (Final[frozenset[str]]): Builtins that return a view of
+            a namespace, which
             only rebinds names when it is written or kept.
-        attribute_rebinders: Builtins that can rebind attributes.
-        attribute_hooks: Attributes whose use can rebind or intercept others.
-        interceptors: Methods that intercept every attribute access.
-        attribute_defs: Methods that customise attribute writes or misses.
-        safe_decorators: Class decorators that keep ``__init__`` as written.
-        safe_bases: External bases that do not change construction.
+        attribute_rebinders (Final[frozenset[str]]): Builtins that can rebind
+            attributes.
+        attribute_hooks (Final[frozenset[str]]): Attributes whose use can
+            rebind or intercept others.
+        interceptors (Final[frozenset[str]]): Methods that intercept every
+            attribute access.
+        attribute_defs (Final[frozenset[str]]): Methods that customise
+            attribute writes or misses.
+        safe_decorators (Final[frozenset[str]]): Class decorators that keep
+            ``__init__`` as written.
+        safe_bases (Final[frozenset[str]]): External bases that do not change
+            construction.
 
     """
 
@@ -124,10 +135,11 @@ def _shape(*, function: Function) -> Shape:
     """Describe the parameter names a function accepts.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        Positional and keyword-only names, then ``*args`` and ``**kwargs``.
+        Shape: Positional and keyword-only names,
+            then ``*args`` and ``**kwargs``.
 
     """
     arguments: ast_arguments = function.args
@@ -159,8 +171,8 @@ class MethodIndex:
         """Index the module once.
 
         Args:
-            module: Parsed module.
-            counts: Binding counts from ``binding_counts``.
+            module (CommentedModule): Parsed module.
+            counts (Mapping[str, int]): Binding counts from ``binding_counts``.
 
         """
         self._module: CommentedModule = module
@@ -202,11 +214,11 @@ class MethodIndex:
         a store, ``update``, an alias, or ``exec``/``eval`` can.
 
         Args:
-            call: A call of ``globals``, ``vars``, ``locals``, ``exec`` or
-                ``eval``.
+            call (Call): A call of ``globals`` , ``vars`` ,
+                ``locals``, ``exec`` or ``eval``.
 
         Returns:
-            ``True`` when the call only reads from the view.
+            bool: ``True`` when the call only reads from the view.
 
         """
         if not (
@@ -227,10 +239,10 @@ class MethodIndex:
         """Tell whether a name is a class defined once in the module.
 
         Args:
-            name: Candidate name.
+            name (str): Candidate name.
 
         Returns:
-            ``True`` for a module class bound exactly once.
+            bool: ``True`` for a module class bound exactly once.
 
         """
         return name in self._classes
@@ -239,12 +251,12 @@ class MethodIndex:
         """Tell whether an attribute call can only reach one signature.
 
         Args:
-            call: Attribute call.
-            declaration: Definition the call was bound to.
+            call (Call): Attribute call.
+            declaration (AST): Definition the call was bound to.
 
         Returns:
-            ``True`` when every definition of the name takes the same
-            parameters and no instance attribute of that name is assigned.
+            bool: ``True`` when every definition of the name takes the same
+                parameters and no instance attribute of that name is assigned.
 
         """
         if not isinstance(call.func, Attribute):
@@ -279,8 +291,8 @@ class MethodIndex:
         """Tell whether the module can rebind attributes behind the binder.
 
         Returns:
-            ``True`` when ``setattr``, ``__dict__``, ``__class__`` writes or
-            similar appear anywhere.
+            bool: ``True`` when ``setattr`` , ``__dict__`` ,
+                ``__class__`` writes or similar appear anywhere.
 
         """
         return self._dynamic_attributes or any(
@@ -292,7 +304,7 @@ class MethodIndex:
         """Tell whether some class intercepts every attribute access.
 
         Returns:
-            ``True`` when a ``__getattribute__`` is defined.
+            bool: ``True`` when a ``__getattribute__`` is defined.
 
         """
         return self._intercepts
@@ -301,8 +313,9 @@ class MethodIndex:
         """Tell whether a class's instance attributes can be reasoned about.
 
         Returns:
-            ``True`` for a module class bound once, with no decorators beyond
-            ``final``, no construction hooks and only trusted bases.
+            bool: ``True`` for a module class bound once,
+                with no decorators beyond ``final``, no
+                construction hooks and only trusted bases.
 
         """
         return (
@@ -318,10 +331,11 @@ class MethodIndex:
         """List the names the in-module bases of a class already define.
 
         Args:
-            _cls: Class definition.
+            _cls (ClassDef): Class definition.
 
         Returns:
-            Method, class-level and instance attribute names of the bases.
+            set[str]: Method, class-level and instance attribute names of the
+                bases.
 
         """
         names: set[str] = set()
@@ -349,10 +363,10 @@ class MethodIndex:
         """List the module classes named in a class's base list.
 
         Args:
-            _cls: Class definition.
+            _cls (ClassDef): Class definition.
 
         Returns:
-            The bases that are module classes.
+            list[ClassDef]: The bases that are module classes.
 
         """
         found: list[ClassDef] = []
@@ -368,11 +382,11 @@ class MethodIndex:
         """Count the ways a class body binds a name.
 
         Args:
-            owner: Class definition.
-            name: Attribute name.
+            owner (ClassDef): Class definition.
+            name (str): Attribute name.
 
         Returns:
-            How many times the body defines, assigns or deletes it.
+            int: How many times the body defines, assigns or deletes it.
 
         """
         return self._binds(owner=owner, name=name)
@@ -385,11 +399,11 @@ class MethodIndex:
         imports all count; the bodies of nested functions and classes do not.
 
         Args:
-            owner: Class definition.
-            name: Attribute name.
+            owner (ClassDef): Class definition.
+            name (str): Attribute name.
 
         Returns:
-            How many times the body binds or deletes the name.
+            int: How many times the body binds or deletes the name.
 
         """
         total: int = 0
@@ -416,14 +430,14 @@ class MethodIndex:
         """Tell whether a call's callee can be trusted at all in this module.
 
         A bare name is distrusted when the module can rebind names behind the
-        binder's back (``globals()``, ``exec`` …). A module class is trusted
+        binder's back (``globals()``, ``exec``…). A module class is trusted
         only when nothing in it or its bases changes construction.
 
         Args:
-            call: Call expression.
+            call (Call): Call expression.
 
         Returns:
-            ``False`` when the call must keep its positional form.
+            bool: ``False`` when the call must keep its positional form.
 
         """
         func: AST = call.func
@@ -439,12 +453,12 @@ class MethodIndex:
         """Tell whether calling a module class runs ``__init__`` as written.
 
         Args:
-            name: Class name.
+            name (str): Class name.
 
         Returns:
-            ``True`` for a class with no metaclass, no ``__new__``, no
-            decorator that rewrites it, and only bases that leave
-            construction alone (checked through in-module bases).
+            bool: ``True`` for a class with no metaclass, no ``__new__``, no
+                decorator that rewrites it, and only bases that leave
+                construction alone (checked through in-module bases).
 
         """
         return self._chain_safe(_cls=self._classes.get(name), seen=set())
@@ -453,11 +467,11 @@ class MethodIndex:
         """Check a class and its in-module bases for construction hooks.
 
         Args:
-            _cls: Class to check.
-            seen: Classes already visited, to stop on cycles.
+            _cls (ClassDef | None): Class to check.
+            seen (set[int]): Classes already visited, to stop on cycles.
 
         Returns:
-            ``True`` when no class in the chain changes construction.
+            bool: ``True`` when no class in the chain changes construction.
 
         """
         if _cls is None:
@@ -493,10 +507,10 @@ class MethodIndex:
         """Tell whether a call is made on a freshly constructed instance.
 
         Args:
-            call: Attribute call.
+            call (Call): Attribute call.
 
         Returns:
-            ``True`` for ``Class(...).method(...)`` with a module class.
+            bool: ``True`` for ``Class(...).method(...)`` with a module class.
 
         """
         return (
@@ -515,11 +529,12 @@ class MethodIndex:
         """Find the method that directly contains a call.
 
         Args:
-            call: Call expression.
+            call (Call): Call expression.
 
         Returns:
-            The nearest function and its class, or ``None`` when that
-            function is not a method defined directly in a class body.
+            tuple[Function, ClassDef] | None:
+                The nearest function and its class, or ``None`` when that
+                function is not a method defined directly in a class body.
 
         """
         node: AST | None = self._parents.get(id(call))
@@ -542,12 +557,14 @@ class MethodIndex:
         """Find the method a class resolves a name to.
 
         Args:
-            owner: Class to start from.
-            name: Method name.
+            owner (ClassDef): Class to start from.
+            name (str): Method name.
 
         Returns:
-            The single definition and its class, searching a lone in-module
-            base chain, or ``None`` when it is missing, repeated or ambiguous.
+            tuple[Function, ClassDef] | None:
+                The single definition and its class, searching
+                a lone in-module base chain, or ``None``
+                when it is missing, repeated or ambiguous.
 
         """
         found: list[Function] = [
@@ -569,11 +586,12 @@ class MethodIndex:
         """Bind ``self.method(...)`` inside a method.
 
         Args:
-            call: Call expression.
+            call (Call): Call expression.
 
         Returns:
-            The binding, or ``None`` when the call is not a plain instance
-            method call on the unmodified receiver.
+            BoundCall | None:
+                The binding, or ``None`` when the call is not a plain
+                instance method call on the unmodified receiver.
 
         """
         func: expr = call.func
@@ -623,13 +641,14 @@ class MethodIndex:
         """Match a call's arguments to an instance method's parameters.
 
         Args:
-            call: Call expression.
-            target: Method definition.
-            owner: Class that defines it.
+            call (Call): Call expression.
+            target (Function): Method definition.
+            owner (ClassDef): Class that defines it.
 
         Returns:
-            The binding, or ``None`` for star arguments, surplus arguments,
-            unknown or repeated keywords, or variadic signatures.
+            BoundCall | None:
+                The binding, or ``None`` for star arguments, surplus arguments,
+                unknown or repeated keywords, or variadic signatures.
 
         """
         contracts: tuple[CallableContract, ...] = self._module.signature(
@@ -727,10 +746,10 @@ def _construction_agrees(*, _cls: ClassDef) -> bool:
     receiver, because the call's arguments reach both.
 
     Args:
-        _cls: Class definition.
+        _cls (ClassDef): Class definition.
 
     Returns:
-        ``True`` when construction cannot be redirected by ``__new__``.
+        bool: ``True`` when construction cannot be redirected by ``__new__``.
 
     """
     methods: dict[str, Function] = {
@@ -756,15 +775,13 @@ def _is_exception(*, name: str | None) -> bool:
     """Tell whether a name is a builtin exception class.
 
     Args:
-        name: Candidate base-class name.
+        name (str | None): Candidate base-class name.
 
     Returns:
-        ``True`` for names such as ``ValueError`` or ``OSError``.
+        bool: ``True`` for names such as ``ValueError`` or ``OSError``.
 
     """
-    found: type | None = (
-        None if name is None else getattr(builtins, name, None)
-    )
+    found: type | None = None if name is None else __dict__.get(name, None)
     return isinstance(found, type) and issubclass(found, BaseException)
 
 
@@ -772,10 +789,10 @@ def _decorator_target(*, node: AST) -> AST:
     """Unwrap a decorator call to the decorator expression itself.
 
     Args:
-        node: Decorator expression.
+        node (AST): Decorator expression.
 
     Returns:
-        The called expression for ``@d(...)``, otherwise the node.
+        AST: The called expression for ``@d(...)``, otherwise the node.
 
     """
     return node.func if isinstance(node, Call) else node
@@ -785,10 +802,10 @@ def _simple_name(*, node: AST) -> str | None:
     """Read the last name of ``name`` or ``module.name``.
 
     Args:
-        node: Expression.
+        node (AST): Expression.
 
     Returns:
-        The identifier, or ``None`` for anything else.
+        str | None: The identifier, or ``None`` for anything else.
 
     """
     if isinstance(node, Name):
@@ -800,11 +817,12 @@ def _keyword_constant(*, call: Call, name: str) -> Constant | None:
     """Find a constant keyword argument of a call.
 
     Args:
-        call: Call expression.
-        name: Keyword name.
+        call (Call): Call expression.
+        name (str): Keyword name.
 
     Returns:
-        The constant node, or ``None`` when absent or not a constant.
+        Constant | None:
+            The constant node, or ``None`` when absent or not a constant.
 
     """
     for item in call.keywords:
@@ -820,8 +838,8 @@ def _header_is_plain(*, cls: ClassDef) -> bool:
         cls: Class definition.
 
     Returns:
-        ``True`` for one ``dataclass`` decorator whose options leave
-        ``__init__`` alone, on a class with no bases or class keywords.
+        bool: ``True`` for one ``dataclass`` decorator whose options leave
+            ``__init__`` alone, on a class with no bases or class keywords.
 
     """
     if cls.bases or cls.keywords or len(cls.decorator_list) != 1:
@@ -842,13 +860,14 @@ def _field_of(*, statement: AnnAssign) -> tuple[bool, str | None]:
     """Classify one annotated class attribute of a dataclass.
 
     Args:
-        statement: Annotated assignment in the class body.
+        statement (AnnAssign): Annotated assignment in the class body.
 
     Returns:
-        ``(valid, name)``: ``valid`` is ``False`` when the attribute makes the
-        generated signature unclear (``KW_ONLY``, per-field ``kw_only``);
-        ``name`` is its parameter name, or ``None`` when it is not a
-        parameter (``ClassVar``, ``field(init=False)``).
+        tuple[bool, str | None]: ``(valid, name)`` : ``valid`` is ``False``
+            when the attribute
+            makes the generated signature unclear (``KW_ONLY``, per-field
+            ``kw_only``); ``name`` is its parameter name, or ``None`` when
+            it is not a parameter (``ClassVar``, ``field(init=False)``).
 
     """
     annotation: AST = statement.annotation
@@ -878,9 +897,10 @@ def dataclass_init_names(*, cls: ClassDef) -> list[str] | None:
         cls: Class definition.
 
     Returns:
-        Field names in order, or ``None`` when the class is not a simple
+        list[str] | None:
+            Field names in order, or ``None`` when the class is not a simple
         dataclass: other decorators, bases, a custom ``__init__``, ``init=``
-        or ``kw_only=`` options, ``KW_ONLY``, or per-field ``kw_only``.
+            or ``kw_only=`` options, ``KW_ONLY``, or per-field ``kw_only``.
 
     """
     if not _header_is_plain(cls=cls):
@@ -904,10 +924,10 @@ def ast_children(*, node: AST) -> list[AST]:
     """List the direct child nodes of a node.
 
     Args:
-        node: Parent node.
+        node (AST): Parent node.
 
     Returns:
-        Its children, in field order.
+        list[AST]: Its children, in field order.
 
     """
     return [
@@ -925,10 +945,11 @@ def _field_values(
     """Return the nodes held in one ``__dict__`` field.
 
     Args:
-        value: Raw field value; lists hold several children.
+        value (AST | list[AST] | str | int | None): Raw field value; lists hold
+            several children.
 
     Returns:
-        The field's items.
+        Iterable[AST | list[AST] | str | int | None]: The field's items.
 
     """
     if isinstance(value, list):

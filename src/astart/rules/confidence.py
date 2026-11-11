@@ -19,18 +19,23 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        proven: Confidence of a fix that preserves meaning by construction.
-        by_basis: Confidence of an inferred annotation, by its evidence.
-        by_fix: Confidence of other guarded fixes, by fix key.
-        by_literal: Confidence of an annotation taken from a literal default
-            alone, by type: the share of such parameters in 165 typed
-            libraries whose original annotation was exactly that type
-            (``int`` 73 %, ``str`` 69 %; the rest are wider, such as
-            ``float`` or ``str | None``).
-        default_minimum: Confidence below which ``astart fix`` writes
+        proven (Final[float]): Confidence of a fix that preserves meaning by
+            construction.
+        by_basis (Final[Mapping[HintBasis, float]]): Confidence of an inferred
+            annotation, by its evidence.
+        by_fix (Final[Mapping[str, float]]): Confidence of other guarded fixes,
+            by fix key.
+        by_literal (Final[Mapping[str, float]]): Confidence of an annotation
+            taken from a literal default alone, by
+            type: the share of such parameters in 165 typed libraries whose
+            original annotation was exactly that type (``int`` 73 %, ``str``
+            69 %; the rest are wider, such as ``float`` or ``str | None``).
+        default_minimum (Final[float]): Confidence below which ``astart fix``
+            writes
             nothing unless asked (``--min-confidence``).
-        fallback: Confidence of a guarded fix not listed above.
-        hinted_fixes: Fixes whose confidence comes from the hint's basis.
+        fallback (Final[float]): Confidence of a guarded fix not listed above.
+        hinted_fixes (Final[frozenset[str]]): Fixes whose confidence comes from
+            the hint's basis.
 
     """
 
@@ -80,13 +85,15 @@ def offer_confidence(
     """Rate how sure the engine is that a fix is right for a subject.
 
     Args:
-        fix: Offered fix.
-        subject: Subject the fix would edit.
-        facts: Resolved module facts, including lazily computed hints.
+        fix (Fix): Offered fix.
+        subject (Subject): Subject the fix would edit.
+        facts (ModuleFacts): Resolved module facts, including lazily computed
+            hints.
 
     Returns:
-        A confidence between 0 and 1; proven fixes are 1.0 and an inferred
-        annotation takes the confidence of the evidence that justified it.
+        float: A confidence between 0 and 1; proven fixes are 1.0 and an
+            inferred
+            annotation takes the confidence of the evidence that justified it.
 
     """
     if fix.safety is FixSafety.proven:

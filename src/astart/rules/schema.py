@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ast import BinOp, BitOr, Constant, Name, Subscript, Tuple, expr, parse
 from dataclasses import MISSING, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, final
@@ -33,10 +34,11 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        enums: Grouped module constant.
-        entities: Grouped module constant.
-        scalar: Grouped module constant.
-        primitives: Grouped module constant.
+        enums (Final[dict[str, type[StrEnum]]]): Grouped module constant.
+        entities (Final[dict[str, type]]): Grouped module constant.
+        scalar (Final[dict[str, JsonValue]]): Grouped module constant.
+        primitives (Final[dict[str, str]]): Grouped module constant.
+        variadic_tuple_arity (Final[int]): Element count of ``tuple[X, ...]``.
 
     """
 
@@ -65,62 +67,144 @@ class Constants:
         "float": "number",
         "bool": "boolean",
     }
+    variadic_tuple_arity: Final[int] = 2
+
+
+def _schema_node(*, node: expr, source: str) -> JsonValue:
+    """Translate one annotation AST node to a schema fragment.
+
+    Args:
+        node (expr): Parsed annotation expression.
+        source (str): Original annotation text, for error messages.
+
+    Returns:
+        JsonValue: The schema fragment.
+
+    Raises:
+        ValueError: If the annotation is not supported.
+
+    """
+    match node:
+        case BinOp(op=BitOr(), left=left, right=right):
+            arms: list[JsonValue] = [
+                {"type": "null"}
+                if isinstance(side, Constant) and side.value is None
+                else _schema_node(node=side, source=source)
+                for side in (left, right)
+            ]
+            return _union_schema(arms=arms)
+        case Name(id=name):
+            return _named_schema(name=name, source=source)
+        case Subscript(value=Name(id="tuple"), slice=slice_node):
+            elements: list[expr] = (
+                list(slice_node.elts)
+                if isinstance(slice_node, Tuple)
+                else [slice_node]
+            )
+            if (
+                len(elements) == Constants.variadic_tuple_arity
+                and isinstance(elements[1], Constant)
+                and elements[1].value is Ellipsis
+            ):
+                return {
+                    "type": "array",
+                    "items": _schema_node(
+                        node=elements[0],
+                        source=source,
+                    ),
+                }
+        case Subscript(
+            value=Name(id="Mapping"),
+            slice=Tuple(elts=[Name(id="str"), inner]),
+        ):
+            values: JsonValue = (
+                Constants.scalar
+                if isinstance(inner, Name) and inner.id == "FactValue"
+                else _schema_node(node=inner, source=source)
+            )
+            return {"type": "object", "additionalProperties": values}
+        case _:
+            pass
+    msg: str = f"unsupported annotation {source!r}"
+    raise ValueError(msg)
+
+
+def _union_schema(*, arms: list[JsonValue]) -> JsonValue:
+    """Flatten a multi-arm union into one ``anyOf`` fragment.
+
+    Args:
+        arms (list[JsonValue]): Schema fragments of each union arm.
+
+    Returns:
+        JsonValue: The combined ``anyOf`` fragment.
+
+    """
+    flattened: list[JsonValue] = []
+    for arm in arms:
+        nested: JsonValue | None = (
+            arm.get("anyOf") if isinstance(arm, dict) else None
+        )
+        if isinstance(nested, list):
+            flattened.extend(nested)
+        else:
+            flattened.append(arm)
+    return {"anyOf": flattened}
+
+
+def _named_schema(*, name: str, source: str) -> JsonValue:
+    """Translate one bare annotation name to a schema fragment.
+
+    Args:
+        name (str): Annotation identifier.
+        source (str): Original annotation text, for error messages.
+
+    Returns:
+        JsonValue: The schema fragment.
+
+    Raises:
+        ValueError: If the annotation is not supported.
+
+    """
+    if name in Constants.primitives:
+        return {"type": Constants.primitives[name]}
+    if name in Constants.enums:
+        names: list[JsonValue] = [
+            m.value
+            for m in sorted(Constants.enums[name], key=lambda m: m.value)
+        ]
+        return {"enum": names}
+    if name in Constants.entities or name == "Predicate":
+        return {"$ref": f"#/$defs/{name}"}
+    msg: str = f"unsupported annotation {source!r}"
+    raise ValueError(msg)
 
 
 def _type_schema(*, text: str) -> JsonValue:
     """Translate one annotation string to a schema fragment.
 
     Args:
-        text: Annotation as written in the dataclass.
+        text (str): Annotation as written in the dataclass.
 
     Returns:
-        The schema fragment.
+        JsonValue: The schema fragment.
 
     Raises:
         ValueError: If the annotation is not supported.
 
     """
-    text = text.strip()
-    if text.endswith(" | None"):
-        return {
-            "anyOf": [
-                _type_schema(text=text.removesuffix(" | None")),
-                {"type": "null"},
-            ],
-        }
-    if text in Constants.primitives:
-        return {"type": Constants.primitives[text]}
-    if text in Constants.enums:
-        names: list[JsonValue] = [
-            m.value
-            for m in sorted(Constants.enums[text], key=lambda m: m.value)
-        ]
-        return {"enum": names}
-    if text in Constants.entities or text == "Predicate":
-        return {"$ref": f"#/$defs/{text}"}
-    if text.startswith("tuple[") and text.endswith(", ...]"):
-        inner: str = text.removeprefix("tuple[").removesuffix(", ...]")
-        return {"type": "array", "items": _type_schema(text=inner)}
-    if text.startswith("Mapping[str, ") and text.endswith("]"):
-        inner = text.removeprefix("Mapping[str, ").removesuffix("]")
-        values: JsonValue = (
-            Constants.scalar
-            if inner == "FactValue"
-            else _type_schema(text=inner)
-        )
-        return {"type": "object", "additionalProperties": values}
-    msg: str = f"unsupported annotation {text!r}"
-    raise ValueError(msg)
+    source: str = text.strip()
+    node: expr = parse(source=source, mode="eval").body
+    return _schema_node(node=node, source=source)
 
 
 def _entity_schema(*, kind: type) -> JsonValue:
     """Describe one dataclass as a JSON object schema.
 
     Args:
-        kind: Dataclass to describe.
+        kind (type): Dataclass to describe.
 
     Returns:
-        The object schema.
+        JsonValue: The object schema.
 
     """
     properties: dict[str, JsonValue] = {}
@@ -142,7 +226,7 @@ def _predicate_schema() -> JsonValue:
     """Describe the predicate algebra.
 
     Returns:
-        The schema of a predicate object.
+        JsonValue: The schema of a predicate object.
 
     """
     ref: JsonValue = {"$ref": "#/$defs/Predicate"}
@@ -188,7 +272,8 @@ def catalog_schema() -> JsonValue:
     """Build the JSON Schema of a catalog.
 
     Returns:
-        A draft 2020-12 schema generated from the entity dataclasses.
+        JsonValue:
+            A draft 2020-12 schema generated from the entity dataclasses.
 
     """
     definitions: dict[str, JsonValue] = {
@@ -221,15 +306,16 @@ def schema_text() -> str:
     """Render the schema as canonical JSON.
 
     Returns:
-        Canonical text ending with a newline.
+        str: Canonical text ending with a newline.
 
     """
     return canonical_dumps(value=catalog_schema())
 
 
 def main() -> None:
-    """Write ``schema.json`` next to this module."""
-    target: Path = Path(__file__).with_name(name="schema.json")
+    """Write the canonical schema into the package artifacts directory."""
+    target: Path = Path(__file__).parent / "artifacts" / "schema.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
     _ = target.write_text(data=schema_text(), encoding="utf-8")
 
 

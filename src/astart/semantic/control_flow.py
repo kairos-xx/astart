@@ -56,11 +56,13 @@ class SuiteContext:
     """Context for building a suite of statements.
 
     Attributes:
-        break_target: Break target retained as int | None by this instance.
-        continue_target: Continue target retained as int | None by this
+        break_target (int | None): Break target retained as int | None by this
             instance.
-        exception_target: Exception target retained as int by this instance.
-        successor: Successor retained as int by this instance.
+        continue_target (int | None): Continue target retained as int | None by
+            this instance.
+        exception_target (int): Exception target retained as int by this
+            instance.
+        successor (int): Successor retained as int by this instance.
 
     """
 
@@ -76,8 +78,8 @@ class FlowEdge:
     """One control-flow transition, including exceptional edges.
 
     Attributes:
-        target: Destination block identity.
-        kind: Control transfer classification.
+        target (int): Destination block identity.
+        kind (EdgeLabel): Control transfer classification.
 
     """
 
@@ -91,9 +93,10 @@ class BasicBlock:
     """One statement-level CFG block.
 
     Attributes:
-        id: CFG-local block identity.
-        statement: Executed syntactic statement, or None for sentinel blocks.
-        successors: Outgoing edges.
+        id (int): CFG-local block identity.
+        statement (stmt | None): Executed syntactic statement, or None for
+            sentinel blocks.
+        successors (tuple[FlowEdge, ...]): Outgoing edges.
 
     """
 
@@ -108,8 +111,9 @@ class ReachingDefinition:
     """A symbol and all binding IDs potentially reaching a program point.
 
     Attributes:
-        symbol_id: Lexical symbol identity.
-        binding_ids: Conservative set of possible reaching bindings.
+        symbol_id (int): Lexical symbol identity.
+        binding_ids (frozenset[int]): Conservative set of possible reaching
+            bindings.
 
     """
 
@@ -130,8 +134,8 @@ class ControlFlowGraph:
         """Build a CFG with explicit branch, loop, return, and cleanup edges.
 
         Args:
-            body: Executable suite of one lexical scope.
-            scopes: Indexed symbol and binding graph.
+            body (list[stmt]): Executable suite of one lexical scope.
+            scopes (ScopeGraph): Indexed symbol and binding graph.
 
         """
         self._scopes: ScopeGraph = scopes
@@ -171,7 +175,7 @@ class ControlFlowGraph:
         """Return visited blocks, changed blocks and convergence status.
 
         Returns:
-            SolveStatistics produced by this operation.
+            SolveStatistics: SolveStatistics produced by this operation.
 
         """
         return self._solver.statistics
@@ -184,7 +188,7 @@ class ControlFlowGraph:
         graph while reusing unchanged results.
 
         Args:
-            scopes: Freshly indexed symbol and binding graph.
+            scopes (ScopeGraph): Freshly indexed symbol and binding graph.
 
         """
         self._scopes = scopes
@@ -197,10 +201,12 @@ class ControlFlowGraph:
         """Recompute changed blocks and all their data-dependent successors.
 
         Args:
-            dirty: CFG block IDs whose transfer behavior changed in place.
+            dirty (frozenset[int]): CFG block IDs whose transfer behavior
+                changed in place.
 
         Returns:
-            Exact worklist statistics, including visited and changed blocks.
+            SolveStatistics: Exact worklist statistics, including
+                visited and changed blocks.
 
         """
         statistics: SolveStatistics = self._solver.solve(dirty=dirty)
@@ -216,11 +222,11 @@ class ControlFlowGraph:
         """Query all definitions reaching a statement's entry.
 
         Args:
-            at: Statement in this CFG.
-            symbol_id: Lexical symbol being queried.
+            at (stmt): Statement in this CFG.
+            symbol_id (int): Lexical symbol being queried.
 
         Returns:
-            Conservative reaching-definition set.
+            ReachingDefinition: Conservative reaching-definition set.
 
         Raises:
             KeyError: If the statement belongs to another scope's CFG.
@@ -246,10 +252,10 @@ class ControlFlowGraph:
         function's flow, not the enclosing suite's.
 
         Args:
-            statement: Statement inspected for ``yield`` or ``await``.
+            statement (stmt): Statement inspected for ``yield`` or ``await``.
 
         Returns:
-            True when the statement contains a suspension point.
+            bool: True when the statement contains a suspension point.
 
         """
         pending: list[AST] = [statement]
@@ -271,11 +277,11 @@ class ControlFlowGraph:
         """Allocate a new block identity.
 
         Args:
-            statement: The statement examined while allocate a new block
-                identity.
+            statement (stmt | None): The statement examined while allocate a
+                new block identity.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         identity: int = self._next_id
@@ -287,10 +293,10 @@ class ControlFlowGraph:
         """Add a deterministic directed CFG edge.
 
         Args:
-            kind: Kind supplied as EdgeLabel for this operation.
-            origin: Origin supplied as int for this operation.
-            target: The target examined while add a deterministic directed CFG
-                edge.
+            kind (EdgeLabel): Kind supplied as EdgeLabel for this operation.
+            origin (int): Origin supplied as int for this operation.
+            target (int): The target examined while add a
+                deterministic directed CFG edge.
 
         """
         edge: FlowEdge = FlowEdge(target=target, kind=kind)
@@ -301,11 +307,13 @@ class ControlFlowGraph:
         """Build a structured suite backwards, preserving entry order.
 
         Args:
-            ctx: Ctx supplied as SuiteContext for this operation.
-            statements: Collection of statements supplied for this operation.
+            ctx (SuiteContext): Ctx supplied as SuiteContext for this
+                operation.
+            statements (list[stmt]): Collection of statements supplied for this
+                operation.
 
         Returns:
-            int produced by this operation.
+            int: int produced by this operation.
 
         """
         next_id: int = ctx.successor
@@ -331,10 +339,11 @@ class ControlFlowGraph:
         """Dispatch a statement to its appropriate control-flow handler.
 
         Args:
-            identity: Identifier of the statement's control-flow node.
-            statement: Statement whose control flow is dispatched.
-            next_id: Identifier of the subsequent control-flow node.
-            ctx: Suite context containing active control-flow targets.
+            identity (int): Identifier of the statement's control-flow node.
+            statement (stmt): Statement whose control flow is dispatched.
+            next_id (int): Identifier of the subsequent control-flow node.
+            ctx (SuiteContext): Suite context containing active control-flow
+                targets.
 
         """
         if isinstance(statement, If):
@@ -398,10 +407,13 @@ class ControlFlowGraph:
         """Dispatch a terminal statement to its control-flow handler.
 
         Args:
-            identity: Identifier of the terminal statement's control-flow node.
-            statement: Return, raise, break, or continue statement to dispatch.
-            next_id: Identifier of the subsequent control-flow node.
-            ctx: Suite context containing exception and loop targets.
+            identity (int): Identifier of the terminal statement's control-flow
+                node.
+            statement (Return | Raise | Break | Continue): Return, raise,
+                break, or continue statement to dispatch.
+            next_id (int): Identifier of the subsequent control-flow node.
+            ctx (SuiteContext): Suite context containing exception and loop
+                targets.
 
         """
         if isinstance(statement, Return):
@@ -435,11 +447,12 @@ class ControlFlowGraph:
         """Handle If statement control flow.
 
         Args:
-            ctx: Ctx supplied as SuiteContext for this operation.
-            identity: Identity supplied as int for this operation.
-            next_id: Next id supplied as int for this operation.
-            statement: The statement examined while handle If statement control
-                flow.
+            ctx (SuiteContext): Ctx supplied as SuiteContext for this
+                operation.
+            identity (int): Identity supplied as int for this operation.
+            next_id (int): Next id supplied as int for this operation.
+            statement (If): The statement examined while handle If statement
+                control flow.
 
         """
         branches: tuple[tuple[EdgeLabel, list[stmt]], ...] = (
@@ -469,11 +482,13 @@ class ControlFlowGraph:
         """Handle While, For, and AsyncFor loop control flow.
 
         Args:
-            ctx: Ctx supplied as SuiteContext for this operation.
-            identity: Identity supplied as int for this operation.
-            next_id: Next id supplied as int for this operation.
-            statement: The statement examined while handle While, For, and
-                AsyncFor loop control flow.
+            ctx (SuiteContext): Ctx supplied as SuiteContext for this
+                operation.
+            identity (int): Identity supplied as int for this operation.
+            next_id (int): Next id supplied as int for this operation.
+            statement (While | For | AsyncFor): The statement examined while
+                handle While,
+                For, and AsyncFor loop control flow.
 
         """
         loop_entry: int = self._suite(
@@ -508,11 +523,12 @@ class ControlFlowGraph:
         """Handle Try and TryStar control flow.
 
         Args:
-            ctx: Ctx supplied as SuiteContext for this operation.
-            identity: Identity supplied as int for this operation.
-            next_id: Next id supplied as int for this operation.
-            statement: The statement examined while handle Try and TryStar
-                control flow.
+            ctx (SuiteContext): Ctx supplied as SuiteContext for this
+                operation.
+            identity (int): Identity supplied as int for this operation.
+            next_id (int): Next id supplied as int for this operation.
+            statement (Try | TryStar): The statement examined while handle
+                Try and TryStar control flow.
 
         """
         final_entry: int = self._suite(
@@ -583,11 +599,12 @@ class ControlFlowGraph:
         """Handle Match statement control flow.
 
         Args:
-            ctx: Ctx supplied as SuiteContext for this operation.
-            identity: Identity supplied as int for this operation.
-            next_id: Next id supplied as int for this operation.
-            statement: The statement examined while handle Match statement
-                control flow.
+            ctx (SuiteContext): Ctx supplied as SuiteContext for this
+                operation.
+            identity (int): Identity supplied as int for this operation.
+            next_id (int): Next id supplied as int for this operation.
+            statement (Match): The statement examined while handle
+                Match statement control flow.
 
         """
         for case in statement.cases:
@@ -618,11 +635,12 @@ class ControlFlowGraph:
         """Handle With and AsyncWith control flow.
 
         Args:
-            ctx: Ctx supplied as SuiteContext for this operation.
-            identity: Identity supplied as int for this operation.
-            next_id: Next id supplied as int for this operation.
-            statement: The statement examined while handle With and AsyncWith
-                control flow.
+            ctx (SuiteContext): Ctx supplied as SuiteContext for this
+                operation.
+            identity (int): Identity supplied as int for this operation.
+            next_id (int): Next id supplied as int for this operation.
+            statement (With | AsyncWith): The statement examined while handle
+                With and AsyncWith control flow.
 
         """
         body_entry: int = self._suite(
@@ -645,7 +663,7 @@ class ControlFlowGraph:
         """Handle Return statement control flow.
 
         Args:
-            identity: Identity supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
 
         """
         self._edge(origin=identity, target=self.exit_id, kind="return")
@@ -654,9 +672,9 @@ class ControlFlowGraph:
         """Handle Raise statement control flow.
 
         Args:
-            exception_target: Exception target supplied as int for this
+            exception_target (int): Exception target supplied as int for this
                 operation.
-            identity: Identity supplied as int for this operation.
+            identity (int): Identity supplied as int for this operation.
 
         """
         self._edge(
@@ -675,10 +693,10 @@ class ControlFlowGraph:
         """Handle Break statement control flow.
 
         Args:
-            break_target: Break target supplied as int | None for this
-                operation.
-            identity: Identity supplied as int for this operation.
-            next_id: Next id supplied as int for this operation.
+            break_target (int | None): Break target supplied as int | None for
+                this operation.
+            identity (int): Identity supplied as int for this operation.
+            next_id (int): Next id supplied as int for this operation.
 
         """
         self._edge(
@@ -697,10 +715,10 @@ class ControlFlowGraph:
         """Handle Continue statement control flow.
 
         Args:
-            continue_target: Continue target supplied as int | None for this
-                operation.
-            identity: Identity supplied as int for this operation.
-            next_id: Next id supplied as int for this operation.
+            continue_target (int | None): Continue target supplied as int |
+                None for this operation.
+            identity (int): Identity supplied as int for this operation.
+            next_id (int): Next id supplied as int for this operation.
 
         """
         self._edge(
@@ -718,12 +736,15 @@ class ControlFlowGraph:
         """Kill previous definitions on writes and generate new bindings.
 
         Args:
-            block: Block supplied as BasicBlock for this operation.
-            incoming: Incoming supplied as dict[int, frozenset[int]] for this
+            block (BasicBlock): Block supplied as BasicBlock for this
                 operation.
+            incoming (dict[int, frozenset[int]]): Incoming supplied as
+                dict[int,
+                frozenset[int]] for this operation.
 
         Returns:
-            dict[int, frozenset[int]] produced by this operation.
+            dict[int, frozenset[int]]: dict[int, frozenset[int]] produced by
+                this operation.
 
         """
         outgoing: dict[int, frozenset[int]] = dict(incoming)
@@ -776,8 +797,8 @@ class ControlFlowGraph:
         """Publish a converged solution or a sound conservative top state.
 
         Args:
-            statistics: Statistics supplied as SolveStatistics for this
-                operation.
+            statistics (SolveStatistics): Statistics supplied as
+                SolveStatistics for this operation.
 
         """
         if statistics.converged:

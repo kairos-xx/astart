@@ -25,6 +25,8 @@ from astart.rules.predicate import (
 from astart.rules.registry import Registries, rule_cost
 from astart.rules.vocabulary import Cost, Expressible, FixSafety
 
+type ListStr = list[str]
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from importlib.resources.abc import Traversable
@@ -44,7 +46,7 @@ class CatalogError(ValueError):
         """Create the error.
 
         Args:
-            problems: Every violation found.
+            problems (tuple[str, ...]): Every violation found.
 
         """
         super().__init__("; ".join(problems))
@@ -55,10 +57,10 @@ def dump_catalog(*, catalog: Catalog) -> str:
     """Serialize a catalog to canonical JSON.
 
     Args:
-        catalog: Catalog to serialize.
+        catalog (Catalog): Catalog to serialize.
 
     Returns:
-        Canonical text.
+        str: Canonical text.
 
     """
     return canonical_dumps(value=to_json(item=catalog))
@@ -68,11 +70,11 @@ def load_catalog(*, text: str, registries: Registries) -> Catalog:
     """Parse and validate a catalog.
 
     Args:
-        text: Catalog JSON.
-        registries: Vocabulary the catalog is validated against.
+        text (str): Catalog JSON.
+        registries (Registries): Vocabulary the catalog is validated against.
 
     Returns:
-        The validated catalog.
+        Catalog: The validated catalog.
 
     """
     value: JsonValue = loads(s=text)
@@ -88,15 +90,30 @@ def load_default_catalog(*, registries: Registries) -> Catalog:
     file-name order before validation.
 
     Args:
-        registries: Vocabulary the catalog is validated against.
+        registries (Registries): Vocabulary the catalog is validated against.
 
     Returns:
-        The validated seed catalog.
+        Catalog: The validated seed catalog.
 
     """
     parts: list[Catalog] = []
-    folder: Traversable = files("astart.rules").joinpath("catalog")
-    for entry in sorted(folder.iterdir(), key=lambda item: item.name):
+    folder: Traversable = files(anchor="astart.rules").joinpath(
+        "artifacts",
+        "catalog",
+    )
+    entries: list[tuple[str, Traversable]] = [
+        (entry.name, entry) for entry in folder.iterdir()
+    ]
+    entries.append(
+        (
+            "docs.json",
+            files(anchor="astart.docstrings").joinpath(
+                "artifacts",
+                "catalog.json",
+            ),
+        ),
+    )
+    for _name, entry in sorted(entries, key=lambda item: item[0]):
         if entry.name.endswith(".json"):
             value: JsonValue = loads(s=entry.read_text(encoding="utf-8"))
             parts.append(catalog_from_json(value=value))
@@ -119,14 +136,15 @@ def validate_catalog(*, catalog: Catalog, registries: Registries) -> None:
     the engine; see ``astart.rules.engine.verify_catalog``.
 
     Args:
-        catalog: Catalog to check.
-        registries: Declared node kinds, facts, procedures and appliers.
+        catalog (Catalog): Catalog to check.
+        registries (Registries): Declared node kinds, facts, procedures and
+            appliers.
 
     Raises:
         CatalogError: With every problem found.
 
     """
-    problems: list[str] = []
+    problems: ListStr = []
     problems.extend(_uniqueness(catalog=catalog))
     problems.extend(_references(catalog=catalog, registries=registries))
     problems.extend(_ordering(catalog=catalog))
@@ -139,18 +157,18 @@ def validate_catalog(*, catalog: Catalog, registries: Registries) -> None:
         raise CatalogError(problems=tuple(problems))
 
 
-def _duplicates(*, values: Iterable[str]) -> list[str]:
+def _duplicates(*, values: Iterable[str]) -> ListStr:
     """Return values that occur more than once, in first-seen order.
 
     Args:
-        values: Values to inspect.
+        values (Iterable[str]): Values to inspect.
 
     Returns:
-        The repeated values.
+        ListStr: The repeated values.
 
     """
     seen: set[str] = set()
-    repeated: list[str] = []
+    repeated: ListStr = []
     for value in values:
         if value in seen and value not in repeated:
             repeated.append(value)
@@ -158,17 +176,17 @@ def _duplicates(*, values: Iterable[str]) -> list[str]:
     return repeated
 
 
-def _uniqueness(*, catalog: Catalog) -> list[str]:
+def _uniqueness(*, catalog: Catalog) -> ListStr:
     """Check invariant 1: keys and codes are unique.
 
     Args:
-        catalog: Catalog to check.
+        catalog (Catalog): Catalog to check.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
-    problems: list[str] = [
+    problems: ListStr = [
         f"duplicate rule key {key!r}"
         for key in _duplicates(values=(r.key for r in catalog.rules))
     ]
@@ -192,21 +210,21 @@ def _predicate_problems(
     owner: str,
     predicate: Predicate | None,
     registries: Registries,
-) -> list[str]:
+) -> ListStr:
     """Report undeclared facts read by a predicate.
 
     Args:
-        owner: Description of the entity owning the predicate.
-        predicate: Predicate to inspect.
-        registries: Declared facts.
+        owner (str): Description of the entity owning the predicate.
+        predicate (Predicate | None): Predicate to inspect.
+        registries (Registries): Declared facts.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
     if predicate is None:
         return []
-    problems: list[str] = [
+    problems: ListStr = [
         f"{owner}: unknown fact {name!r}"
         for name in sorted(predicate_facts(predicate=predicate))
         if name not in registries.facts
@@ -222,10 +240,10 @@ def _contains_exists(*, predicate: Predicate) -> bool:
     """Tell whether a predicate uses the ``exists`` quantifier.
 
     Args:
-        predicate: Predicate to inspect.
+        predicate (Predicate): Predicate to inspect.
 
     Returns:
-        ``True`` when any node of the predicate tree is an ``Exists``.
+        bool: ``True`` when any node of the predicate tree is an ``Exists``.
 
     """
     match predicate:
@@ -239,18 +257,18 @@ def _contains_exists(*, predicate: Predicate) -> bool:
             return False
 
 
-def _references(*, catalog: Catalog, registries: Registries) -> list[str]:
+def _references(*, catalog: Catalog, registries: Registries) -> ListStr:
     """Check invariant 2: every reference resolves.
 
     Args:
-        catalog: Catalog to check.
-        registries: Declared vocabulary.
+        catalog (Catalog): Catalog to check.
+        registries (Registries): Declared vocabulary.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
-    problems: list[str] = []
+    problems: ListStr = []
     fix_keys: frozenset[str] = frozenset(f.key for f in catalog.fixes)
     rule_keys: frozenset[str] = frozenset(r.key for r in catalog.rules)
     for rule in catalog.rules:
@@ -312,14 +330,14 @@ def _references(*, catalog: Catalog, registries: Registries) -> list[str]:
     return problems
 
 
-def _ordering(*, catalog: Catalog) -> list[str]:
+def _ordering(*, catalog: Catalog) -> ListStr:
     """Check invariant 3: ordering relations have no cycle.
 
     Args:
-        catalog: Catalog to check.
+        catalog (Catalog): Catalog to check.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
     edges: dict[str, set[str]] = {}
@@ -333,7 +351,7 @@ def _ordering(*, catalog: Catalog) -> list[str]:
             edges.setdefault(earlier, set()).add(fix.key)
     done: set[str] = set()
     for start in sorted(edges):
-        path: list[str] = []
+        path: ListStr = []
         if _cycle(node=start, edges=edges, path=path, done=done):
             return [f"ordering cycle through {' -> '.join(path)}"]
     return []
@@ -343,19 +361,20 @@ def _cycle(
     *,
     node: str,
     edges: dict[str, set[str]],
-    path: list[str],
+    path: ListStr,
     done: set[str],
 ) -> bool:
     """Depth-first search for a cycle.
 
     Args:
-        node: Node being visited.
-        edges: Adjacency sets.
-        path: Nodes on the current path, extended in place.
-        done: Nodes already proven acyclic.
+        node (str): Node being visited.
+        edges (dict[str, set[str]]): Adjacency sets.
+        path (ListStr): Nodes on the current path, extended in place.
+        done (set[str]): Nodes already proven acyclic.
 
     Returns:
-        Whether a cycle was found; ``path`` then ends in the repeated node.
+        bool: Whether a cycle was found; ``path`` then ends in the repeated
+            node.
 
     """
     if node in path:
@@ -372,17 +391,17 @@ def _cycle(
     return False
 
 
-def _conflicts(*, catalog: Catalog) -> list[str]:
+def _conflicts(*, catalog: Catalog) -> ListStr:
     """Check invariant 3: conflicting rules never share a profile.
 
     Args:
-        catalog: Catalog to check.
+        catalog (Catalog): Catalog to check.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
-    problems: list[str] = []
+    problems: ListStr = []
     for relation in catalog.relations:
         if relation.kind is not RelationKind.conflicts_with:
             continue
@@ -405,28 +424,28 @@ def _profiles_with(
     """Select profiles that enable every given rule.
 
     Args:
-        profiles: Profiles to scan.
-        keys: Rule keys that must all be enabled.
+        profiles (tuple[Profile, ...]): Profiles to scan.
+        keys (tuple[str, ...]): Rule keys that must all be enabled.
 
     Returns:
-        The matching profiles.
+        list[Profile]: The matching profiles.
 
     """
     return [p for p in profiles if all(key in p.rules for key in keys)]
 
 
-def _purity(*, catalog: Catalog, registries: Registries) -> list[str]:
+def _purity(*, catalog: Catalog, registries: Registries) -> ListStr:
     """Check invariant 6: proven fixes need no inference.
 
     Args:
-        catalog: Catalog to check.
-        registries: Declared facts.
+        catalog (Catalog): Catalog to check.
+        registries (Registries): Declared facts.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
-    problems: list[str] = []
+    problems: ListStr = []
     for fix in catalog.fixes:
         if fix.safety is not FixSafety.proven or fix.preconditions is None:
             continue
@@ -440,18 +459,18 @@ def _purity(*, catalog: Catalog, registries: Registries) -> list[str]:
     return problems
 
 
-def _requirements(*, catalog: Catalog, registries: Registries) -> list[str]:
+def _requirements(*, catalog: Catalog, registries: Registries) -> ListStr:
     """Check invariant 7: declarative requirements equal the facts read.
 
     Args:
-        catalog: Catalog to check.
-        registries: Declared facts.
+        catalog (Catalog): Catalog to check.
+        registries (Registries): Declared facts.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
-    problems: list[str] = []
+    problems: ListStr = []
     for rule in catalog.rules:
         if rule.expressible is not Expressible.declarative:
             continue
@@ -469,17 +488,17 @@ def _requirements(*, catalog: Catalog, registries: Registries) -> list[str]:
     return problems
 
 
-def _aliases(*, catalog: Catalog) -> list[str]:
+def _aliases(*, catalog: Catalog) -> ListStr:
     """Check invariant 8: aliases are unique per external system.
 
     Args:
-        catalog: Catalog to check.
+        catalog (Catalog): Catalog to check.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
-    problems: list[str] = []
+    problems: ListStr = []
     owners: dict[tuple[str, str], str] = {}
     for rule in catalog.rules:
         for system, alias in rule.aliases.items():
@@ -493,14 +512,14 @@ def _aliases(*, catalog: Catalog) -> list[str]:
     return problems
 
 
-def _examples(*, catalog: Catalog) -> list[str]:
+def _examples(*, catalog: Catalog) -> ListStr:
     """Check invariant 4 (data half): both kinds of example exist.
 
     Args:
-        catalog: Catalog to check.
+        catalog (Catalog): Catalog to check.
 
     Returns:
-        Problems found.
+        ListStr: Problems found.
 
     """
     return [

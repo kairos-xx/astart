@@ -1,0 +1,170 @@
+# `braintree/`
+
+Provide   init   pyi content.
+
+<!-- exactus:inventory:start -->
+## Directory contents
+
+### Files
+
+- [`__init__.pyi`](__init__.pyi) — Provide   init   pyi content.
+- [`account_updater_daily_report.pyi`](account_updater_daily_report.pyi) — Provide account updater daily report pyi content.
+- [`ach_mandate.pyi`](ach_mandate.pyi) — Provide ach mandate pyi content.
+- [`add_on.pyi`](add_on.pyi) — Provide add on pyi content.
+- [`add_on_gateway.pyi`](add_on_gateway.pyi) — Provide add on gateway pyi content.
+- [`address.pyi`](address.pyi) — Provide address pyi content.
+- [`address_gateway.pyi`](address_gateway.pyi) — Provide address gateway pyi content.
+- [`amex_express_checkout_card.pyi`](amex_express_checkout_card.pyi) — Provide amex express checkout card pyi content.
+- [`android_pay_card.pyi`](android_pay_card.pyi) — Provide android pay card pyi content.
+- [`apple_pay_card.pyi`](apple_pay_card.pyi) — Provide apple pay card pyi content.
+- [`apple_pay_gateway.pyi`](apple_pay_gateway.pyi) — Provide apple pay gateway pyi content.
+- [`apple_pay_options.pyi`](apple_pay_options.pyi) — Provide apple pay options pyi content.
+- [`attribute_getter.pyi`](attribute_getter.pyi) — Provide attribute getter pyi content.
+- [`authorization_adjustment.pyi`](authorization_adjustment.pyi) — Provide authorization adjustment pyi content.
+- [`bank_account_instant_verification_gateway.pyi`](bank_account_instant_verification_gateway.pyi) — Provide bank account instant verification gateway pyi content.
+- [`bank_account_instant_verification_jwt.pyi`](bank_account_instant_verification_jwt.pyi) — Provide bank account instant verification jwt pyi content.
+- [`bank_account_instant_verification_jwt_request.pyi`](bank_account_instant_verification_jwt_request.pyi) — Provide bank account instant verification jwt request pyi content.
+- [`bin_data.pyi`](bin_data.pyi) — Provide bin data pyi content.
+- [`blik_alias.pyi`](blik_alias.pyi) — Provide blik alias pyi content.
+- [`braintree_gateway.pyi`](braintree_gateway.pyi) — Provide braintree gateway pyi content.
+- [`client_token.pyi`](client_token.pyi) — Provide client token pyi content.
+- [`client_token_gateway.pyi`](client_token_gateway.pyi) — Provide client token gateway pyi content.
+- [`configuration.pyi`](configuration.pyi) — Provide configuration pyi content.
+- [`connected_merchant_paypal_status_changed.pyi`](connected_merchant_paypal_status_changed.pyi) — Provide connected merchant paypal status changed pyi content.
+- [`connected_merchant_status_transitioned.pyi`](connected_merchant_status_transitioned.pyi) — Provide connected merchant status transitioned pyi content.
+- [`credentials_parser.pyi`](credentials_parser.pyi) — Provide credentials parser pyi content.
+- [`credit_card.pyi`](credit_card.pyi) — Provide credit card pyi content.
+- [`credit_card_gateway.pyi`](credit_card_gateway.pyi) — Provide credit card gateway pyi content.
+- [`credit_card_verification.pyi`](credit_card_verification.pyi) — Provide credit card verification pyi content.
+- [`credit_card_verification_gateway.pyi`](credit_card_verification_gateway.pyi) — Provide credit card verification gateway pyi content.
+- [`credit_card_verification_search.pyi`](credit_card_verification_search.pyi) — Provide credit card verification search pyi content.
+- [`customer.pyi`](customer.pyi) — Provide customer pyi content.
+- [`customer_gateway.pyi`](customer_gateway.pyi) — Provide customer gateway pyi content.
+- [`customer_search.pyi`](customer_search.pyi) — Provide customer search pyi content.
+- [`customer_session_gateway.pyi`](customer_session_gateway.pyi) — Provide customer session gateway pyi content.
+- [`descriptor.pyi`](descriptor.pyi) — Provide descriptor pyi content.
+- [`disbursement.pyi`](disbursement.pyi) — Provide disbursement pyi content.
+- [`disbursement_detail.pyi`](disbursement_detail.pyi) — Provide disbursement detail pyi content.
+- [`discount.pyi`](discount.pyi) — Provide discount pyi content.
+- [`discount_gateway.pyi`](discount_gateway.pyi) — Provide discount gateway pyi content.
+- [`dispute.pyi`](dispute.pyi) — Provide dispute pyi content.
+- [`dispute_gateway.pyi`](dispute_gateway.pyi) — Provide dispute gateway pyi content.
+- [`dispute_search.pyi`](dispute_search.pyi) — Provide dispute search pyi content.
+- [`document_upload.pyi`](document_upload.pyi) — Provide document upload pyi content.
+- [`document_upload_gateway.pyi`](document_upload_gateway.pyi) — Provide document upload gateway pyi content.
+- [`enriched_customer_data.pyi`](enriched_customer_data.pyi) — Provide enriched customer data pyi content.
+- [`environment.pyi`](environment.pyi) — Provide environment pyi content.
+- [`error_codes.pyi`](error_codes.pyi) — Provide error codes pyi content.
+- [`error_result.pyi`](error_result.pyi) — Provide error result pyi content.
+- [`errors.pyi`](errors.pyi) — Provide errors pyi content.
+- [`europe_bank_account.pyi`](europe_bank_account.pyi) — Provide europe bank account pyi content.
+- [`exchange_rate_quote.pyi`](exchange_rate_quote.pyi) — Provide exchange rate quote pyi content.
+- [`exchange_rate_quote_gateway.pyi`](exchange_rate_quote_gateway.pyi) — Provide exchange rate quote gateway pyi content.
+- [`exchange_rate_quote_input.pyi`](exchange_rate_quote_input.pyi) — Provide exchange rate quote input pyi content.
+- [`exchange_rate_quote_payload.pyi`](exchange_rate_quote_payload.pyi) — Provide exchange rate quote payload pyi content.
+- [`exchange_rate_quote_request.pyi`](exchange_rate_quote_request.pyi) — Provide exchange rate quote request pyi content.
+- [`facilitated_details.pyi`](facilitated_details.pyi) — Provide facilitated details pyi content.
+- [`facilitator_details.pyi`](facilitator_details.pyi) — Provide facilitator details pyi content.
+- [`granted_payment_instrument_update.pyi`](granted_payment_instrument_update.pyi) — Provide granted payment instrument update pyi content.
+- [`iban_bank_account.pyi`](iban_bank_account.pyi) — Provide iban bank account pyi content.
+- [`ids_search.pyi`](ids_search.pyi) — Provide ids search pyi content.
+- [`liability_shift.pyi`](liability_shift.pyi) — Provide liability shift pyi content.
+- [`local_payment.pyi`](local_payment.pyi) — Provide local payment pyi content.
+- [`local_payment_completed.pyi`](local_payment_completed.pyi) — Provide local payment completed pyi content.
+- [`local_payment_context.pyi`](local_payment_context.pyi) — Provide local payment context pyi content.
+- [`local_payment_context_gateway.pyi`](local_payment_context_gateway.pyi) — Provide local payment context gateway pyi content.
+- [`local_payment_expired.pyi`](local_payment_expired.pyi) — Provide local payment expired pyi content.
+- [`local_payment_funded.pyi`](local_payment_funded.pyi) — Provide local payment funded pyi content.
+- [`local_payment_reversed.pyi`](local_payment_reversed.pyi) — Provide local payment reversed pyi content.
+- [`local_payment_type.pyi`](local_payment_type.pyi) — Provide local payment type pyi content.
+- [`masterpass_card.pyi`](masterpass_card.pyi) — Provide masterpass card pyi content.
+- [`merchant.pyi`](merchant.pyi) — Provide merchant pyi content.
+- [`merchant_account_gateway.pyi`](merchant_account_gateway.pyi) — Provide merchant account gateway pyi content.
+- [`merchant_gateway.pyi`](merchant_gateway.pyi) — Provide merchant gateway pyi content.
+- [`meta_checkout_card.pyi`](meta_checkout_card.pyi) — Provide meta checkout card pyi content.
+- [`meta_checkout_token.pyi`](meta_checkout_token.pyi) — Provide meta checkout token pyi content.
+- [`modification.pyi`](modification.pyi) — Provide modification pyi content.
+- [`monetary_amount.pyi`](monetary_amount.pyi) — Provide monetary amount pyi content.
+- [`oauth_access_revocation.pyi`](oauth_access_revocation.pyi) — Provide oauth access revocation pyi content.
+- [`oauth_credentials.pyi`](oauth_credentials.pyi) — Provide oauth credentials pyi content.
+- [`oauth_gateway.pyi`](oauth_gateway.pyi) — Provide oauth gateway pyi content.
+- [`package_details.pyi`](package_details.pyi) — Provide package details pyi content.
+- [`paginated_collection.pyi`](paginated_collection.pyi) — Provide paginated collection pyi content.
+- [`paginated_result.pyi`](paginated_result.pyi) — Provide paginated result pyi content.
+- [`partner_merchant.pyi`](partner_merchant.pyi) — Provide partner merchant pyi content.
+- [`payment_facilitator.pyi`](payment_facilitator.pyi) — Provide payment facilitator pyi content.
+- [`payment_instrument_type.pyi`](payment_instrument_type.pyi) — Provide payment instrument type pyi content.
+- [`payment_method.pyi`](payment_method.pyi) — Provide payment method pyi content.
+- [`payment_method_customer_data_updated_metadata.pyi`](payment_method_customer_data_updated_metadata.pyi) — Provide payment method customer data updated metadata pyi content.
+- [`payment_method_gateway.pyi`](payment_method_gateway.pyi) — Provide payment method gateway pyi content.
+- [`payment_method_nonce.pyi`](payment_method_nonce.pyi) — Provide payment method nonce pyi content.
+- [`payment_method_nonce_gateway.pyi`](payment_method_nonce_gateway.pyi) — Provide payment method nonce gateway pyi content.
+- [`payment_method_parser.pyi`](payment_method_parser.pyi) — Provide payment method parser pyi content.
+- [`paypal_account.pyi`](paypal_account.pyi) — Provide paypal account pyi content.
+- [`paypal_account_gateway.pyi`](paypal_account_gateway.pyi) — Provide paypal account gateway pyi content.
+- [`paypal_here.pyi`](paypal_here.pyi) — Provide paypal here pyi content.
+- [`paypal_payment_resource.pyi`](paypal_payment_resource.pyi) — Provide paypal payment resource pyi content.
+- [`paypal_payment_resource_gateway.pyi`](paypal_payment_resource_gateway.pyi) — Provide paypal payment resource gateway pyi content.
+- [`plan.pyi`](plan.pyi) — Provide plan pyi content.
+- [`plan_gateway.pyi`](plan_gateway.pyi) — Provide plan gateway pyi content.
+- [`processor_response_types.pyi`](processor_response_types.pyi) — Provide processor response types pyi content.
+- [`receiver.pyi`](receiver.pyi) — Provide receiver pyi content.
+- [`resource.pyi`](resource.pyi) — Provide resource pyi content.
+- [`resource_collection.pyi`](resource_collection.pyi) — Provide resource collection pyi content.
+- [`revoked_payment_method_metadata.pyi`](revoked_payment_method_metadata.pyi) — Provide revoked payment method metadata pyi content.
+- [`risk_data.pyi`](risk_data.pyi) — Provide risk data pyi content.
+- [`samsung_pay_card.pyi`](samsung_pay_card.pyi) — Provide samsung pay card pyi content.
+- [`search.pyi`](search.pyi) — Provide search pyi content.
+- [`sender.pyi`](sender.pyi) — Provide sender pyi content.
+- [`sepa_direct_debit_account.pyi`](sepa_direct_debit_account.pyi) — Provide sepa direct debit account pyi content.
+- [`sepa_direct_debit_account_gateway.pyi`](sepa_direct_debit_account_gateway.pyi) — Provide sepa direct debit account gateway pyi content.
+- [`settlement_batch_summary.pyi`](settlement_batch_summary.pyi) — Provide settlement batch summary pyi content.
+- [`settlement_batch_summary_gateway.pyi`](settlement_batch_summary_gateway.pyi) — Provide settlement batch summary gateway pyi content.
+- [`signature_service.pyi`](signature_service.pyi) — Provide signature service pyi content.
+- [`status_event.pyi`](status_event.pyi) — Provide status event pyi content.
+- [`sub_merchant.pyi`](sub_merchant.pyi) — Provide sub merchant pyi content.
+- [`subscription.pyi`](subscription.pyi) — Provide subscription pyi content.
+- [`subscription_details.pyi`](subscription_details.pyi) — Provide subscription details pyi content.
+- [`subscription_gateway.pyi`](subscription_gateway.pyi) — Provide subscription gateway pyi content.
+- [`subscription_search.pyi`](subscription_search.pyi) — Provide subscription search pyi content.
+- [`subscription_status_event.pyi`](subscription_status_event.pyi) — Provide subscription status event pyi content.
+- [`successful_result.pyi`](successful_result.pyi) — Provide successful result pyi content.
+- [`testing_gateway.pyi`](testing_gateway.pyi) — Provide testing gateway pyi content.
+- [`three_d_secure_info.pyi`](three_d_secure_info.pyi) — Provide three d secure info pyi content.
+- [`transaction.pyi`](transaction.pyi) — Provide transaction pyi content.
+- [`transaction_amounts.pyi`](transaction_amounts.pyi) — Provide transaction amounts pyi content.
+- [`transaction_details.pyi`](transaction_details.pyi) — Provide transaction details pyi content.
+- [`transaction_gateway.pyi`](transaction_gateway.pyi) — Provide transaction gateway pyi content.
+- [`transaction_line_item.pyi`](transaction_line_item.pyi) — Provide transaction line item pyi content.
+- [`transaction_line_item_gateway.pyi`](transaction_line_item_gateway.pyi) — Provide transaction line item gateway pyi content.
+- [`transaction_review.pyi`](transaction_review.pyi) — Provide transaction review pyi content.
+- [`transaction_search.pyi`](transaction_search.pyi) — Provide transaction search pyi content.
+- [`transaction_us_bank_account_request.pyi`](transaction_us_bank_account_request.pyi) — Provide transaction us bank account request pyi content.
+- [`transfer.pyi`](transfer.pyi) — Provide transfer pyi content.
+- [`unknown_payment_method.pyi`](unknown_payment_method.pyi) — Provide unknown payment method pyi content.
+- [`us_bank_account.pyi`](us_bank_account.pyi) — Provide us bank account pyi content.
+- [`us_bank_account_gateway.pyi`](us_bank_account_gateway.pyi) — Provide us bank account gateway pyi content.
+- [`us_bank_account_verification.pyi`](us_bank_account_verification.pyi) — Provide us bank account verification pyi content.
+- [`us_bank_account_verification_gateway.pyi`](us_bank_account_verification_gateway.pyi) — Provide us bank account verification gateway pyi content.
+- [`us_bank_account_verification_search.pyi`](us_bank_account_verification_search.pyi) — Provide us bank account verification search pyi content.
+- [`validation_error.pyi`](validation_error.pyi) — Provide validation error pyi content.
+- [`validation_error_collection.pyi`](validation_error_collection.pyi) — Provide validation error collection pyi content.
+- [`venmo_account.pyi`](venmo_account.pyi) — Provide venmo account pyi content.
+- [`venmo_profile_data.pyi`](venmo_profile_data.pyi) — Provide venmo profile data pyi content.
+- [`version.pyi`](version.pyi) — Provide version pyi content.
+- [`visa_checkout_card.pyi`](visa_checkout_card.pyi) — Provide visa checkout card pyi content.
+- [`webhook_notification.pyi`](webhook_notification.pyi) — Provide webhook notification pyi content.
+- [`webhook_notification_gateway.pyi`](webhook_notification_gateway.pyi) — Provide webhook notification gateway pyi content.
+- [`webhook_testing.pyi`](webhook_testing.pyi) — Provide webhook testing pyi content.
+- [`webhook_testing_gateway.pyi`](webhook_testing_gateway.pyi) — Provide webhook testing gateway pyi content.
+
+### Subdirectories
+
+- [`dispute_details/`](dispute_details/README.md) — Provide init pyi content.
+- [`exceptions/`](exceptions/README.md) — Provide init pyi content.
+- [`graphql/`](graphql/README.md) — Provide init pyi content.
+- [`merchant_account/`](merchant_account/README.md) — Provide init pyi content.
+- [`test/`](test/README.md) — Provide init pyi content.
+- [`util/`](util/README.md) — Provide init pyi content.
+
+<!-- exactus:inventory:end -->

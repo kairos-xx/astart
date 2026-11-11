@@ -105,13 +105,14 @@ class Candidate:
     """One type proposal for a node.
 
     Attributes:
-        type_text: The type as annotation source.
-        confidence: Ordering and pruning weight in ``(0, 1]``; it never
+        type_text (str): The type as annotation source.
+        confidence (float): Ordering and pruning weight in ``(0, 1]``; it never
             decides acceptance by itself.
-        distance: Contracts travelled from the seed.
-        origins: What supports the type.
-        explanation: Why it was proposed.
-        slot: Names the derived contract that produced it; a later candidate
+        distance (int): Contracts travelled from the seed.
+        origins (frozenset[Origin]): What supports the type.
+        explanation (str): Why it was proposed.
+        slot (str): Names the derived contract that produced it; a later
+            candidate
             with the same slot replaces this one instead of joining it.
 
     """
@@ -128,7 +129,7 @@ class Candidate:
         """Tell whether something other than inference supports the type.
 
         Returns:
-            ``True`` when any origin is not ``inferred``.
+            bool: ``True`` when any origin is not ``inferred``.
 
         """
         return bool(self.origins - {Origin.inferred})
@@ -137,10 +138,10 @@ class Candidate:
         """Return the candidate one contract further away.
 
         Args:
-            decay: Factor applied to the confidence.
+            decay (float): Factor applied to the confidence.
 
         Returns:
-            A copy with lower confidence and larger distance.
+            Candidate: A copy with lower confidence and larger distance.
 
         """
         return Candidate(
@@ -156,10 +157,10 @@ class Candidate:
         """Return the candidate with another type and the same support.
 
         Args:
-            type_text: The new type.
+            type_text (str): The new type.
 
         Returns:
-            A copy carrying the new type.
+            Candidate: A copy carrying the new type.
 
         """
         return Candidate(
@@ -178,13 +179,13 @@ class Contract:
     """A directed constraint between two nodes.
 
     Attributes:
-        source: Path text of the node the candidate leaves.
-        target: Path text of the node it reaches.
-        relation: What the contract states.
-        polarity: How it contributes to the target.
-        confidence: Trust in the contract itself.
-        decay: Factor applied to candidates that cross it.
-        explanation: Why the contract exists.
+        source (str): Path text of the node the candidate leaves.
+        target (str): Path text of the node it reaches.
+        relation (Relation): What the contract states.
+        polarity (Polarity): How it contributes to the target.
+        confidence (float): Trust in the contract itself.
+        decay (float): Factor applied to candidates that cross it.
+        explanation (str): Why the contract exists.
 
     """
 
@@ -203,10 +204,10 @@ class Conflict:
     """Two types that cannot both hold for one node.
 
     Attributes:
-        path: Path text of the node.
-        left: The type already believed.
-        right: The type that clashes with it.
-        explanation: Why the clash was recorded.
+        path (str): Path text of the node.
+        left (str): The type already believed.
+        right (str): The type that clashes with it.
+        explanation (str): Why the clash was recorded.
 
     """
 

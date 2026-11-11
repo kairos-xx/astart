@@ -2,9 +2,10 @@
 
 A bare ``import ast`` that only ever appears as ``ast.walk`` can become
 ``from ast import walk`` plus rewritten use sites — proven safe when the
-imported attributes collide with nothing already bound.  This module
+imported attributes collide with nothing already bound. This module
 detects rewrite candidates; collision checks and the edit live in the
 fix.
+
 """
 
 from __future__ import annotations
@@ -33,8 +34,8 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        evidence_module: Evidence key for the imported module.
-        evidence_attributes: Evidence key for attributes in use.
+        evidence_module (str): Evidence key for the imported module.
+        evidence_attributes (str): Evidence key for attributes in use.
 
     """
 
@@ -55,11 +56,11 @@ def find_bare_imports(
     the module binds the name, so the evidence is exhaustive.
 
     Args:
-        module: Parsed module.
-        filename: Name used in spans.
+        module (Module): Parsed module.
+        filename (str): Name used in spans.
 
     Returns:
-        Candidates in source order.
+        tuple[Candidate, ...]: Candidates in source order.
 
     """
     bound: dict[str, int] = _binding_counts(module=module)
@@ -122,10 +123,10 @@ def _binding_counts(*, module: Module) -> dict[str, int]:
     """Count how many times each name is bound module-wide.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Binding name to number of binding sites.
+        dict[str, int]: Binding name to number of binding sites.
 
     """
     counts: dict[str, int] = {}
@@ -147,10 +148,10 @@ def _uses(*, module: Module) -> dict[str, _Use]:
     """Classify every ``Name`` load as chain base or bare use.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Bound name to its uses.
+        dict[str, _Use]: Bound name to its uses.
 
     """
     longest: dict[int, tuple[str, ...]] = {}

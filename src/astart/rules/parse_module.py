@@ -3,6 +3,7 @@
 No other rule can run when the module does not parse, so this detector
 stands alone: it takes raw source and returns one candidate carrying the
 syntax diagnostic, or nothing when the source parses cleanly.
+
 """
 
 from __future__ import annotations
@@ -19,8 +20,8 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        evidence_message: Evidence key for the parser's message.
-        evidence_offset: Evidence key for the byte offset, when known.
+        evidence_message (str): Evidence key for the parser's message.
+        evidence_offset (str): Evidence key for the byte offset, when known.
 
     """
 
@@ -32,11 +33,11 @@ def find_parse_error(*, source: str, filename: str) -> Candidate | None:
     """Report the first syntax error in a source file.
 
     Args:
-        source: Python source text.
-        filename: Name used in the span and diagnostic.
+        source (str): Python source text.
+        filename (str): Name used in the span and diagnostic.
 
     Returns:
-        One candidate for the syntax error, or ``None``.
+        Candidate | None: One candidate for the syntax error, or ``None``.
 
     """
     try:

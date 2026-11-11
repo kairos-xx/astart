@@ -6,6 +6,7 @@ already exists, the constant joins that class and the module's uses become
 ``Constants.NAME``. Anything that could break stays a plain module global:
 exported names, names reached by ``global``, names the class body or the
 module's import-time code reads before the class exists, and name clashes.
+
 """
 
 from __future__ import annotations
@@ -48,20 +49,26 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        class_name: Name of the class constants are grouped into.
-        exports: Name of the module's export list.
-        section: Heading of the docstring section that lists attributes.
-        placeholder: Description written for a newly documented constant.
-        class_doc: Docstring text written into the generated class.
+        class_name (Final[str]): Name of the class constants are grouped into.
+        exports (Final[str]): Name of the module's export list.
+        section (Final[str]): Heading of the docstring section that lists
+            attributes.
+        placeholder (Final[str]): Description written for a newly documented
+            constant.
+        class_doc (Final[str]): Docstring text written into the generated
+            class.
 
     """
 
     class_name: Final[str] = "Constants"
     exports: Final[str] = "__all__"
     section: Final[str] = "Attributes:"
-    class_doc: Final[str] = (
-        "Group module-level constants.\n\n    Attributes:\n\n    "
-    )
+    class_doc: Final[str] = """\
+Group module-level constants.
+
+    Attributes:
+
+    """
     placeholder: Final[str] = "Grouped module constant."
 
 
@@ -69,10 +76,10 @@ def _parents(*, module: Module) -> dict[int, AST]:
     """Map every node to its parent.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Parent by node identity.
+        dict[int, AST]: Parent by node identity.
 
     """
     return {
@@ -89,11 +96,11 @@ def _deferred(*, node: AST, parents: Mapping[int, AST]) -> bool:
     defined, so only the body counts as deferred.
 
     Args:
-        node: Expression node.
-        parents: Parent by node identity.
+        node (AST): Expression node.
+        parents (Mapping[int, AST]): Parent by node identity.
 
     Returns:
-        ``True`` when the node sits in a function or lambda body.
+        bool: ``True`` when the node sits in a function or lambda body.
 
     """
     child: AST = node
@@ -113,12 +120,12 @@ def _within(*, node: AST, outer: AST, parents: Mapping[int, AST]) -> bool:
     """Tell whether a node lies inside another one.
 
     Args:
-        node: Inner candidate.
-        outer: Outer candidate.
-        parents: Parent by node identity.
+        node (AST): Inner candidate.
+        outer (AST): Outer candidate.
+        parents (Mapping[int, AST]): Parent by node identity.
 
     Returns:
-        ``True`` when ``outer`` is an ancestor of ``node``.
+        bool: ``True`` when ``outer`` is an ancestor of ``node``.
 
     """
     current: AST | None = parents.get(id(node))
@@ -138,12 +145,12 @@ def _top_index(
     """Find the module-body statement that contains a node.
 
     Args:
-        node: Any node of the module.
-        module: Parsed module.
-        parents: Parent by node identity.
+        node (AST): Any node of the module.
+        module (Module): Parsed module.
+        parents (Mapping[int, AST]): Parent by node identity.
 
     Returns:
-        Its index in ``module.body``.
+        int: Its index in ``module.body``.
 
     """
     current: AST = node
@@ -156,6 +163,26 @@ def _top_index(
     )
 
 
+def snake_name(*, name: str) -> str:
+    """Return the lowercase snake_case form of a constant name.
+
+    Grouped constants are class attributes, so ``_CASES`` becomes
+    ``cases`` and ``MAX_VALUE`` becomes ``max_value``. Names that are
+    already snake_case are returned unchanged; a name that is nothing
+    but underscores keeps its original spelling.
+
+    Args:
+        name (str): Constant or attribute name.
+
+    Returns:
+        str: The snake_case attribute name.
+
+    """
+    stripped: str = name.lstrip("_")
+    lowered: str = stripped.lower()
+    return lowered if lowered.isidentifier() else name
+
+
 def _claimed(*, cls: ClassDef) -> set[str]:
     """List the names a class body already defines.
 
@@ -163,7 +190,7 @@ def _claimed(*, cls: ClassDef) -> set[str]:
         cls: The grouping class.
 
     Returns:
-        Attribute, method and nested-class names.
+        set[str]: Attribute, method and nested-class names.
 
     """
     names: set[str] = set()
@@ -180,11 +207,11 @@ def _exported(*, module: Module, name: str) -> bool:
     """Tell whether the module lists a name in ``__all__``.
 
     Args:
-        module: Parsed module.
-        name: Constant name.
+        module (Module): Parsed module.
+        name (str): Constant name.
 
     Returns:
-        ``True`` when any assignment to ``__all__`` mentions the name.
+        bool: ``True`` when any assignment to ``__all__`` mentions the name.
 
     """
     for statement in module.body:
@@ -215,13 +242,14 @@ def find_group(
     """Find the ``Constants`` class a new constant can safely join.
 
     Args:
-        module: Parsed module.
-        statement: The module-level statement that defines the constant.
-        name: Constant name.
-        counts: Module binding counts.
+        module (Module): Parsed module.
+        statement (AST): The module-level statement that defines the constant.
+        name (str): Constant name.
+        counts (Mapping[str, int]): Module binding counts.
 
     Returns:
-        The class, or ``None`` when there is none or moving is unsafe.
+        ClassDef | None:
+            The class, or ``None`` when there is none or moving is unsafe.
 
     """
     classes: list[ClassDef] = [
@@ -232,8 +260,11 @@ def find_group(
     if len(classes) != 1 or counts.get(Constants.class_name) != 1:
         return None
     cls: ClassDef = classes[0]
+    claimed: set[str] = {
+        snake_name(name=claimed) for claimed in _claimed(cls=cls)
+    }
     if (
-        name in _claimed(cls=cls)
+        snake_name(name=name) in claimed
         or _exported(module=module, name=name)
         or any(
             isinstance(node, (Global, Nonlocal)) and name in node.names
@@ -271,13 +302,13 @@ def creatable(
     """Tell whether a ``Constants`` class could be created for a constant.
 
     Args:
-        module: Parsed module.
-        statement: The constant's statement.
-        counts: Module binding counts.
+        module (Module): Parsed module.
+        statement (AST): The constant's statement.
+        counts (Mapping[str, int]): Module binding counts.
 
     Returns:
-        ``True`` when nothing in the module is bound to ``Constants`` and the
-        statement is a module-level annotated literal.
+        bool: ``True`` when nothing in the module is bound to ``Constants``
+            and the statement is a module-level annotated literal.
 
     """
     return (
@@ -296,10 +327,10 @@ def create_group(*, module: Module) -> ClassDef:
     """Create an empty ``@final class Constants`` after the leading imports.
 
     Args:
-        module: Parsed module, modified in place.
+        module (Module): Parsed module, modified in place.
 
     Returns:
-        The new class, ready for :func:`move_into`.
+        ClassDef: The new class, ready for :func:`move_into`.
 
     """
     local: str = insert_import(
@@ -327,9 +358,9 @@ def _replace(*, parent: AST, old: AST, new: AST) -> None:
     """Swap one child of a node for another.
 
     Args:
-        parent: Node that holds the child.
-        old: Child to replace.
-        new: Replacement.
+        parent (AST): Node that holds the child.
+        old (AST): Child to replace.
+        new (AST): Replacement.
 
     """
     for field, value in iter_fields(node=parent):
@@ -344,6 +375,233 @@ def _replace(*, parent: AST, old: AST, new: AST) -> None:
                     return
 
 
+def _cls_index(
+    *,
+    node: AST,
+    cls: ClassDef,
+    parents: Mapping[int, AST],
+) -> int:
+    """Find which direct ``cls`` body statement contains a node.
+
+    Args:
+        node (AST): Node inside the class body.
+        cls (ClassDef): The class.
+        parents (Mapping[int, AST]): Parent by node identity.
+
+    Returns:
+        int: Index of the containing statement in ``cls.body``.
+
+    """
+    current: AST = node
+    while parents.get(id(current)) is not cls:
+        current = parents[id(current)]
+    return next(
+        index
+        for index, item in enumerate(iterable=cls.body)
+        if item is current
+    )
+
+
+def renameable(
+    *,
+    module: Module,
+    statement: stmt,
+    name: str,
+    counts: Mapping[str, int],
+) -> ClassDef | None:
+    """Find the ``Constants`` class whose attribute ``name`` can be renamed.
+
+    The rename is safe only when ``name`` is a direct attribute of the
+    unique module-level ``Constants`` class, its snake_case form differs
+    and is unclaimed, no other class-body statement binds the name, and
+    nothing refers to it through a string such as ``getattr``.
+
+    Args:
+        module (Module): Parsed module.
+        statement (stmt): The attribute's statement.
+        name (str): Current attribute name.
+        counts (Mapping[str, int]): Module binding counts.
+
+    Returns:
+        ClassDef | None: The class, or ``None`` when renaming is unsafe.
+
+    """
+    new: str = snake_name(name=name)
+    if new == name or counts.get(Constants.class_name) != 1:
+        return None
+    classes: list[ClassDef] = [
+        item
+        for item in module.body
+        if isinstance(item, ClassDef) and item.name == Constants.class_name
+    ]
+    if len(classes) != 1 or statement not in classes[0].body:
+        return None
+    cls: ClassDef = classes[0]
+    claimed: set[str] = _claimed(cls=cls)
+    claimed.discard(name)
+    if new in {snake_name(name=item) for item in claimed}:
+        return None
+    parents: dict[int, AST] = _parents(module=module)
+    for node in walk(node=module):
+        if (
+            isinstance(node, Name)
+            and node.id == name
+            and isinstance(node.ctx, Store)
+            and not _within(node=node, outer=statement, parents=parents)
+        ):
+            return None
+        if isinstance(node, Constant) and node.value == name:
+            return None
+    return cls
+
+
+def _ident_char(*, char: str) -> bool:
+    """Tell whether a character continues an identifier.
+
+    Args:
+        char (str): Single character to classify.
+
+    Returns:
+        bool: ``True`` for letters, digits, marks and ``_``.
+
+    """
+    return char == "_" or char.isalnum()
+
+
+def _replace_name(*, text: str, old: str, new: str) -> str:
+    """Replace ``old`` only where it stands alone as an identifier.
+
+    Args:
+        text (str): Prose to rewrite.
+        old (str): Name to replace.
+        new (str): Replacement name.
+
+    Returns:
+        str: The text with standalone occurrences of ``old`` renamed.
+
+    """
+    out: list[str] = []
+    index: int = 0
+    while True:
+        found: int = text.find(old, index)
+        if found < 0:
+            out.append(text[index:])
+            return "".join(out)
+        end: int = found + len(old)
+        bounded: bool = (
+            found == 0 or not _ident_char(char=text[found - 1])
+        ) and (end == len(text) or not _ident_char(char=text[end]))
+        out.append(text[index:found] if bounded else text[index:end])
+        if bounded:
+            out.append(new)
+        index = end
+
+
+def _rename_documented(
+    *,
+    module: Module,
+    cls: ClassDef,
+    old: str,
+    new: str,
+) -> None:
+    """Rename an attribute label in the class docstring.
+
+    Entry names and prose mentions are updated on the parsed
+    ``DocstringNode`` and the document is marked for re-rendering;
+    editing the string constant directly would conflict with the
+    structured docstring state at write-back.
+
+    Args:
+        module (Module): Parsed module, for its docstring nodes.
+        cls: The grouping class.
+        old (str): Current attribute name.
+        new (str): Snake_case attribute name.
+
+    """
+    for document in getattr(module, "docstrings", ()):
+        if document.owner is not cls:
+            continue
+        changed: bool = False
+        for entry in document.entries():
+            if entry.name == old:
+                entry.name = new
+                changed = True
+            if entry.raw == old or entry.raw.startswith(
+                (f"{old} ", f"{old}(", f"{old}:"),
+            ):
+                entry.raw = new + entry.raw[len(old) :]
+                changed = True
+        for part in ("summary", "description"):
+            text: object = getattr(document, part, "")
+            if isinstance(text, str):
+                renamed: str = _replace_name(text=text, old=old, new=new)
+                if renamed != text:
+                    setattr(document, part, renamed)
+                    changed = True
+        if changed:
+            document.layout.preserve_original = False
+            document.link()
+
+
+def rename_constant(
+    *,
+    module: Module,
+    cls: ClassDef,
+    statement: stmt,
+    name: str,
+) -> None:
+    """Rename a ``Constants`` attribute to snake_case in place.
+
+    Rewrites the declaration, every ``Constants.<name>`` attribute use,
+    class-body references that resolve to the attribute, and the
+    docstring's ``Attributes:`` labels. References inside methods keep
+    their spelling: they resolve to module globals, not class attributes.
+
+    Args:
+        module (Module): Parsed module.
+        cls: The grouping class from :func:`renameable`.
+        statement (stmt): The attribute's statement.
+        name (str): Current attribute name.
+
+    """
+    new: str = snake_name(name=name)
+    parents: dict[int, AST] = _parents(module=module)
+    statement_index: int = next(
+        index
+        for index, item in enumerate(iterable=cls.body)
+        if item is statement
+    )
+    for node in walk(node=module):
+        if isinstance(node, Attribute) and (
+            node.attr == name
+            and isinstance(node.value, Name)
+            and node.value.id == Constants.class_name
+        ):
+            node.attr = new
+    for node in walk(node=cls):
+        if not (
+            isinstance(node, Name)
+            and node.id == name
+            and isinstance(node.ctx, Load)
+            and not _within(node=node, outer=statement, parents=parents)
+            and not _deferred(node=node, parents=parents)
+            and _cls_index(node=node, cls=cls, parents=parents)
+            > statement_index
+        ):
+            continue
+        node.id = new
+    match statement:
+        case AnnAssign(target=Name() as target):
+            target.id = new
+        case Assign(targets=targets):
+            for target in targets:
+                if isinstance(target, Name) and target.id == name:
+                    target.id = new
+        case _:
+            pass
+    _rename_documented(module=module, cls=cls, old=name, new=new)
+
+
 def _document(*, cls: ClassDef, name: str) -> None:
     """Add the constant to the class docstring's ``Attributes:`` section.
 
@@ -352,7 +610,7 @@ def _document(*, cls: ClassDef, name: str) -> None:
 
     Args:
         cls: The grouping class.
-        name: Constant name.
+        name (str): Constant name.
 
     """
     first: stmt | None = cls.body[0] if cls.body else None
@@ -362,7 +620,9 @@ def _document(*, cls: ClassDef, name: str) -> None:
         and isinstance(first.value.value, str)
     ):
         return
-    lines: list[str] = first.value.value.split(sep="\n")
+    lines: list[str] = first.value.value.split(
+        sep="\n",
+    )
     header: int | None = next(
         (
             index
@@ -403,12 +663,14 @@ def move_into(
     """Move a constant's statement into the class and rewrite its uses.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
         cls: The grouping class from :func:`find_group`.
-        statement: The constant's (now annotated) statement.
-        name: Constant name.
+        statement (stmt): The constant's (now annotated) statement.
+        name (str): Constant name; the class attribute takes its
+            snake_case form.
 
     """
+    attr: str = snake_name(name=name)
     parents: dict[int, AST] = _parents(module=module)
     for node in walk(node=module):
         if (
@@ -421,10 +683,19 @@ def move_into(
                 old=node,
                 new=Attribute(
                     value=Name(id=Constants.class_name, ctx=Load()),
-                    attr=name,
+                    attr=attr,
                     ctx=Load(),
                 ),
             )
+    match statement:
+        case AnnAssign(target=Name() as target):
+            target.id = attr
+        case Assign(targets=targets):
+            for target in targets:
+                if isinstance(target, Name) and target.id == name:
+                    target.id = attr
+        case _:
+            pass
     module.body[:] = [item for item in module.body if item is not statement]
     position: int = 0
     for index, item in enumerate(iterable=cls.body):
@@ -443,4 +714,4 @@ def move_into(
         for item in cls.body
         if not (isinstance(item, Pass) and len(cls.body) > 1)
     ]
-    _document(cls=cls, name=name)
+    _document(cls=cls, name=attr)

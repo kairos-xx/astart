@@ -3,6 +3,7 @@
 The corpus-parametrized modules replay hundreds of real files and make up
 almost all of the suite's run time. They are marked ``slow`` so that the edit
 loop can run ``pytest -m "not slow"`` (a fast tier) while CI runs everything.
+
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ class Constants:
     """Constants used in the tests module.
 
     Attributes:
-        slow_modules: Test module names marked as slow.
+        slow_modules (Final[frozenset[str]]): Test module names marked as slow.
 
     """
 
@@ -48,8 +49,8 @@ def pytest_collection_modifyitems(
     """Mark every test of a corpus-heavy module as ``slow``.
 
     Args:
-        config: Pytest configuration (unused).
-        items: The collected tests, marked in place.
+        config (pytest.Config): Pytest configuration (unused).
+        items (Sequence[pytest.Item]): The collected tests, marked in place.
 
     """
     _ = config

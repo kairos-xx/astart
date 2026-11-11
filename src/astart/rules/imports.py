@@ -39,8 +39,8 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        known_imports: Grouped module constant.
-        constructors: Grouped module constant.
+        known_imports (Final[Mapping[str, str]]): Grouped module constant.
+        constructors (Final[frozenset[str]]): Grouped module constant.
 
     """
 
@@ -55,6 +55,8 @@ class Constants:
         "MutableMapping": "collections.abc",
         "MutableSequence": "collections.abc",
         "Sequence": "collections.abc",
+        "Match": "re",
+        "Pattern": "re",
         "Decimal": "decimal",
         "Fraction": "fractions",
         "Path": "pathlib",
@@ -66,10 +68,13 @@ class Constants:
         "Final": "typing",
         "NoReturn": "typing",
         "Optional": "typing",
+        "ParamSpec": "typing",
         "Protocol": "typing",
         "Self": "typing",
+        "TYPE_CHECKING": "typing",
         "TypeVar": "typing",
         "Union": "typing",
+        "runtime_checkable": "typing",
     }
     constructors: Final[frozenset[str]] = frozenset(
         {
@@ -89,10 +94,10 @@ def bound_names(*, module: Module) -> frozenset[str]:
     """Collect every name the module binds anywhere.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Imported, defined and assigned names.
+        frozenset[str]: Imported, defined and assigned names.
 
     """
     names: set[str] = set()
@@ -119,10 +124,10 @@ def _is_type_checking(*, test: expr) -> bool:
     """Tell whether an ``if`` test is ``TYPE_CHECKING``.
 
     Args:
-        test: Condition expression.
+        test (expr): Condition expression.
 
     Returns:
-        ``True`` for ``TYPE_CHECKING`` and ``module.TYPE_CHECKING``.
+        bool: ``True`` for ``TYPE_CHECKING`` and ``module.TYPE_CHECKING``.
 
     """
     return (isinstance(test, Name) and test.id == "TYPE_CHECKING") or (
@@ -138,8 +143,9 @@ def _record_import(
     """Record the names an import statement binds.
 
     Args:
-        node: Import statement.
-        out: Bound names; a plain ``from`` import records its origin.
+        node (Import | ImportFrom): Import statement.
+        out (dict[str, tuple[str, str] | None]): Bound names; a plain ``from``
+            import records its origin.
 
     """
     for imported in node.names:
@@ -159,9 +165,10 @@ def _visit(*, node: AST, out: dict[str, tuple[str, str] | None]) -> None:
     ``if TYPE_CHECKING:`` is skipped because it never runs.
 
     Args:
-        node: Statement or expression to scan.
-        out: Bound names; an import records ``(module, name)``, anything
-            else records ``None``.
+        node (AST): Statement or expression to scan.
+        out (dict[str, tuple[str, str] | None]): Bound names; an import records
+            ``(module, name)``
+            , anything else records ``None``.
 
     """
     match node:
@@ -193,11 +200,12 @@ def runtime_bindings(
     """List the names bound at runtime by the first ``before`` statements.
 
     Args:
-        module: Module to scan.
-        before: Number of leading top-level statements that have run.
+        module (Module): Module to scan.
+        before (int): Number of leading top-level statements that have run.
 
     Returns:
-        Bound names; ``(module, name)`` for a plain ``from`` import.
+        dict[str, tuple[str, str] | None]: Bound names; ``(module, name)`` for
+            a plain ``from`` import.
 
     """
     out: dict[str, tuple[str, str] | None] = {}
@@ -210,10 +218,10 @@ def header_end(*, module: Module) -> int:
     """Find where a new top-level import belongs.
 
     Args:
-        module: Module to inspect.
+        module (Module): Module to inspect.
 
     Returns:
-        The index after the docstring and the leading import block.
+        int: The index after the docstring and the leading import block.
 
     """
     body: list[stmt] = module.body
@@ -248,13 +256,13 @@ def insert_import(
     underscore alias instead, so nothing is shadowed.
 
     Args:
-        module: Module to modify in place.
-        source: Module the name is imported from.
-        name: Name to import.
-        before: Index of the statement that will use the name.
+        module (Module): Module to modify in place.
+        source (str): Module the name is imported from.
+        name (str): Name to import.
+        before (int): Index of the statement that will use the name.
 
     Returns:
-        The local name to write in the annotation or base list.
+        str: The local name to write in the annotation or base list.
 
     """
     bound: dict[str, tuple[str, str] | None] = runtime_bindings(
@@ -296,10 +304,10 @@ def module_classes(*, module: Module) -> frozenset[str]:
     """List the classes defined at the top level of a module.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Their names.
+        frozenset[str]: Their names.
 
     """
     return frozenset(
@@ -321,20 +329,23 @@ def ensure_names(
     Names are renamed in place when they had to be imported under an alias.
 
     Args:
-        module: Module to modify in place.
-        expression: Annotation expression about to be written.
-        before: Index of the statement that will use the annotation.
-        skip: Names that already mean what the annotation means (classes the
-            module defines itself) and must not be imported.
+        module (Module): Module to modify in place.
+        expression (expr): Annotation expression about to be written.
+        before (int): Index of the statement that will use the annotation.
+        skip (frozenset[str]): Names that already mean what the annotation
+            means (classes
+            the module defines itself) and must not be imported.
 
     """
     for node in walk(node=expression):
         if isinstance(node, Name) and node.id not in skip:
             source: str | None = Constants.known_imports.get(node.id)
             if source is not None:
+                size: int = len(module.body)
                 node.id = insert_import(
                     module=module,
                     source=source,
                     name=node.id,
                     before=before,
                 )
+                before += len(module.body) - size

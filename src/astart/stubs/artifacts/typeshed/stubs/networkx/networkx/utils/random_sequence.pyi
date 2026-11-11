@@ -1,0 +1,23 @@
+from collections.abc import Iterable
+
+from _typeshed import Incomplete
+
+__all__ = [
+    "cumulative_distribution",
+    "discrete_sequence",
+    "is_valid_tree_degree_sequence",
+    "powerlaw_sequence",
+    "random_weighted_sample",
+    "weighted_choice",
+    "zipf_rv",
+]
+
+def powerlaw_sequence(n, exponent: float = 2.0, seed=None): ...
+def is_valid_tree_degree_sequence(
+    degree_sequence: Iterable[Incomplete],
+) -> tuple[bool, str]: ...
+def zipf_rv(alpha, xmin: int = 1, seed=None) -> int: ...
+def cumulative_distribution(distribution): ...
+def discrete_sequence(n, distribution=None, cdistribution=None, seed=None): ...
+def random_weighted_sample(mapping, k, seed=None): ...
+def weighted_choice(mapping, seed=None): ...

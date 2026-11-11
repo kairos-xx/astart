@@ -1,0 +1,64 @@
+import re
+from collections.abc import Iterable
+from typing import AnyStr
+
+from .spawnbase import (
+    SpawnBase,
+    _CompiledRePattern,
+    _CompiledStringPattern,
+    _Searcher,
+)
+
+class searcher_string[AnyStr: (bytes, str)]:
+    eof_index: int
+    timeout_index: int
+    longest_string: int
+    def __init__(
+        self,
+        strings: Iterable[_CompiledStringPattern[AnyStr]],
+    ) -> None: ...
+    match: AnyStr
+    start: int
+    end: int
+    def search(
+        self,
+        buffer: AnyStr,
+        freshlen: int,
+        searchwindowsize: int | None = None,
+    ): ...
+
+class searcher_re[AnyStr: (bytes, str)]:
+    eof_index: int
+    timeout_index: int
+    def __init__(
+        self,
+        patterns: Iterable[_CompiledRePattern[AnyStr]],
+    ) -> None: ...
+    match: re.Match[AnyStr]
+    start: int
+    end: int
+    def search(
+        self,
+        buffer: AnyStr,
+        freshlen: int,
+        searchwindowsize: int | None = None,
+    ): ...
+
+class Expecter[AnyStr: (bytes, str)]:
+    spawn: SpawnBase[AnyStr]
+    searcher: _Searcher[AnyStr]
+    searchwindowsize: int | None
+    lookback: _Searcher[AnyStr] | int | None
+    def __init__(
+        self,
+        spawn: SpawnBase[AnyStr],
+        searcher: _Searcher[AnyStr],
+        searchwindowsize: int | None = -1,
+    ) -> None: ...
+    def do_search(self, window: AnyStr, freshlen: int) -> int: ...
+    def existing_data(self) -> int: ...
+    def new_data(self, data: AnyStr) -> int: ...
+    def eof(self, err: object = None) -> int: ...
+    def timeout(self, err: object = None) -> int: ...
+    def errored(self) -> None: ...
+    def expect_loop(self, timeout: float | None = -1) -> int: ...

@@ -1,0 +1,49 @@
+{
+  "fixes": [
+    {
+      "after": [],
+      "before": [],
+      "edits": ["typing.use-type-statement"],
+      "idempotent": true,
+      "key": "typing.use-type-statement",
+      "min_confidence": 0.9,
+      "preconditions": {
+        "cmp": "eq",
+        "fact": "binding.is_legacy_alias",
+        "op": "compare",
+        "value": true
+      },
+      "rules": ["typing.legacy-type-alias"],
+      "safety": "guarded"
+    }
+  ],
+  "profiles": [],
+  "relations": [],
+  "rules": [
+    {
+      "aliases": {},
+      "code": "TYP008",
+      "domain": "typing",
+      "evidence": [{"name": "name", "type": "str"}],
+      "examples": [
+        {"note": "No naming convention is required.", "source": "_ListInt = list[int]\n", "triggers": true},
+        {"note": "Legacy explicit declaration.", "source": "from typing import TypeAlias\n_Vector: TypeAlias = list[int]\n", "triggers": true},
+        {"note": "A runtime class alias retains its object identity.", "source": "factory = list[int]\nfactory()\n", "triggers": false},
+        {"note": "Already native.", "source": "type _ListInt = list[int]\n", "triggers": false}
+      ],
+      "fixes": ["typing.use-type-statement"],
+      "key": "typing.legacy-type-alias",
+      "maturity": "stable",
+      "message": "Type-only alias `{name}` should use a type statement.",
+      "owner": "astart",
+      "params": {},
+      "procedure": null,
+      "rationale": "A type alias is a declaration rather than a variable requiring a type hint. Preserve its spelling and body while refusing runtime uses and rebinding.",
+      "requires": ["binding.is_legacy_alias"],
+      "severity": "warning",
+      "subject": ["Assign"],
+      "title": "Legacy type alias declaration",
+      "when": {"cmp": "eq", "fact": "binding.is_legacy_alias", "op": "compare", "value": true}
+    }
+  ]
+}

@@ -5,6 +5,7 @@ A module's name is its import identity: ``pkg/sub/mod.py`` is
 the directories imports are resolved from (``src/``, the project root, a
 site-packages directory). Without a root the name is derived from the chain
 of ``__init__.py`` markers above the file itself.
+
 """
 
 from __future__ import annotations
@@ -20,8 +21,8 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        init_file: Name marking a directory as a package.
-        init_stub: Stub name marking a directory as a package.
+        init_file (Final[str]): Name marking a directory as a package.
+        init_stub (Final[str]): Stub name marking a directory as a package.
 
     """
 
@@ -33,10 +34,10 @@ def _is_package_dir(*, directory: Path) -> bool:
     """Tell whether a directory declares itself a package.
 
     Args:
-        directory: Directory to test.
+        directory (Path): Directory to test.
 
     Returns:
-        ``True`` when the directory holds an ``__init__`` marker.
+        bool: ``True`` when the directory holds an ``__init__`` marker.
 
     """
     return (directory / Constants.init_file).is_file() or (
@@ -57,13 +58,13 @@ def module_name(
     file's directory through every ancestor that is itself a package.
 
     Args:
-        path: The ``.py``/``.pyi`` file to name.
-        source_roots: Directories imports are resolved from, most specific
-            first.
+        path (Path): The ``.py``/``.pyi`` file to name.
+        source_roots (tuple[Path, ...]): Directories imports are resolved from,
+            most specific first.
 
     Returns:
-        The dotted module name, or ``None`` when the path cannot name an
-        importable module.
+        str | None: The dotted module name, or ``None`` when
+            the path cannot name an importable module.
 
     """
     resolved: Path = path.resolve()
@@ -97,11 +98,11 @@ def package_of(*, name: str, is_package: bool) -> str:
     package.
 
     Args:
-        name: Dotted module name.
-        is_package: Whether the module is a package ``__init__``.
+        name (str): Dotted module name.
+        is_package (bool): Whether the module is a package ``__init__``.
 
     Returns:
-        The dotted package name; empty for a top-level module.
+        str: The dotted package name; empty for a top-level module.
 
     """
     return name if is_package else name.rpartition(".")[0]

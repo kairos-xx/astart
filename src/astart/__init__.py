@@ -3,23 +3,15 @@
 Use :func:`parse` to build an editable module, then query ``tree.semantic``
 for types, values, signatures, conversion and immutable evidence. All advanced
 features use one imported package; the source graph is an internal subsystem.
+
 """
 
 from __future__ import annotations
 
 from ast import AST
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
-from astart.ast import (
-    Comment,
-    CommentedModule,
-    CommentGroup,
-    MultilineComment,
-    ShebangNode,
-    SingleLineComment,
-    SuppressionComment,
-    SuppressionRule,
-)
+from astart.api import check_source, fix_source
 from astart.docstrings import (
     DocDescription,
     DocEntry,
@@ -29,7 +21,7 @@ from astart.docstrings import (
     DocSummary,
     ModuleDocstringNode,
 )
-from astart.formatting import FormatPreservationError
+from astart.files import FileOutcome, fix_file, fix_paths
 from astart.semantic import (
     AnalysisBudgets,
     Args,
@@ -53,67 +45,48 @@ from astart.semantic import (
     TypeShape,
     ValueEvidence,
 )
-from astart.tokens import LexicalToken, SourceSpan, TokenSnapshot
+from astart.settings import Settings
+from astart.source.api import parse, unparse
+from astart.source.ast import (
+    Comment,
+    CommentedModule,
+    CommentGroup,
+    MultilineComment,
+    ShebangNode,
+    SingleLineComment,
+    SuppressionComment,
+    SuppressionRule,
+)
+from astart.source.formatting import FormatPreservationError
+from astart.source.tokens import LexicalToken, SourceSpan, TokenSnapshot
 
 if TYPE_CHECKING:
     from pathlib import Path
-Module = CommentedModule
 
 
-def parse(*, source: str, filename: str = "<memory>") -> CommentedModule:
-    """Parse Python source into an editable annotated module.
-
-    Args:
-        source: Python source text.
-        filename: Source identity for Python's syntax diagnostics.
-
-    Returns:
-        Editable module retaining lexical and semantic information.
-
-    """
-    return CommentedModule.parse(source=source, filename=filename)
-
-
-def unparse(
-    *,
-    tree: CommentedModule,
-    preserve_formatting: bool = True,
-    on_format_conflict: Literal["raise", "fallback"] = "raise",
-) -> str:
-    """Serialize an editable module, preserving original formatting by default.
-
-    Args:
-        tree: Editable module to serialize.
-        preserve_formatting: Retain concrete source formatting where possible.
-        on_format_conflict: Strategy for edits without safe lexical patches.
-
-    Returns:
-        Updated Python source.
-
-    """
-    return tree.unparse(
-        preserve_formatting=preserve_formatting,
-        on_format_conflict=on_format_conflict,
-    )
+Module: type[CommentedModule] = CommentedModule
 
 
 def convert(
     *,
     tree: CommentedModule,
-    stubs_path: Path,
+    stubs_path: Path | None = None,
     filename: str = "<memory>",
     apply: bool = False,
 ) -> GraphConversion:
     """Merge graph-based type conclusions into the same mutable AST.
 
     Args:
-        tree: Editable module.
-        stubs_path: Root of local stubs for graph inference.
-        filename: Source identity.
-        apply: Apply verified annotation updates when true.
+        tree (CommentedModule): Editable module.
+        stubs_path (Path | None): Typeshed root for stub lookups, or ``None``
+            for the
+            ``ASTART_TYPESHED`` override and then the bundled snapshot.
+        filename (str): Source identity.
+        apply (bool): Apply verified annotation updates when true.
 
     Returns:
-        Conversion proposals, provenance, stage outcomes and diagnostics.
+        GraphConversion:
+            Conversion proposals, provenance, stage outcomes and diagnostics.
 
     """
     return tree.convert(
@@ -141,6 +114,7 @@ __all__ = (
     "DocStyle",
     "DocSummary",
     "DocstringNode",
+    "FileOutcome",
     "FormatPreservationError",
     "GraphAnnotation",
     "GraphConversion",
@@ -152,6 +126,7 @@ __all__ = (
     "ParameterKind",
     "ProtocolSpec",
     "SemanticAnalyzer",
+    "Settings",
     "ShebangNode",
     "SingleLineComment",
     "SourceSpan",
@@ -166,7 +141,11 @@ __all__ = (
     "TypeShape",
     "Types",
     "ValueEvidence",
+    "check_source",
     "convert",
+    "fix_file",
+    "fix_paths",
+    "fix_source",
     "parse",
     "unparse",
 )

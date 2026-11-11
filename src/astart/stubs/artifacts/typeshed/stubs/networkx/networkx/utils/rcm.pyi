@@ -1,0 +1,14 @@
+from collections.abc import Generator
+
+from _typeshed import Incomplete
+from networkx.classes.graph import Graph, _Node
+
+__all__ = ["cuthill_mckee_ordering", "reverse_cuthill_mckee_ordering"]
+
+def cuthill_mckee_ordering(
+    G: Graph[_Node],
+    heuristic=None,
+) -> Generator[Incomplete, Incomplete]: ...
+def reverse_cuthill_mckee_ordering(G: Graph[_Node], heuristic=None): ...
+def connected_cuthill_mckee_ordering(G: Graph[_Node], heuristic=None): ...
+def pseudo_peripheral_node(G: Graph[_Node]): ...

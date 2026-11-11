@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
-from astart.rules.negotiation.model import Candidate, Contract, Polarity
+from astart.rules.negotiation.model import (
+    Candidate,
+    Contract,
+    Origin,
+    Polarity,
+)
 
 if TYPE_CHECKING:
     from ast import expr
@@ -20,10 +25,10 @@ def _candidate_key(
     """Order candidates without depending on insertion order.
 
     Args:
-        candidate: Any candidate.
+        candidate (Candidate): Any candidate.
 
     Returns:
-        A sortable key.
+        tuple[str, float, tuple[str, ...], str]: A sortable key.
 
     """
     return (
@@ -40,13 +45,16 @@ class Derived:
     """A node whose type is an expression over other nodes.
 
     Attributes:
-        target: Path of the node holding the expression's value.
-        template: The expression with each operand replaced by a placeholder
+        target (str): Path of the node holding the expression's value.
+        template (expr): The expression with each operand replaced by a
+            placeholder
             name; the syntax typer evaluates it once the operands settle.
-        parts: ``(placeholder, node path)`` for every operand.
-        fixed: ``(name, type text)`` pairs for names the template reads
-            whose type is already known.
-        explanation: The source text of the expression.
+        parts (tuple[tuple[str, str], ...]): ``(placeholder, node path)`` for
+            every operand.
+        fixed (tuple[tuple[str, str], ...]): ``(name, type text)`` pairs for
+            names the
+            template reads whose type is already known.
+        explanation (str): The source text of the expression.
 
     """
 
@@ -74,7 +82,7 @@ class ContractGraph:
         """Make sure a node exists.
 
         Args:
-            path: Path text of the node.
+            path (str): Path text of the node.
 
         """
         self._nodes.add(path)
@@ -83,7 +91,7 @@ class ContractGraph:
         """Add a contract, keeping the stronger of two equal ones.
 
         Args:
-            contract: The contract; both ends become nodes.
+            contract (Contract): The contract; both ends become nodes.
 
         """
         self._nodes.update((contract.source, contract.target))
@@ -103,8 +111,8 @@ class ContractGraph:
         """Add a node that is an expression over other nodes.
 
         Args:
-            derived: The expression and its operands; every path becomes a
-                node.
+            derived (Derived): The expression and its operands; every path
+                becomes a node.
 
         """
         self._nodes.add(derived.target)
@@ -115,7 +123,7 @@ class ContractGraph:
         """List every derived node in a stable order.
 
         Returns:
-            The derived nodes sorted by target.
+            tuple[Derived, ...]: The derived nodes sorted by target.
 
         """
         return tuple(self._derived[key] for key in sorted(self._derived))
@@ -124,10 +132,10 @@ class ContractGraph:
         """List the derived nodes that read a node.
 
         Args:
-            path: Path text of the operand.
+            path (str): Path text of the operand.
 
         Returns:
-            The derived nodes sorted by target.
+            tuple[Derived, ...]: The derived nodes sorted by target.
 
         """
         return tuple(
@@ -140,10 +148,10 @@ class ContractGraph:
         """Tell whether a node's type goes anywhere.
 
         Args:
-            path: Path text of the node.
+            path (str): Path text of the node.
 
         Returns:
-            ``True`` when a contract or a derived node reads it.
+            bool: ``True`` when a contract or a derived node reads it.
 
         """
         return bool(self.outgoing(path=path)) or bool(
@@ -160,9 +168,9 @@ class ContractGraph:
         """Start a candidate at a node.
 
         Args:
-            path: Path text of the node.
-            candidate: The seed type.
-            polarity: How it contributes at the node.
+            path (str): Path text of the node.
+            candidate (Candidate): The seed type.
+            polarity (Polarity): How it contributes at the node.
 
         """
         self._nodes.add(path)
@@ -173,7 +181,7 @@ class ContractGraph:
         """List every node.
 
         Returns:
-            The path texts, sorted.
+            tuple[str, ...]: The path texts, sorted.
 
         """
         return tuple(sorted(self._nodes))
@@ -182,7 +190,8 @@ class ContractGraph:
         """List every seed in a stable order.
 
         Returns:
-            ``(path, candidate, polarity)`` sorted by path and candidate.
+            tuple[tuple[str, Candidate, Polarity], ...]:
+                ``(path, candidate, polarity)`` sorted by path and candidate.
 
         """
         return tuple(
@@ -201,10 +210,10 @@ class ContractGraph:
         """Tell whether anything can give a node a type.
 
         Args:
-            path: Path text of the node.
+            path (str): Path text of the node.
 
         Returns:
-            ``True`` when the node has a seed or an incoming contract.
+            bool: ``True`` when the node has a seed or an incoming contract.
 
         """
         return (
@@ -213,14 +222,51 @@ class ContractGraph:
             or bool(self.incoming(path=path))
         )
 
+    def seed_ablation(
+        self,
+        *,
+        excluded: frozenset[Origin],
+    ) -> ContractGraph:
+        """Create an isolated seed experiment over the same syntax nodes.
+
+        Remove complete candidates before propagation; relabeling a settled
+        belief would leave consequences of excluded evidence in the graph.
+        Mixed-origin seeds are removed when any dependency is excluded.
+        Contracts and derived rules remain fixed, so this measures seed
+        sensitivity rather than a complete inference-origin ablation.
+
+        Args:
+            excluded (frozenset[Origin]): Seed origins disabled for this
+                experiment.
+
+        Returns:
+            ContractGraph:
+                An independently mutable graph sharing the original AST nodes.
+
+        """
+        result: ContractGraph = ContractGraph()
+        result._nodes = self._nodes.copy()
+        result._contracts = self._contracts.copy()
+        result._derived = self._derived.copy()
+        for path, candidates in self._seeds.items():
+            remaining: list[tuple[Candidate, Polarity]] = [
+                (candidate, polarity)
+                for candidate, polarity in candidates
+                if not candidate.origins & excluded
+            ]
+            if remaining:
+                result._seeds[path] = remaining
+        return result
+
     def outgoing(self, *, path: str) -> tuple[Contract, ...]:
         """List the contracts leaving a node.
 
         Args:
-            path: Path text of the node.
+            path (str): Path text of the node.
 
         Returns:
-            The contracts sorted by target, relation and polarity.
+            tuple[Contract, ...]: The contracts sorted by target, relation and
+                polarity.
 
         """
         if self._out is None:
@@ -231,10 +277,11 @@ class ContractGraph:
         """List the contracts reaching a node.
 
         Args:
-            path: Path text of the node.
+            path (str): Path text of the node.
 
         Returns:
-            The contracts sorted by source, relation and polarity.
+            tuple[Contract, ...]: The contracts sorted by source, relation and
+                polarity.
 
         """
         if self._in is None:

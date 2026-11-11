@@ -2,10 +2,11 @@
 
 Flags simple-name assignments whose value has a stable, known inferred
 type but which carry no annotation — candidates for an annotation the
-tool could propose.  Refuses whenever inference is ``Unknown``,
+tool could propose. Refuses whenever inference is ``Unknown``,
 unstable, or the name is already annotated, private, or a dunder.
 
 Standalone detector; catalog wiring is deferred (M8-22).
+
 """
 
 from __future__ import annotations
@@ -25,18 +26,18 @@ from typing import TYPE_CHECKING
 from astart.rules.procedural import Candidate, span_of
 
 if TYPE_CHECKING:
-    from astart.ast import CommentedModule
     from astart.semantic.type_inference import TypeInference, TypeShape
+    from astart.source.ast import CommentedModule
 
 
 def _annotated_names(*, module: CommentedModule) -> set[str]:
     """Names that already carry an annotation anywhere in the module.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Annotated binding names.
+        set[str]: Annotated binding names.
 
     """
     names: set[str] = set()
@@ -63,10 +64,10 @@ def _assignments(*, module: CommentedModule) -> list[Assign]:
     """Every ``Assign`` node, including nested scopes.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Assign nodes in source order.
+        list[Assign]: Assign nodes in source order.
 
     """
     found: list[Assign] = []
@@ -84,11 +85,11 @@ def _eligible_name(*, name: str, annotated: set[str]) -> bool:
     """Whether ``name`` may be flagged for a missing annotation.
 
     Args:
-        annotated: Names already annotated in the module.
-        name: Candidate binding name.
+        annotated (set[str]): Names already annotated in the module.
+        name (str): Candidate binding name.
 
     Returns:
-        ``True`` when the name is a plain public identifier.
+        bool: ``True`` when the name is a plain public identifier.
 
     """
     return (
@@ -106,11 +107,11 @@ def find_missing_variable_annotations(
     """Flag unannotated assignments with a known inferred type.
 
     Args:
-        filename: Source name for spans.
-        module: Parsed module.
+        filename (str): Source name for spans.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Candidates for each annotatable assignment.
+        tuple[Candidate, ...]: Candidates for each annotatable assignment.
 
     """
     annotated: set[str] = _annotated_names(module=module)

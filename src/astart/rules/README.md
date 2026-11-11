@@ -4,7 +4,7 @@ A rule ontology: rules, fixes, profiles and relations as typed, serializable
 data, plus a small reference engine that evaluates the catalog against Python
 source parsed once with astart.
 
-Design: `docs/TODO.md` chapter 8 (M8); the ontology spec was merged there and retired.
+Design: `docs/planning/TODO.md` chapter 8 (M8); the ontology spec was merged there and retired.
 
 ## Layers
 
@@ -16,10 +16,10 @@ Design: `docs/TODO.md` chapter 8 (M8); the ontology spec was merged there and re
 | `model` | `Rule`, `Fix`, `Profile`, `Relation`, `Finding`, `Catalog` | no |
 | `registry` | Declared node kinds, facts, procedures, appliers | no |
 | `catalog` | Load, dump and validate catalogs (data invariants) | no |
-| `schema` | JSON Schema generated from the model (`schema.json`) | no |
+| `schema` | JSON Schema generated from the model (`artifacts/schema.json`) | no |
 | `facts`, `appliers`, `engine` | Reference implementation | yes |
 
-`python -m astart.rules.schema` regenerates `schema.json`; a test fails when
+`python -m astart.rules.schema` regenerates `artifacts/schema.json`; a test fails when
 the committed file is out of date.
 
 ## Seeded rules
@@ -85,7 +85,12 @@ applies fixes backed by corroborated evidence. Anything skipped is reported
 with a reason (`conflict`, `preconditions no longer hold`,
 `cannot write back without changing formatting`, an applier error). When a
 combined write-back fails, the runner halves the set of fixes and keeps every
-one that can be written. `format_source` then runs `ruff format` once.
+one that can be written. Checker failures use `ddmin` instead: test function
+groups, then individual edits against the same original source, caching each
+subset by stable fix IDs. Minimal failing cores are removed until the
+remaining batch passes; removed edits retain explicit refusal codes.
+This finds a 1-minimal failure, not a globally smallest failure or the largest
+possible accepted batch. `format_source` then runs `ruff format` once.
 
 ### Type hints (TYP003)
 
@@ -127,6 +132,7 @@ files and directories; see the project README for the flags and exit codes.
 ### Files
 
 - [`__init__.py`](__init__.py) — Rule ontology: a typed, serializable catalog of checks and fixes.
+- [`alias_declarations.py`](alias_declarations.py) — Recognize annotation-only legacy aliases using the native lexical graph.
 - [`appliers.py`](appliers.py) — Edit appliers: tree-level rewrites that fixes are made of.
 - [`attributes.py`](attributes.py) — Prove the type of ``self.attr`` from every write to it in a class.
 - [`call_problems.py`](call_problems.py) — M6-05…M6-08 call-shape detectors.
@@ -134,13 +140,7 @@ files and directories; see the project README for the flags and exit codes.
 - [`checker.py`](checker.py) — External type-checker gate: reject fixes that make the checker unhappy.
 - [`confidence.py`](confidence.py) — How sure the engine is about each offered fix.
 - [`constants_grouping.py`](constants_grouping.py) — M8-09 ``structure.constants-grouping``: loose module constants.
-- [`docs_fixes.py`](docs_fixes.py) — Docstring facts and fixes: parameter entries and whitespace.
-- [`docs_missing.py`](docs_missing.py) — DOC001 ``docs.missing-docstring``: definitions without docstrings.
-- [`docs_missing_raises.py`](docs_missing_raises.py) — DOC006 ``docs.missing-raises``: raised exception not documented.
-- [`docs_missing_returns.py`](docs_missing_returns.py) — DOC004 ``docs.missing-returns``: value-returning function, no section.
-- [`docs_shared.py`](docs_shared.py) — Shared docstring helpers for the DOC rule family.
-- [`docs_stale_params.py`](docs_stale_params.py) — DOC003 ``docs.stale-parameter``: documented name with no parameter.
-- [`docstring_edit.py`](docstring_edit.py) — Pure text edits for Google-style docstrings.
+- [`ddmin.py`](ddmin.py) — Deterministic delta debugging over stable change identifiers.
 - [`engine.py`](engine.py) — Reference engine: parse once, evaluate rules, report findings.
 - [`engine_hints.py`](engine_hints.py) — Annotations from the inference engine, for conversion mode.
 - [`environment.py`](environment.py) — Detect where a file lives so a checker can resolve its imports.
@@ -171,21 +171,38 @@ files and directories; see the project README for the flags and exit codes.
 - [`registry.py`](registry.py) — Registries of node kinds, facts, procedures and appliers.
 - [`resolve.py`](resolve.py) — Shared name-binding and call-resolution helpers for rules and hints.
 - [`runner.py`](runner.py) — Fix runner: parse once, apply many fixes, write once.
-- [`schema.json`](schema.json) — Provide schema json content.
 - [`schema.py`](schema.py) — Generate the JSON Schema of the rule catalog from the entity model.
 - [`scopes.py`](scopes.py) — Which names a syntax node binds.
 - [`slots.py`](slots.py) — Evidence slots: named buckets where sources deposit type claims.
-- [`strings_normalize.py`](strings_normalize.py) — String literal normalisation fixer (standalone, M8-24).
+- [`strings_normalize.py`](strings_normalize.py) — String literal normalisation fixer (M8-24, wired by WSP003).
 - [`suppressions.py`](suppressions.py) — SUP001 ``suppression.marker-comment``: checker suppression comments.
 - [`type_mismatch.py`](type_mismatch.py) — M8-06 detectors: return-type mismatches and incompatible defaults.
 - [`typevars.py`](typevars.py) — Detect parameters that only flow through to the return value.
 - [`variable_annotations.py`](variable_annotations.py) — TYP005 ``typing.missing-variable-annotation`` detector.
 - [`vocabulary.py`](vocabulary.py) — Closed vocabulary of the rule ontology.
-- [`whitespace_rules.py`](whitespace_rules.py) — Whitespace rules: WSP001 blank-line runs and WSP002 trailing space.
+- [`whitespace_rules.py`](whitespace_rules.py) — Whitespace rules: WSP001 blank runs through WSP005 string literals.
 
 ### Subdirectories
 
-- [`catalog/`](catalog/README.md) — Provide calls json content.
+- [`artifacts/`](artifacts/README.md) — Provide schema json content.
 - [`negotiation/`](negotiation/README.md) — Two-way type negotiation over a graph of contracts.
 
 <!-- exactus:inventory:end -->
+
+## Native alias declarations
+
+`TYP008` / `typing.use-type-statement` migrates proven module-level legacy
+aliases to PEP 695 on targets supporting Python 3.12. It preserves the author's
+name and RHS, adds no variable annotation, and consumes unused `TypeAlias`
+imports. The per-module cache reuses the native lexical graph; no source
+reparse or runtime import is used to detect an alias. Runtime uses, rebinding,
+wildcard ambiguity and metadata object uses block migration, including through
+dependent aliases. Supported unconstrained legacy generic binders become
+explicit native alias parameters. Unsupported type expressions stay unchanged.
+
+Generator result documentation is now a registered rule:
+`DOC004` (`docs.missing-generator-results`) and the proven
+`docs.add-generator-results` fix. It retains TODO placeholders, distinguishes
+yielded values from non-None terminal returns, and preserves supported
+structured documentation styles. General non-generator return documentation
+remains available through the standalone detector.

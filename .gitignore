@@ -39,6 +39,7 @@ coverage/
 .history/
 .remember/
 EXACTUS_RESULTS/
+artifacts/
 mutants/
 .bkp/
 .build-cache/
@@ -60,3 +61,26 @@ mutants/
 *.log
 
 .astart_cache/
+.astart-backup/
+
+# Owned package resources and test policy data are source-controlled.
+!src/astart/docstrings/artifacts/
+!src/astart/rules/artifacts/
+!src/astart/stubs/artifacts/
+!tests/artifacts/
+
+# Canonical comparison evidence is retained for agent handoff.
+!scripts/compare/artifacts/
+scripts/compare/artifacts/*
+!scripts/compare/artifacts/results/
+scripts/compare/artifacts/results/*
+!scripts/compare/artifacts/results/conversion-report.md
+!scripts/compare/artifacts/results/conversion-report.json
+!scripts/compare/artifacts/results/result.py
+
+# Benchmark inputs are tracked; measured run outputs stay local.
+!scripts/benchmark/artifacts/
+scripts/benchmark/artifacts/*
+!scripts/benchmark/artifacts/README.md
+!scripts/benchmark/artifacts/resources/
+!scripts/benchmark/artifacts/resources/**

@@ -1,0 +1,192 @@
+{
+  "updated": "2026-11-09",
+  "working_tree": "Uncommitted: engine_hints.py (convert apply=False, W-03), negotiation/variables.py (first assignments, G-10), facts.py (--engine implies variable annotation), tests/astart/rules/test_engine_hints.py (new test), scripts/*.py and docs/*. Do not commit before the semantic run.",
+  "history": [
+    {
+      "date": "2026-11-08",
+      "label": "Start of session",
+      "p_exact": 253,
+      "p_wrong": 55,
+      "p_total": 482,
+      "v_exact": 174,
+      "v_wrong": 49,
+      "v_total": 335
+    },
+    {
+      "date": "2026-11-08",
+      "label": "After W-03 (engine annotations no longer written into the module)",
+      "p_exact": 221,
+      "p_wrong": 13,
+      "p_total": 482,
+      "v_exact": 152,
+      "v_wrong": 13,
+      "v_total": 335
+    },
+    {
+      "date": "2026-11-08",
+      "label": "After G-10 (first assignment of multiply-bound locals)",
+      "p_exact": 221,
+      "p_wrong": 13,
+      "p_total": 482,
+      "v_exact": 163,
+      "v_wrong": 13,
+      "v_total": 335
+    },
+    {
+      "date": "2026-11-09",
+      "at": "2026-11-09T17:17:19+00:00",
+      "label": "reference fixtures/typed.py",
+      "p_exact": 202,
+      "p_wrong": 9,
+      "p_total": 498,
+      "v_exact": 177,
+      "v_wrong": 13,
+      "v_total": 492
+    },
+    {
+      "date": "2026-11-09",
+      "at": "2026-11-09T18:18:40+00:00",
+      "label": "CC-09/CC-10 baseline before next slice",
+      "p_exact": 198,
+      "p_wrong": 9,
+      "p_total": 475,
+      "v_exact": 164,
+      "v_wrong": 14,
+      "v_total": 296
+    },
+    {
+      "date": "2026-11-09",
+      "at": "2026-11-09T18:24:38+00:00",
+      "label": "Receiver-aware method return inference; no suffix-based None",
+      "p_exact": 198,
+      "p_wrong": 9,
+      "p_total": 475,
+      "v_exact": 164,
+      "v_wrong": 12,
+      "v_total": 296
+    },
+    {
+      "date": "2026-11-09",
+      "at": "2026-11-09T19:50:41+00:00",
+      "label": "Curated alias and capability-name reference; receiver-aware inference",
+      "p_exact": 157,
+      "p_wrong": 21,
+      "p_total": 471,
+      "v_exact": 88,
+      "v_wrong": 23,
+      "v_total": 294
+    },
+    {
+      "date": "2026-11-09",
+      "at": "2026-11-09T20:05:05+00:00",
+      "label": "Generic alias and variadic tuple comparison support",
+      "p_exact": 157,
+      "p_wrong": 9,
+      "p_total": 471,
+      "v_exact": 88,
+      "v_wrong": 13,
+      "v_total": 294
+    },
+    {
+      "date": "2026-11-09",
+      "at": "2026-11-09T20:22:49+00:00",
+      "label": "Separate alias-equivalent types from spelling recovery; repair variadic tuple scoring",
+      "p_exact": 157,
+      "p_wrong": 8,
+      "p_total": 471,
+      "v_exact": 88,
+      "v_wrong": 12,
+      "v_total": 294
+    },
+    {
+      "date": "2026-11-09",
+      "at": "2026-11-09T21:03:45+00:00",
+      "label": "TYP008 native legacy alias declarations; no variable hints on aliases",
+      "p_exact": 157,
+      "p_wrong": 8,
+      "p_total": 471,
+      "v_exact": 88,
+      "v_wrong": 12,
+      "v_total": 294
+    }
+  ],
+  "checks": {
+    "fast_tier": {
+      "status": "pass",
+      "date": "2026-11-08",
+      "at": "2026-11-08T22:42:30+00:00",
+      "note": "bench+rules tests green incl. new perf/targets/runner tests 2026-11-09"
+    },
+    "slow_tier": {
+      "status": "not run",
+      "date": "2026-11-08",
+      "note": "not run since W-03 and G-10"
+    },
+    "stdlib_gate": {
+      "status": "pass",
+      "date": "2026-11-08",
+      "at": "2026-11-08T22:42:21+00:00",
+      "note": "128 modules, 0 crashes, gate vs baseline.json PASS 2026-11-09"
+    },
+    "external_gate": {
+      "status": "pass",
+      "date": "2026-11-08",
+      "at": "2026-11-08T22:42:29+00:00",
+      "note": "165 modules, recall 20.18%, precision 99.60%, 0 crashes, gate vs baseline_ext.json PASS 2026-11-09; refresh declined (+0.55pts < +2pts)"
+    },
+    "semantic_run": {
+      "status": "pass",
+      "date": "2026-11-08",
+      "at": "2026-11-08T22:42:30+00:00",
+      "note": "15 of 15 projects same_imports and same_result 2026-11-09"
+    },
+    "lint": {
+      "status": "pass",
+      "date": "2026-11-09",
+      "at": "2026-11-09T22:40:08+00:00",
+      "note": "dispatcher smoke"
+    },
+    "todo_lint": {
+      "status": "pass",
+      "date": "2026-11-08",
+      "at": "2026-11-08T22:42:30+00:00",
+      "note": "0 errors, 0 warnings 2026-11-09"
+    }
+  },
+  "open_items": [
+    "Run the semantic equivalence run (W-01 step 4) before committing anything.",
+    "Re-run the full in-place conversion on a copy of fixtures/untyped.py (it was interrupted on 2026-11-08) and record time and exit code in the conversion-goal section.",
+    "Variables exact is 163 of 335; G-10 asks for at least 170: compare variable_map before and after W-03 to find the lost ones.",
+    "Do R-18 (settings registry) first and alone so the parallel lanes stop colliding.",
+    "Scorer tasks G-02, G-05, P-07 remove about 20 of the 26 remaining contradictions; G-04 root-causes the other five.",
+    "Re-run the slow tier (about 19 minutes) after the engine changes.",
+    "Add tests and lint for the TODO tooling (R-25)",
+    "Make docs/planning/status.json updates atomic, locked and validated (R-26)",
+    "Triage 2026-11-09 session artifacts before commit: dev/t.py, fixtures/typed.py, fixtures/artifacts/typed_graph.json, explanation.json (F-26 schema sketch)"
+  ],
+  "previous": {
+    "at": "2026-11-09T21:21:42+00:00",
+    "p_exact": 157,
+    "p_wrong": 8,
+    "p_total": 471,
+    "v_exact": 88,
+    "v_wrong": 12,
+    "v_total": 294,
+    "tasks_done": 235,
+    "tasks_total": 482,
+    "tasks_open": 247
+  },
+  "snapshot": {
+    "at": "2026-11-09T22:40:08+00:00",
+    "p_exact": 157,
+    "p_wrong": 8,
+    "p_total": 471,
+    "v_exact": 88,
+    "v_wrong": 12,
+    "v_total": 294,
+    "tasks_done": 235,
+    "tasks_total": 487,
+    "tasks_open": 252
+  },
+  "updated_at": "2026-11-09T22:40:08+00:00"
+}

@@ -2,6 +2,7 @@
 
 The library is static: no runtime imports, isinstance tests, descriptor calls,
 or eval of analyzed source. Unrecognized relationships stay unresolved.
+
 """
 
 from __future__ import annotations
@@ -32,8 +33,10 @@ class Compatibility:
     """A three-valued subtype result with declarative evidence.
 
     Attributes:
-        compatible: Compatible retained as bool | None by this instance.
-        evidence: Evidence retained as tuple[str, ...] by this instance.
+        compatible (bool | None): Compatible retained as bool | None by this
+            instance.
+        evidence (tuple[str, ...]): Evidence retained as tuple[str, ...] by
+            this instance.
 
     """
 
@@ -46,16 +49,22 @@ class Constants:
     """Static collection ABC edges and generic variance policies.
 
     Attributes:
-        ABC_BASES: Abc bases retained as ClassVar[dict[str, frozenset[str]]] by
+        abc_bases (ClassVar[dict[str, frozenset[str]]]): Abc bases retained as
+            ClassVar[dict[str,
+            frozenset[str]]] by this instance.
+        aliases (ClassVar[dict[str, str]]): Aliases retained as
+            ClassVar[dict[str, str]] by this instance.
+        covariant (frozenset[str]): Covariant retained as frozenset[str] by
             this instance.
-        ALIASES: Aliases retained as ClassVar[dict[str, str]] by this instance.
-        COVARIANT: Covariant retained as frozenset[str] by this instance.
-        INVARIANT: Invariant retained as frozenset[str] by this instance.
-        PAIR_SIZE: Arity of key/value type-argument pairs.
+        invariant (frozenset[str]): Invariant retained as frozenset[str] by
+            this instance.
+        pair_size (Final[int]): Arity of key/value type-argument pairs.
+        qualifiers (Final[frozenset[str]]): Grouped module constant.
+        builtin_nominals (Final[frozenset[str]]): Grouped module constant.
 
     """
 
-    ABC_BASES: ClassVar[dict[str, frozenset[str]]] = {
+    abc_bases: ClassVar[dict[str, frozenset[str]]] = {
         "list": frozenset(
             (
                 "Collection",
@@ -272,7 +281,7 @@ class Constants:
         ),
         "Collection": frozenset(("Iterable", "Sized", "Container")),
     }
-    COVARIANT: frozenset[str] = frozenset(
+    covariant: frozenset[str] = frozenset(
         (
             "Iterable",
             "Iterator",
@@ -292,7 +301,7 @@ class Constants:
             "ItemsView",
         ),
     )
-    INVARIANT: frozenset[str] = frozenset(
+    invariant: frozenset[str] = frozenset(
         (
             "list",
             "dict",
@@ -309,7 +318,7 @@ class Constants:
             "UserList",
         ),
     )
-    ALIASES: ClassVar[dict[str, str]] = {
+    aliases: ClassVar[dict[str, str]] = {
         "typing.List": "list",
         "typing.Dict": "dict",
         "typing.Tuple": "tuple",
@@ -344,20 +353,48 @@ class Constants:
         "typing.ByteString": "ByteString",
         "typing.Hashable": "Hashable",
     }
-    PAIR_SIZE: Final[int] = 2
+    pair_size: Final[int] = 2
+
+    qualifiers: Final[frozenset[str]] = frozenset(
+        (
+            "Annotated",
+            "Final",
+            "ClassVar",
+            "Required",
+            "NotRequired",
+            "ReadOnly",
+        ),
+    )
+    builtin_nominals: Final[frozenset[str]] = frozenset(
+        (
+            "str",
+            "bytes",
+            "int",
+            "float",
+            "complex",
+            "bool",
+            "list",
+            "tuple",
+            "dict",
+            "set",
+            "frozenset",
+            "None",
+            "range",
+        ),
+    )
 
 
 def normalize(*, name: str) -> str:
     """Canonicalize well-known collection/typing generic aliases.
 
     Args:
-        name: Identifier of the name being resolved.
+        name (str): Identifier of the name being resolved.
 
     Returns:
-        str produced by this operation.
+        str: str produced by this operation.
 
     """
-    normalized: str = Constants.ALIASES.get(name, name)
+    normalized: str = Constants.aliases.get(name, name)
     return normalized.removeprefix("collections.abc.")
 
 
@@ -369,13 +406,15 @@ def _generic_arguments(
     """Convert builtin collection parameters to ABC views where meaningful.
 
     Args:
-        source: The source examined while convert builtin collection parameters
-            to ABC views where meaningful.
-        target: The target examined while convert builtin collection parameters
-            to ABC views where meaningful.
+        source (TypeShape): The source examined while convert builtin
+            collection
+            parameters to ABC views where meaningful.
+        target (str): The target examined while convert builtin collection
+            parameters to ABC views where meaningful.
 
     Returns:
-        tuple[TypeShape, ...] produced by this operation.
+        tuple[TypeShape, ...]: tuple[TypeShape, ...] produced by this
+            operation.
 
     """
     if source.name in (
@@ -411,11 +450,12 @@ def _literal_value(*, source: str) -> tuple[str, str] | None:
     """Inspect only syntax literals; never evaluate analyzed expressions.
 
     Args:
-        source: The source examined while inspect only syntax literals; never
-            evaluate analyzed expressions.
+        source (str): The source examined while inspect only syntax
+            literals; never evaluate analyzed expressions.
 
     Returns:
-        tuple[str, str] | None produced by this operation.
+        tuple[str, str] | None:
+            tuple[str, str] | None produced by this operation.
 
     """
     try:
@@ -440,11 +480,12 @@ def _literal_set_inclusion(
     """Check that every actual literal is among the expected literals.
 
     Args:
-        actual: Actual supplied as TypeShape for this operation.
-        expected: Expected supplied as TypeShape for this operation.
+        actual (TypeShape): Actual supplied as TypeShape for this operation.
+        expected (TypeShape): Expected supplied as TypeShape for this
+            operation.
 
     Returns:
-        Compatibility produced by this operation.
+        Compatibility: Compatibility produced by this operation.
 
     """
     wanted: set[tuple[str, str]] = set()
@@ -480,12 +521,13 @@ def _enum_member_comparison(
     """Compare an enum-member literal with a nominal expected type.
 
     Args:
-        index: Index identifying a position in the relevant sequence or source.
-        member: Member supplied as TypeShape for this operation.
-        right: Right supplied as str for this operation.
+        index (ContractIndex | None): Index identifying a position in the
+            relevant sequence or source.
+        member (TypeShape): Member supplied as TypeShape for this operation.
+        right (str): Right supplied as str for this operation.
 
     Returns:
-        bool | None produced by this operation.
+        bool | None: bool | None produced by this operation.
 
     """
     owner, _, _ = member.name.partition(".")
@@ -507,12 +549,14 @@ def _literal_to_nominal(
     """Check literals against a non-literal expected type.
 
     Args:
-        actual: Actual supplied as TypeShape for this operation.
-        expected: Expected supplied as TypeShape for this operation.
-        index: Index identifying a position in the relevant sequence or source.
+        actual (TypeShape): Actual supplied as TypeShape for this operation.
+        expected (TypeShape): Expected supplied as TypeShape for this
+            operation.
+        index (ContractIndex | None): Index identifying a position in the
+            relevant sequence or source.
 
     Returns:
-        Compatibility produced by this operation.
+        Compatibility: Compatibility produced by this operation.
 
     """
     right: str = normalize(name=expected.name)
@@ -553,11 +597,11 @@ def _nominal_literal_relation(*, left: str, right: str) -> Compatibility:
     """Relate non-literal actual types to literal-flavored expected types.
 
     Args:
-        left: Left supplied as str for this operation.
-        right: Right supplied as str for this operation.
+        left (str): Left supplied as str for this operation.
+        right (str): Right supplied as str for this operation.
 
     Returns:
-        Compatibility produced by this operation.
+        Compatibility: Compatibility produced by this operation.
 
     """
     unknown: bool = left in ("Unknown", "Any", "typing.Any", "WidenedUnknown")
@@ -598,12 +642,14 @@ def _literal_relation(
     """Compare PEP 586 literals by value and type, not truthiness.
 
     Args:
-        actual: Actual supplied as TypeShape for this operation.
-        expected: Expected supplied as TypeShape for this operation.
-        index: Index identifying a position in the relevant sequence or source.
+        actual (TypeShape): Actual supplied as TypeShape for this operation.
+        expected (TypeShape): Expected supplied as TypeShape for this
+            operation.
+        index (ContractIndex | None): Index identifying a position in the
+            relevant sequence or source.
 
     Returns:
-        Compatibility produced by this operation.
+        Compatibility: Compatibility produced by this operation.
 
     """
     left: str = normalize(name=actual.name)
@@ -620,49 +666,22 @@ def _literal_relation(
     return _literal_to_nominal(actual=actual, expected=expected, index=index)
 
 
-_QUALIFIERS: Final[frozenset[str]] = frozenset(
-    (
-        "Annotated",
-        "Final",
-        "ClassVar",
-        "Required",
-        "NotRequired",
-        "ReadOnly",
-    ),
-)
-_BUILTIN_NOMINALS: Final[frozenset[str]] = frozenset(
-    (
-        "str",
-        "bytes",
-        "int",
-        "float",
-        "complex",
-        "bool",
-        "list",
-        "tuple",
-        "dict",
-        "set",
-        "frozenset",
-        "None",
-        "range",
-    ),
-)
-
-
 @final
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _SubtypeQuery:
     """One subtype question together with its normalized names and history.
 
     Attributes:
-        actual: Actual retained as TypeShape by this instance.
-        expected: Expected retained as TypeShape by this instance.
-        index: Index retained as ContractIndex | None by this instance.
-        left: Left retained as str by this instance.
-        outer_seen: Outer seen retained as frozenset[tuple[str, str]] by this
-            instance.
-        right: Right retained as str by this instance.
-        seen: Seen retained as frozenset[tuple[str, str]] by this instance.
+        actual (TypeShape): Actual retained as TypeShape by this instance.
+        expected (TypeShape): Expected retained as TypeShape by this instance.
+        index (ContractIndex | None): Index retained as ContractIndex | None by
+            this instance.
+        left (str): Left retained as str by this instance.
+        outer_seen (frozenset[tuple[str, str]]): Outer seen retained as
+            frozenset[tuple[str, str]] by this instance.
+        right (str): Right retained as str by this instance.
+        seen (frozenset[tuple[str, str]]): Seen retained as
+            frozenset[tuple[str, str]] by this instance.
 
     """
 
@@ -678,11 +697,13 @@ class _SubtypeQuery:
         """Answer a nested question using this query's cycle history.
 
         Args:
-            actual: Actual supplied as TypeShape for this operation.
-            expected: Expected supplied as TypeShape for this operation.
+            actual (TypeShape): Actual supplied as TypeShape for this
+                operation.
+            expected (TypeShape): Expected supplied as TypeShape for this
+                operation.
 
         Returns:
-            Compatibility produced by this operation.
+            Compatibility: Compatibility produced by this operation.
 
         """
         return subtype(
@@ -697,10 +718,11 @@ def _all_or_unknown(*, items: tuple[Compatibility, ...]) -> bool | None:
     """Join covariant results: any False fails, any None is unresolved.
 
     Args:
-        items: Collection of items supplied for this operation.
+        items (tuple[Compatibility, ...]): Collection of items supplied for
+            this operation.
 
     Returns:
-        bool | None produced by this operation.
+        bool | None: bool | None produced by this operation.
 
     """
     if any(item.compatible is False for item in items):
@@ -714,13 +736,14 @@ def _rule_actual_qualifier(query: _SubtypeQuery) -> Compatibility | None:
     """Look through type qualifiers wrapped around the actual type.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
-    if query.left in _QUALIFIERS and query.actual.arguments:
+    if query.left in Constants.qualifiers and query.actual.arguments:
         return subtype(
             actual=query.actual.arguments[0],
             expected=query.expected,
@@ -734,13 +757,14 @@ def _rule_expected_qualifier(query: _SubtypeQuery) -> Compatibility | None:
     """Look through type qualifiers wrapped around the expected type.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
-    if query.right in _QUALIFIERS and query.expected.arguments:
+    if query.right in Constants.qualifiers and query.expected.arguments:
         return subtype(
             actual=query.actual,
             expected=query.expected.arguments[0],
@@ -754,10 +778,11 @@ def _rule_actual_union(query: _SubtypeQuery) -> Compatibility | None:
     """Every alternative of an actual union must be compatible.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     if query.left != "union":
@@ -776,10 +801,11 @@ def _rule_expected_union(query: _SubtypeQuery) -> Compatibility | None:
     """Require some alternative of an expected union to be compatible.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     if query.right != "union":
@@ -801,10 +827,11 @@ def _rule_literal(query: _SubtypeQuery) -> Compatibility | None:
     """Delegate literal questions to the literal relation.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     if query.left in ("Literal", "LiteralString") or query.right in (
@@ -823,10 +850,11 @@ def _rule_callable(query: _SubtypeQuery) -> Compatibility | None:
     """Callables: contravariant parameters and covariant results.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     actual, expected = query.actual, query.expected
@@ -835,7 +863,7 @@ def _rule_callable(query: _SubtypeQuery) -> Compatibility | None:
         and query.right == "Callable"
         and len(actual.arguments)
         == len(expected.arguments)
-        == Constants.PAIR_SIZE
+        == Constants.pair_size
     ):
         return None
     given, wanted = actual.arguments[0], expected.arguments[0]
@@ -869,10 +897,11 @@ def _rule_trivial(query: _SubtypeQuery) -> Compatibility | None:
     """Identity, dynamic typing, unresolved types, ``object`` and ``Never``.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     left, right = query.left, query.right
@@ -900,10 +929,11 @@ def _rule_numeric_tower(query: _SubtypeQuery) -> Compatibility | None:
     """Apply PEP 484 numeric promotion.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     left, right = query.left, query.right
@@ -920,18 +950,19 @@ def _rule_distinct_builtins(query: _SubtypeQuery) -> Compatibility | None:
     """Different builtin nominal types without an ABC relation never match.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     left, right = query.left, query.right
     if (
-        left in _BUILTIN_NOMINALS
-        and right in _BUILTIN_NOMINALS
+        left in Constants.builtin_nominals
+        and right in Constants.builtin_nominals
         and left != right
-        and right not in Constants.ABC_BASES.get(left, frozenset())
+        and right not in Constants.abc_bases.get(left, frozenset())
     ):
         return Compatibility(
             compatible=False,
@@ -944,10 +975,11 @@ def _rule_protocol(query: _SubtypeQuery) -> Compatibility | None:
     """Check expected protocols structurally.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     index: ContractIndex | None = query.index
@@ -968,15 +1000,16 @@ def _rule_generic_nominal(query: _SubtypeQuery) -> Compatibility | None:
     """Compare type arguments of a shared nominal or ABC base.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     left, right = query.left, query.right
     if not (
-        left == right or right in Constants.ABC_BASES.get(left, frozenset())
+        left == right or right in Constants.abc_bases.get(left, frozenset())
     ):
         return None
     largs: tuple[TypeShape, ...] = _generic_arguments(
@@ -994,14 +1027,14 @@ def _rule_generic_nominal(query: _SubtypeQuery) -> Compatibility | None:
             compatible=None,
             evidence=("generic arity unresolved",),
         )
-    if right in Constants.INVARIANT:
+    if right in Constants.invariant:
         return Compatibility(
             compatible=all(a == b for a, b in zip(largs, rargs, strict=True)),
             evidence=("invariant generic arguments",),
         )
     if (
         right == "Mapping"
-        and len(largs) == len(rargs) == Constants.PAIR_SIZE
+        and len(largs) == len(rargs) == Constants.pair_size
         and largs[0] != rargs[0]
     ):
         return Compatibility(
@@ -1028,10 +1061,11 @@ def _rule_declared_inheritance(query: _SubtypeQuery) -> Compatibility | None:
     """Walk declared bases of locally defined classes.
 
     Args:
-        query: Query supplied as _SubtypeQuery for this operation.
+        query (_SubtypeQuery): Query supplied as _SubtypeQuery for this
+            operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     index: ContractIndex | None = query.index
@@ -1089,15 +1123,17 @@ def subtype(
     Unbound generics and unknown types are *indeterminate*, not automatically
     compatible. Invariant mutable containers do not admit numeric promotion.
 
-
     Args:
-        _seen: Seen supplied as frozenset[tuple[str, str]] for this operation.
-        actual: Actual supplied as TypeShape for this operation.
-        expected: Expected supplied as TypeShape for this operation.
-        index: Index identifying a position in the relevant sequence or source.
+        _seen (frozenset[tuple[str, str]]): Seen supplied as
+            frozenset[tuple[str, str]] for this operation.
+        actual (TypeShape): Actual supplied as TypeShape for this operation.
+        expected (TypeShape): Expected supplied as TypeShape for this
+            operation.
+        index (ContractIndex | None): Index identifying a position in the
+            relevant sequence or source.
 
     Returns:
-        Compatibility produced by this operation.
+        Compatibility: Compatibility produced by this operation.
 
     """
     key: tuple[str, str] = (str(object=actual), str(object=expected))
@@ -1133,12 +1169,15 @@ def _protocol_requirements(
     """Collect fields and methods required by a protocol and its bases.
 
     Args:
-        index: Index identifying a position in the relevant sequence or source.
-        protocol: Protocol supplied as ClassContract for this operation.
+        index (ContractIndex): Index identifying a position in the relevant
+            sequence or source.
+        protocol (ClassContract): Protocol supplied as ClassContract for this
+            operation.
 
     Returns:
-        tuple[dict[str, TypeShape], dict[str, CallableContract]] produced by
-        this operation.
+        tuple[dict[str, TypeShape], dict[str, CallableContract]]:
+            tuple[dict[str, TypeShape], dict[str,
+            CallableContract]] produced by this operation.
 
     """
     required_fields: dict[str, TypeShape] = {}
@@ -1176,12 +1215,13 @@ def _property_implementation(
     """Find the implemented type of a field, including property getters.
 
     Args:
-        index: Index identifying a position in the relevant sequence or source.
-        name: Identifier of the name being resolved.
-        owner: Owner supplied as str for this operation.
+        index (ContractIndex): Index identifying a position in the relevant
+            sequence or source.
+        name (str): Identifier of the name being resolved.
+        owner (str): Owner supplied as str for this operation.
 
     Returns:
-        TypeShape | None produced by this operation.
+        TypeShape | None: TypeShape | None produced by this operation.
 
     """
     hint: TypeExpression | None = index.class_member(owner=owner, name=name)
@@ -1215,13 +1255,15 @@ def _field_mismatch(
     """Return the first unsatisfied protocol field, if any.
 
     Args:
-        index: Index identifying a position in the relevant sequence or source.
-        owner: Owner supplied as str for this operation.
-        required_fields: Required fields supplied as dict[str, TypeShape] for
-            this operation.
+        index (ContractIndex): Index identifying a position in the relevant
+            sequence or source.
+        owner (str): Owner supplied as str for this operation.
+        required_fields (dict[str, TypeShape]): Required fields supplied as
+            dict[str,
+            TypeShape] for this operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     for name, requirement in required_fields.items():
@@ -1257,13 +1299,15 @@ def _method_mismatch(
     """Return the first unsatisfied protocol method, if any.
 
     Args:
-        index: Index identifying a position in the relevant sequence or source.
-        owner: Owner supplied as str for this operation.
-        required_methods: Required methods supplied as dict[str,
+        index (ContractIndex): Index identifying a position in the relevant
+            sequence or source.
+        owner (str): Owner supplied as str for this operation.
+        required_methods (dict[str, CallableContract]): Required methods
+            supplied as dict[str,
             CallableContract] for this operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     for name, required in required_methods.items():
@@ -1303,14 +1347,15 @@ def protocol_compatible(
     members. Read-only properties can satisfy attribute requirements, but
     methods retain their full callable compatibility constraints.
 
-
     Args:
-        actual: Actual supplied as TypeShape for this operation.
-        index: Index identifying a position in the relevant sequence or source.
-        protocol: Protocol supplied as ClassContract for this operation.
+        actual (TypeShape): Actual supplied as TypeShape for this operation.
+        index (ContractIndex): Index identifying a position in the relevant
+            sequence or source.
+        protocol (ClassContract): Protocol supplied as ClassContract for this
+            operation.
 
     Returns:
-        Compatibility produced by this operation.
+        Compatibility: Compatibility produced by this operation.
 
     """
     cls: ClassContract | None = index.classes.get(normalize(name=actual.name))
@@ -1348,12 +1393,15 @@ def _parameter_mismatch(
     """Explain why an overriding parameter is incompatible, if it is.
 
     Args:
-        current: Current supplied as ParameterContract for this operation.
-        index: Index identifying a position in the relevant sequence or source.
-        previous: Previous supplied as ParameterContract for this operation.
+        current (ParameterContract): Current supplied as ParameterContract for
+            this operation.
+        index (ContractIndex): Index identifying a position in the relevant
+            sequence or source.
+        previous (ParameterContract): Previous supplied as ParameterContract
+            for this operation.
 
     Returns:
-        Compatibility | None produced by this operation.
+        Compatibility | None: Compatibility | None produced by this operation.
 
     """
     if current.kind != previous.kind:
@@ -1404,13 +1452,15 @@ def method_compatible(
     """Check method parameter contravariance and return covariance.
 
     Args:
-        implementation: Implementation supplied as CallableContract for this
-            operation.
-        index: Index identifying a position in the relevant sequence or source.
-        inherited: Inherited supplied as CallableContract for this operation.
+        implementation (CallableContract): Implementation supplied as
+            CallableContract for this operation.
+        index (ContractIndex): Index identifying a position in the relevant
+            sequence or source.
+        inherited (CallableContract): Inherited supplied as CallableContract
+            for this operation.
 
     Returns:
-        Compatibility produced by this operation.
+        Compatibility: Compatibility produced by this operation.
 
     """
     if implementation.method_kind != inherited.method_kind and (
@@ -1466,11 +1516,13 @@ def specialize(
     """Substitute bound generic type parameters recursively.
 
     Args:
-        bindings: Bindings supplied as dict[str, TypeShape] for this operation.
-        declared: Declared supplied as TypeShape for this operation.
+        bindings (dict[str, TypeShape]): Bindings supplied as dict[str,
+            TypeShape] for this operation.
+        declared (TypeShape): Declared supplied as TypeShape for this
+            operation.
 
     Returns:
-        TypeShape produced by this operation.
+        TypeShape: TypeShape produced by this operation.
 
     """
     return (
@@ -1496,13 +1548,16 @@ def unify(
     """Unify structural generic variables; unknowns are never exact.
 
     Args:
-        actual: Actual supplied as TypeShape for this operation.
-        bindings: Bindings supplied as dict[str, TypeShape] for this operation.
-        declared: Declared supplied as TypeShape for this operation.
-        parameters: Collection of parameters supplied for this operation.
+        actual (TypeShape): Actual supplied as TypeShape for this operation.
+        bindings (dict[str, TypeShape]): Bindings supplied as dict[str,
+            TypeShape] for this operation.
+        declared (TypeShape): Declared supplied as TypeShape for this
+            operation.
+        parameters (frozenset[str]): Collection of parameters supplied for this
+            operation.
 
     Returns:
-        Whether the requested condition holds.
+        bool: Whether the requested condition holds.
 
     """
     if declared.name in parameters:

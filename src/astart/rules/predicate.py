@@ -40,7 +40,7 @@ class AllOf:
     """Hold when every item holds.
 
     Attributes:
-        items: Child predicates.
+        items (tuple[Predicate, ...]): Child predicates.
 
     """
 
@@ -53,7 +53,7 @@ class AnyOf:
     """Hold when at least one item holds.
 
     Attributes:
-        items: Child predicates.
+        items (tuple[Predicate, ...]): Child predicates.
 
     """
 
@@ -66,7 +66,7 @@ class Not:
     """Hold when the item does not.
 
     Attributes:
-        item: Negated predicate.
+        item (Predicate): Negated predicate.
 
     """
 
@@ -79,9 +79,9 @@ class Compare:
     """Compare one fact with a constant.
 
     Attributes:
-        fact: Fact name.
-        op: Comparison operator.
-        value: Constant to compare with.
+        fact (str): Fact name.
+        op (CompareOp): Comparison operator.
+        value (FactValue): Constant to compare with.
 
     """
 
@@ -96,8 +96,8 @@ class Exists:
     """Hold when some node of a kind satisfies a predicate.
 
     Attributes:
-        selector: Node kind to quantify over.
-        where: Predicate each candidate must satisfy.
+        selector (str): Node kind to quantify over.
+        where (Predicate): Predicate each candidate must satisfy.
 
     """
 
@@ -112,10 +112,10 @@ def predicate_to_json(*, predicate: Predicate) -> JsonValue:
     """Convert a predicate to its JSON form.
 
     Args:
-        predicate: Predicate to convert.
+        predicate (Predicate): Predicate to convert.
 
     Returns:
-        JSON-compatible value.
+        JsonValue: JSON-compatible value.
 
     """
     match predicate:
@@ -150,10 +150,10 @@ def predicate_from_json(*, value: JsonValue) -> Predicate:
     """Restore a predicate from its JSON form.
 
     Args:
-        value: JSON-compatible value.
+        value (JsonValue): JSON-compatible value.
 
     Returns:
-        The predicate.
+        Predicate: The predicate.
 
     Raises:
         ValueError: If the value is not a predicate object, or its operator
@@ -172,10 +172,10 @@ def _node_from_json(*, value: dict[str, JsonValue]) -> Predicate:
     """Restore a predicate from a JSON object.
 
     Args:
-        value: Predicate object.
+        value (dict[str, JsonValue]): Predicate object.
 
     Returns:
-        The predicate.
+        Predicate: The predicate.
 
     Raises:
         ValueError: If the operator or a required key is invalid.
@@ -218,10 +218,10 @@ def _children(*, value: dict[str, JsonValue]) -> list[JsonValue]:
     """Return the child list of an ``all`` or ``any`` object.
 
     Args:
-        value: Predicate object.
+        value (dict[str, JsonValue]): Predicate object.
 
     Returns:
-        The children.
+        list[JsonValue]: The children.
 
     Raises:
         ValueError: If ``of`` is not a list.
@@ -239,11 +239,11 @@ def _required(value: dict[str, JsonValue], key: str) -> JsonValue:
     """Return a mandatory key of a predicate object.
 
     Args:
-        value: Predicate object.
-        key: Required key.
+        value (dict[str, JsonValue]): Predicate object.
+        key (str): Required key.
 
     Returns:
-        The stored value.
+        JsonValue: The stored value.
 
     Raises:
         ValueError: If the key is absent.
@@ -259,10 +259,10 @@ def _compare_from_json(*, value: dict[str, JsonValue]) -> Compare:
     """Restore a comparison node.
 
     Args:
-        value: Predicate object whose op is ``compare``.
+        value (dict[str, JsonValue]): Predicate object whose op is ``compare``.
 
     Returns:
-        The comparison.
+        Compare: The comparison.
 
     Raises:
         ValueError: If the fact, operator or constant is malformed.
@@ -291,10 +291,10 @@ def predicate_facts(*, predicate: Predicate) -> frozenset[str]:
     """Collect every fact name a predicate reads.
 
     Args:
-        predicate: Predicate to inspect.
+        predicate (Predicate): Predicate to inspect.
 
     Returns:
-        The fact names.
+        frozenset[str]: The fact names.
 
     """
     match predicate:
@@ -315,11 +315,11 @@ def evaluate(*, predicate: Predicate, facts: Mapping[str, FactValue]) -> bool:
     """Evaluate a predicate against computed facts.
 
     Args:
-        predicate: Predicate to evaluate.
-        facts: Fact values by name.
+        predicate (Predicate): Predicate to evaluate.
+        facts (Mapping[str, FactValue]): Fact values by name.
 
     Returns:
-        Whether the predicate holds.
+        bool: Whether the predicate holds.
 
     Raises:
         KeyError: If a fact the predicate reads is missing.
@@ -347,12 +347,12 @@ def _compare(*, left: FactValue, op: CompareOp, right: FactValue) -> bool:
     """Apply a comparison operator.
 
     Args:
-        left: Computed fact value.
-        op: Operator.
-        right: Constant from the predicate.
+        left (FactValue): Computed fact value.
+        op (CompareOp): Operator.
+        right (FactValue): Constant from the predicate.
 
     Returns:
-        The comparison result.
+        bool: The comparison result.
 
     """
     if op is CompareOp.eq:
@@ -373,11 +373,11 @@ def _order(*, left: FactValue, right: FactValue) -> int:
     """Three-way compare two numbers or two strings.
 
     Args:
-        left: Computed fact value.
-        right: Constant from the predicate.
+        left (FactValue): Computed fact value.
+        right (FactValue): Constant from the predicate.
 
     Returns:
-        Negative, zero or positive.
+        int: Negative, zero or positive.
 
     Raises:
         TypeError: If the operands are not both numbers or both strings.

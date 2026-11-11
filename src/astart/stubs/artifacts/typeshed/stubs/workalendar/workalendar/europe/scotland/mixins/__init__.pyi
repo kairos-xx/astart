@@ -1,0 +1,104 @@
+import datetime
+
+from .autumn_holiday import (
+    AutumnHolidayFirstMondayOctober as AutumnHolidayFirstMondayOctober,
+)
+from .autumn_holiday import (
+    AutumnHolidayLastMondaySeptember as AutumnHolidayLastMondaySeptember,
+)
+from .autumn_holiday import (
+    AutumnHolidaySecondMondayOctober as AutumnHolidaySecondMondayOctober,
+)
+from .autumn_holiday import (
+    AutumnHolidayThirdMondayOctober as AutumnHolidayThirdMondayOctober,
+)
+from .fair_holiday import (
+    FairHolidayFirstMondayAugust as FairHolidayFirstMondayAugust,
+)
+from .fair_holiday import (
+    FairHolidayFirstMondayJuly as FairHolidayFirstMondayJuly,
+)
+from .fair_holiday import (
+    FairHolidayFourthFridayJuly as FairHolidayFourthFridayJuly,
+)
+from .fair_holiday import (
+    FairHolidayLastMondayJuly as FairHolidayLastMondayJuly,
+)
+from .fair_holiday import (
+    FairHolidayLastMondayJune as FairHolidayLastMondayJune,
+)
+from .fair_holiday import (
+    FairHolidaySecondMondayJuly as FairHolidaySecondMondayJuly,
+)
+from .fair_holiday import (
+    FairHolidayThirdMondayJuly as FairHolidayThirdMondayJuly,
+)
+from .spring_holiday import (
+    SpringHolidayFirstMondayApril as SpringHolidayFirstMondayApril,
+)
+from .spring_holiday import (
+    SpringHolidayFirstMondayJune as SpringHolidayFirstMondayJune,
+)
+from .spring_holiday import (
+    SpringHolidayLastMondayMay as SpringHolidayLastMondayMay,
+)
+from .spring_holiday import (
+    SpringHolidaySecondMondayApril as SpringHolidaySecondMondayApril,
+)
+from .spring_holiday import (
+    SpringHolidayTuesdayAfterFirstMondayMay as SpringHolidayTuesdayAfterFirstMondayMay,
+)
+from .victoria_day import (
+    VictoriaDayFirstMondayJune as VictoriaDayFirstMondayJune,
+)
+from .victoria_day import (
+    VictoriaDayFourthMondayMay as VictoriaDayFourthMondayMay,
+)
+from .victoria_day import (
+    VictoriaDayLastMondayMay as VictoriaDayLastMondayMay,
+)
+
+class LateSummer:
+    def get_variable_days(
+        self,
+        year: int,
+    ) -> list[tuple[datetime.date, str]]: ...
+
+class BattleStirlingBridge:
+    def get_variable_days(
+        self,
+        year: int,
+    ) -> list[tuple[datetime.date, str]]: ...
+
+class AyrGoldCup:
+    def get_variable_days(
+        self,
+        year: int,
+    ) -> list[tuple[datetime.date, str]]: ...
+
+# Names in __all__ with no definition:
+#   VictoriaDayTuesdayAfterFirstMondayMay
+
+__all__ = [
+    "AutumnHolidayFirstMondayOctober",
+    "AutumnHolidayLastMondaySeptember",
+    "AutumnHolidaySecondMondayOctober",
+    "AutumnHolidayThirdMondayOctober",
+    "AyrGoldCup",
+    "FairHolidayFirstMondayAugust",
+    "FairHolidayFirstMondayJuly",
+    "FairHolidayFourthFridayJuly",
+    "FairHolidayLastMondayJuly",
+    "FairHolidayLastMondayJune",
+    "FairHolidaySecondMondayJuly",
+    "FairHolidayThirdMondayJuly",
+    "SpringHolidayFirstMondayApril",
+    "SpringHolidayFirstMondayJune",
+    "SpringHolidayLastMondayMay",
+    "SpringHolidaySecondMondayApril",
+    "SpringHolidayTuesdayAfterFirstMondayMay",
+    "VictoriaDayFirstMondayJune",
+    "VictoriaDayFourthMondayMay",
+    "VictoriaDayLastMondayMay",
+    "VictoriaDayTuesdayAfterFirstMondayMay",  # noqa: F822 # pyright: ignore[reportUnsupportedDunderAll] see https://github.com/workalendar/workalendar/pull/778
+]

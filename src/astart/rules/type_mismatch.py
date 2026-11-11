@@ -7,7 +7,8 @@ type is provably incompatible with the parameter annotation.
 
 Both refuse whenever inference is indeterminate — only a definitive
 ``compatible is False`` verdict from :func:`subtype` produces a
-candidate.  Standalone detectors; catalog wiring is deferred (M8-22).
+candidate. Standalone detectors; catalog wiring is deferred (M8-22).
+
 """
 
 from __future__ import annotations
@@ -37,9 +38,9 @@ from astart.semantic.typing_relations import subtype
 if TYPE_CHECKING:
     from types import EllipsisType
 
-    from astart.ast import CommentedModule
     from astart.semantic.type_expressions import TypeExpression
     from astart.semantic.typing_relations import Compatibility
+    from astart.source.ast import CommentedModule
 
 
 @final
@@ -47,7 +48,9 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        scope_nodes: Definition nodes that open a scope for name binding.
+        scope_nodes: Final[
+                tuple[type[FunctionDef], type[AsyncFunctionDef], type[Lambda]]
+            ]: Definition nodes that open a scope for name binding.
 
     """
 
@@ -68,10 +71,10 @@ def _declared_shape(*, annotation: expr | None) -> TypeShape | None:
     """Convert an annotation expression to a :class:`TypeShape`.
 
     Args:
-        annotation: Annotation AST, or ``None``.
+        annotation (expr | None): Annotation AST, or ``None``.
 
     Returns:
-        The shape, or ``None`` when absent or unconvertible.
+        TypeShape | None: The shape, or ``None`` when absent or unconvertible.
 
     """
     if annotation is None:
@@ -93,11 +96,12 @@ def _definitely_incompatible(
     """Return the subtype verdict only when it is definitively False.
 
     Args:
-        actual: Inferred type of the value.
-        expected: Declared/annotated type.
+        actual (TypeShape): Inferred type of the value.
+        expected (TypeShape): Declared/annotated type.
 
     Returns:
-        The verdict when ``compatible is False``, else ``None``.
+        Compatibility | None:
+            The verdict when ``compatible is False``, else ``None``.
 
     """
     if str(object=actual) == "Unknown":
@@ -115,11 +119,11 @@ def _value_shape(*, module: CommentedModule, value: expr) -> TypeShape:
     directly; everything else goes through :meth:`infer_type`.
 
     Args:
-        module: Parsed module.
-        value: Expression to type.
+        module (CommentedModule): Parsed module.
+        value (expr): Expression to type.
 
     Returns:
-        Inferred shape.
+        TypeShape: Inferred shape.
 
     """
     if isinstance(value, Constant):
@@ -139,10 +143,10 @@ def _own_returns(*, node: FunctionDef | AsyncFunctionDef) -> list[Return]:
     their returns belong to their own signatures.
 
     Args:
-        node: Function to inspect.
+        node (FunctionDef | AsyncFunctionDef): Function to inspect.
 
     Returns:
-        ``return`` statement nodes in source order.
+        list[Return]: ``return`` statement nodes in source order.
 
     """
     found: list[Return] = []
@@ -166,10 +170,10 @@ def _all_functions(
     """Every function definition in the module, any nesting depth.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Function nodes in source order.
+        list[FunctionDef | AsyncFunctionDef]: Function nodes in source order.
 
     """
     found: list[FunctionDef | AsyncFunctionDef] = []
@@ -191,11 +195,12 @@ def find_return_mismatches(
     """Flag returns provably incompatible with the declared return type.
 
     Args:
-        filename: Source name for spans.
-        module: Parsed module.
+        filename (str): Source name for spans.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Candidates for each mismatched ``return`` statement.
+        tuple[Candidate, ...]: Candidates for each mismatched ``return``
+            statement.
 
     """
     candidates: list[Candidate] = []
@@ -235,11 +240,11 @@ def find_incompatible_defaults(
     """Flag parameter defaults provably incompatible with annotations.
 
     Args:
-        filename: Source name for spans.
-        module: Parsed module.
+        filename (str): Source name for spans.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Candidates for each mismatched default.
+        tuple[Candidate, ...]: Candidates for each mismatched default.
 
     """
     candidates: list[Candidate] = []

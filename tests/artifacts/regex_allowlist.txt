@@ -1,0 +1,5 @@
+src/astart/docstrings/core.py
+src/astart/source/formatting.py
+src/astart/docstrings/edit.py
+src/astart/docstrings/shared.py
+src/astart/docstrings/prose.py

@@ -1,6 +1,6 @@
 """Dependency-free semantic graph and abstract evaluation for ASTs."""
 
-from astart._graph.conversion.synthesis import (
+from astart.graph.conversion.synthesis import (
     Args,
     ArgumentSpec,
     MethodSpec,

@@ -1,0 +1,3 @@
+from braintree.merchant_account.merchant_account import (
+    MerchantAccount as MerchantAccount,
+)

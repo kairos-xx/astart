@@ -1,0 +1,32 @@
+from collections.abc import Callable
+from typing import IO
+
+from _typeshed.wsgi import WSGIEnvironment
+
+__all__ = [
+    "FileWrapper",
+    "application_uri",
+    "guess_scheme",
+    "request_uri",
+    "setup_testing_defaults",
+    "shift_path_info",
+]
+__all__ += ["is_hop_by_hop"]
+
+class FileWrapper:
+    filelike: IO[bytes]
+    blksize: int
+    close: Callable[[], None]
+    def __init__(self, filelike: IO[bytes], blksize: int = 8192) -> None: ...
+    def __iter__(self) -> FileWrapper: ...
+    def __next__(self) -> bytes: ...
+
+def guess_scheme(environ: WSGIEnvironment) -> str: ...
+def application_uri(environ: WSGIEnvironment) -> str: ...
+def request_uri(
+    environ: WSGIEnvironment,
+    include_query: bool = True,
+) -> str: ...
+def shift_path_info(environ: WSGIEnvironment) -> str | None: ...
+def setup_testing_defaults(environ: WSGIEnvironment) -> None: ...
+def is_hop_by_hop(header_name: str) -> bool: ...

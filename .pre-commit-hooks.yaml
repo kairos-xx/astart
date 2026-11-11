@@ -3,3 +3,8 @@
   entry: astart fix --check
   language: python
   types: [python]
+- id: astart-check
+  name: astart check
+  entry: astart check
+  language: python
+  types: [python]

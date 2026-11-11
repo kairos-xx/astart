@@ -11,12 +11,13 @@ executing anything:
 
 Lookups are lazy: a module file is parsed at most once, and misses are
 cached as empty results.
+
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, Protocol, final
 
 from astart.semantic.stubs import StubIndex, StubSignature, stub_signatures
 
@@ -27,19 +28,37 @@ if TYPE_CHECKING:
     from astart.semantic.typing_contracts import CallableContract
 
 
+class _ClientLookup(Protocol):
+    """An optional external stub backend such as ``typeshed_client``."""
+
+    def lookup(self, *, qualified_name: str) -> tuple[StubSignature, ...]:
+        """Resolve a dotted name to matching stub signatures.
+
+        Args:
+            qualified_name (str): Dotted name such as ``"os.getcwd"``.
+
+        Returns:
+            Matching signatures, empty when undeclared.
+
+        """
+        ...
+
+
 @final
 class Constants:
     """Group module-level constants.
 
     Attributes:
-        stub_suffix: Package-directory suffix naming a stub-only package.
-        marker: File marking a package as inline-typed.
-        stubs_dir: Typeshed subdirectory holding third-party stubs.
-        init_file: Package-initializer stub filename.
-        init_source: Package-initializer source filename.
-        pyi: Stub extension.
-        py: Source extension.
-        max_stub_bytes: Cap on parsed stub size.
+        stub_suffix (Final[str]): Package-directory suffix naming a stub-only
+            package.
+        marker (Final[str]): File marking a package as inline-typed.
+        stubs_dir (Final[str]): Typeshed subdirectory holding third-party
+            stubs.
+        init_file (Final[str]): Package-initializer stub filename.
+        init_source (Final[str]): Package-initializer source filename.
+        pyi (Final[str]): Stub extension.
+        py (Final[str]): Source extension.
+        max_stub_bytes (Final[int]): Cap on parsed stub size.
 
     """
 
@@ -59,12 +78,14 @@ class PackageRoot:
     """Where one import package's signatures live.
 
     Attributes:
-        package: Top-level import name the root provides.
-        directory: The package directory itself (contains ``__init__`` and
-            submodules), or ``None`` for single-module stubs.
-        module_file: A lone ``foo.pyi`` module file, or ``None``.
-        allow_source: Whether annotated ``.py`` files may be read when no
-            ``.pyi`` exists — true for inline ``py.typed`` packages only.
+        package (str): Top-level import name the root provides.
+        directory (Path | None): The package directory itself (contains
+            ``__init__``
+            and submodules), or ``None`` for single-module stubs.
+        module_file (Path | None): A lone ``foo.pyi`` module file, or ``None``.
+        allow_source (bool): Whether annotated ``.py`` files may be read when
+            no ``.pyi``
+            exists — true for inline ``py.typed`` packages only.
 
     """
 
@@ -78,11 +99,12 @@ def _package_roots(*, site: Path) -> list[PackageRoot]:
     """Find package signature roots inside one site directory.
 
     Args:
-        site: A ``site-packages``-like directory or a typeshed
+        site (Path): A ``site-packages``-like directory or a typeshed
             ``stubs/<dist>/`` directory.
 
     Returns:
-        Roots for stub-only and ``py.typed`` packages found there.
+        list[PackageRoot]: Roots for stub-only and ``py.typed`` packages found
+            there.
 
     """
     roots: list[PackageRoot] = []
@@ -125,10 +147,10 @@ def _typeshed_roots(*, stubs: Path) -> list[PackageRoot]:
     file inside it is a root.
 
     Args:
-        stubs: The typeshed ``stubs/`` directory.
+        stubs (Path): The typeshed ``stubs/`` directory.
 
     Returns:
-        One root per declared package or module stub.
+        list[PackageRoot]: One root per declared package or module stub.
 
     """
     roots: list[PackageRoot] = []
@@ -163,13 +185,15 @@ def find_library_roots(
     """Discover package signature roots.
 
     Args:
-        site_packages: ``site-packages``-like directories to inspect.
-        typeshed: A typeshed root; its ``stubs/<dist>/`` packages count as
-            package roots too (``stdlib/`` itself is handled by the
-            separate typeshed index).
+        site_packages (Iterable[Path]): ``site-packages`` -like directories to
+            inspect.
+        typeshed (Path | None): A typeshed root; its ``stubs/<dist>/`` packages
+            count as package roots too (``stdlib/`` itself
+            is handled by the separate typeshed index).
 
     Returns:
-        Roots, stub-only packages before inline ones for each name.
+        tuple[PackageRoot, ...]: Roots, stub-only packages before inline ones
+            for each name.
 
     """
     roots: list[PackageRoot] = []
@@ -200,17 +224,24 @@ class LibraryIndex:
         *,
         typeshed: Path | None = None,
         roots: Iterable[PackageRoot] = (),
+        client: _ClientLookup | None = None,
     ) -> None:
         """Build the index over a typeshed root and package roots.
 
         Args:
-            typeshed: Typeshed root (``stdlib/`` layout), or ``None``.
-            roots: Package roots, earliest winning on name collisions.
+            typeshed (Path | None): Typeshed root (``stdlib/`` layout), or
+                ``None``.
+            roots (Iterable[PackageRoot]): Package roots, earliest winning on
+                name collisions.
+            client (_ClientLookup | None): Optional external backend consulted
+                before
+                the hand-written readers, or ``None``.
 
         """
         self.typeshed: StubIndex | None = (
             StubIndex(root=typeshed) if typeshed is not None else None
         )
+        self._client: _ClientLookup | None = client
         self._roots: dict[str, list[PackageRoot]] = {}
         for root in roots:
             self._roots.setdefault(root.package, []).append(root)
@@ -220,17 +251,25 @@ class LibraryIndex:
     def lookup(self, *, qualified_name: str) -> tuple[StubSignature, ...]:
         """Resolve a dotted name against external signatures.
 
-        Typeshed answers first; then each package root claiming the
-        leading package name, earliest root first.
+        An optional client answers first; then typeshed; then each
+        package root claiming the leading package name, earliest root
+        first.
 
         Args:
-            qualified_name: Dotted name such as
+            qualified_name (str): Dotted name such as
                 ``"requests.sessions.Session.send"``.
 
         Returns:
-            Matching signatures, empty when nothing declares the name.
+            tuple[StubSignature, ...]: Matching signatures, empty when nothing
+                declares the name.
 
         """
+        if self._client is not None:
+            found_client: tuple[StubSignature, ...] = self._client.lookup(
+                qualified_name=qualified_name,
+            )
+            if found_client:
+                return found_client
         if self.typeshed is not None:
             found: tuple[StubSignature, ...] = self.typeshed.lookup(
                 qualified_name=qualified_name,
@@ -253,10 +292,10 @@ class LibraryIndex:
         """Return the binding contract of an external callable.
 
         Args:
-            qualified_name: Dotted name such as ``"requests.get"``.
+            qualified_name (str): Dotted name such as ``"requests.get"``.
 
         Returns:
-            The first declared contract, or ``None``.
+            CallableContract | None: The first declared contract, or ``None``.
 
         """
         for signature in self.lookup(qualified_name=qualified_name):
@@ -273,11 +312,11 @@ class LibraryIndex:
         """Try one package root for a dotted name.
 
         Args:
-            root: The package's signature root.
-            pieces: The dotted name split on dots.
+            root (PackageRoot): The package's signature root.
+            pieces (list[str]): The dotted name split on dots.
 
         Returns:
-            Matching signatures.
+            tuple[StubSignature, ...]: Matching signatures.
 
         """
         for length in range(len(pieces), 0, -1):
@@ -322,12 +361,12 @@ class LibraryIndex:
         both the package name and its own submodules' parents.
 
         Args:
-            root: The package's signature root.
-            relative: Module path below the package name — empty means the
-                package module itself.
+            root (PackageRoot): The package's signature root.
+            relative (list[str]): Module path below the package name —
+                empty means the package module itself.
 
         Returns:
-            The file, or ``None``.
+            Path | None: The file, or ``None``.
 
         """
         if root.module_file is not None:
@@ -368,11 +407,12 @@ class LibraryIndex:
         """Parse one signature file with a size cap.
 
         Args:
-            file: The ``.pyi``/``.py`` file.
-            module_name: Dotted name it provides.
+            file (Path): The ``.pyi``/``.py`` file.
+            module_name (str): Dotted name it provides.
 
         Returns:
-            Its declared signatures, empty when unreadable or oversized.
+            tuple[StubSignature, ...]: Its declared signatures, empty when
+                unreadable or oversized.
 
         """
         try:

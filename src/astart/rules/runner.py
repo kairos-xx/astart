@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from ast import AsyncFunctionDef, FunctionDef, walk
 from ast import parse as ast_parse
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Final, final
 
-from astart import FormatPreservationError, parse, unparse
+from astart.docstrings.core import Constants as DocstringConstants
+from astart.docstrings.fixes import stub_missing_docstrings
 from astart.rules.appliers import Appliers
-from astart.rules.docs_fixes import stub_missing_docstrings
+from astart.rules.ddmin import ddmin
 from astart.rules.engine import (
     CheckOptions,
     check,
@@ -18,11 +20,17 @@ from astart.rules.engine import (
 from astart.rules.facts import FactsOptions, module_facts
 from astart.rules.hints import HintCache
 from astart.rules.reasons import SkipCode
+from astart.rules.strings_normalize import normalize_strings
 from astart.rules.vocabulary import FixSafety
 from astart.rules.whitespace_rules import (
     collapse_blank_lines,
     strip_trailing_space,
 )
+from astart.source.api import parse, unparse
+from astart.source.formatting import FormatPreservationError
+from astart.transforms.aliases import AliasOptimizer
+
+type ListTupleFindingFix = list[tuple[Finding, Fix]]
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -44,14 +52,19 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        safety_rank: Grouped module constant.
-        allowed_ceilings: Grouped module constant.
-        applier_errors: Grouped module constant.
-        checker_reason: Why the external checker rejected a fix.
-        write_back_reason: Grouped module constant.
-        no_op_reason: Why a text fix found nothing safe to edit.
-        docstring_prefix: Prefix of fix keys that rewrite only a docstring
-            and so never conflict with edits to the same definition.
+        safety_rank (Final[dict[FixSafety, int]]): Grouped module constant.
+        allowed_ceilings (Final[frozenset[FixSafety]]): Grouped module
+            constant.
+        applier_errors (Final[tuple[type[Exception], ...]]): Grouped module
+            constant.
+        checker_reason (Final[str]): Why the external checker rejected a fix.
+        write_back_reason (Final[str]): Grouped module constant.
+        no_op_reason (Final[str]): Why a text fix found nothing safe to edit.
+        docstring_prefix (Final[str]): Prefix of fix keys that rewrite only a
+            docstring and
+            so never conflict with edits to the same definition.
+        text_fixes (Final[Mapping[str, Callable[[str], str]]]): Grouped module
+            constant.
 
     """
 
@@ -80,15 +93,18 @@ class Constants:
     )
     no_op_reason: Final[str] = "no editable violations remain"
 
-
-_TEXT_FIXES: Final[Mapping[str, Callable[[str], str]]] = {
-    "whitespace.collapse-blank-lines": lambda source: collapse_blank_lines(
-        source=source,
-    ),
-    "whitespace.strip-trailing-space": lambda source: strip_trailing_space(
-        source=source,
-    ),
-}
+    text_fixes: Final[Mapping[str, Callable[[str], str]]] = {
+        "whitespace.collapse-blank-lines": lambda source: collapse_blank_lines(
+            source=source,
+        ),
+        "whitespace.strip-trailing-space": lambda source: strip_trailing_space(
+            source=source,
+        ),
+        "whitespace.split-long-strings": lambda source: normalize_strings(
+            source=source,
+            line_length=DocstringConstants.line_length,
+        ).output,
+    }
 
 
 @final
@@ -97,9 +113,9 @@ class AppliedFix:
     """A fix that was applied.
 
     Attributes:
-        fix_key: Fix that ran.
-        rule_key: Rule whose finding it resolved.
-        subject_path: Path of the subject it edited.
+        fix_key (str): Fix that ran.
+        rule_key (str): Rule whose finding it resolved.
+        subject_path (str): Path of the subject it edited.
 
     """
 
@@ -114,11 +130,11 @@ class SkippedFix:
     """A fix that was selected but not applied.
 
     Attributes:
-        fix_key: Fix that was skipped.
-        rule_key: Rule whose finding it would have resolved.
-        subject_path: Path of the subject.
-        reason: Why it was skipped, with detail.
-        code: Closed classification of the reason.
+        fix_key (str): Fix that was skipped.
+        rule_key (str): Rule whose finding it would have resolved.
+        subject_path (str): Path of the subject.
+        reason (str): Why it was skipped, with detail.
+        code (SkipCode): Closed classification of the reason.
 
     """
 
@@ -135,41 +151,62 @@ class FixSettings:
     """Options of a fix run.
 
     Attributes:
-        ceiling: Highest fix safety to apply (``proven`` or ``guarded``).
-        stubs_path: Stub directory for type hints, or ``None``.
-        max_rounds: Upper bound on repeat passes.
-        appliers: Applier functions; ``None`` selects the built-in ones.
-        create_constants: Whether a missing ``Constants`` class may be
+        ceiling (FixSafety): Highest fix safety to apply (``proven`` or
+            ``guarded``).
+        stubs_path (Path | None): Stub directory for type hints, or ``None``.
+        max_rounds (int): Upper bound on repeat passes.
+        appliers (Mapping[str, Applier] | None): Applier functions; ``None``
+            selects the built-in ones.
+        create_constants (bool): Whether a missing ``Constants`` class may be
             created to hold ``Final`` module constants.
-        stub_docstrings: Whether undocumented public definitions get a stub
-            docstring.
-        annotate_variables: Whether function-local variables get a type
+        docstring_types (bool): Include annotation types in generated
+            documentation.
+        stub_docstrings (bool): Whether undocumented public definitions get a
+            stub docstring.
+        annotate_variables (bool): Whether function-local variables get a type
             annotation.
-        negotiate: Whether negotiated annotations supplement the hint
+        negotiate (bool): Whether negotiated annotations supplement the hint
             index.
-        engine: Conversion mode: the inference engine's annotations fill
+        engine (bool): Conversion mode: the inference engine's annotations fill
             what nothing else decided.
-        min_confidence: Offers below this confidence are not applied, on top
-            of each fix's own minimum.
-        checker: External type checker that must not object to guarded
-            fixes, or ``None`` to apply them on astart's evidence alone.
-        project: Cross-module view of the project, or ``None`` for
-            single-module analysis.
-        libraries: External signature index for callees outside the
-            project, or ``None``.
-        target: Oldest Python version emitted code must run on, or
-            ``None`` for the running interpreter.
-        excluded_prefixes: Fix-key prefixes that are never applied, so a
-            run can leave whole fix families (such as ``docs.``) off.
+        min_confidence (float): Offers below this confidence are not
+            applied, on top of each fix's own minimum.
+        checker (Checker | None): External type checker that must not object to
+            guarded fixes,
+            or ``None`` to apply them on astart's evidence alone.
+        project (ProjectView | None): Cross-module view of the project, or
+            ``None`` for single-module analysis.
+        libraries (LibraryIndex | None): External signature index for callees
+            outside the project, or ``None``.
+        target (PythonTarget | None): Oldest Python version emitted code must
+            run
+            on, or ``None`` for the running interpreter.
+        excluded_prefixes (tuple[str, ...]): Fix-key prefixes that are never
+            applied, so a run can
+            leave whole fix families (such as ``docs.``) off.
+        runtime_protocols (bool): Whether synthesized protocols used under
+            ``isinstance`` get ``@runtime_checkable``.
+        accept_general (bool): Whether abstract collection types may replace a
+            synthesized ``Protocol`` on read-only container parameters.
+        protocol_placement (str): Where synthesized protocols land:
+            ``"module"`` (today's
+            position, right before the enclosing top-level statement),
+            ``"function"`` (directly above the def), or ``"type-checking"``
+            (under ``if TYPE_CHECKING:`` with quoted annotations).
+        optimize_aliases (bool): Whether repeated type patterns are extracted
+            into
+            PEP 695 ``type`` aliases after the fixes settle.
+            Skipped when the target Python predates 3.12.
 
     """
 
     ceiling: FixSafety
     stubs_path: Path | None = None
-    max_rounds: int = 3
+    max_rounds: int = 8
     appliers: Mapping[str, Applier] | None = None
     create_constants: bool = False
     stub_docstrings: bool = False
+    docstring_types: bool = True
     annotate_variables: bool = False
     negotiate: bool = True
     engine: bool = False
@@ -179,6 +216,10 @@ class FixSettings:
     libraries: LibraryIndex | None = None
     target: PythonTarget | None = None
     excluded_prefixes: tuple[str, ...] = ()
+    runtime_protocols: bool = False
+    accept_general: bool = False
+    protocol_placement: str = "module"
+    optimize_aliases: bool = True
 
 
 @final
@@ -187,12 +228,15 @@ class FixResult:
     """Outcome of fixing one source file.
 
     Attributes:
-        source: The final source text.
-        applied: Fixes that were applied.
-        skipped: Fixes that were selected but not applied.
-        remaining: Findings still present in the final source.
-        parse_error: Why the source could not be analysed, if it could not.
-        rounds: How many passes ran, including the final one that found
+        source (str): The final source text.
+        applied (tuple[AppliedFix, ...]): Fixes that were applied.
+        skipped (tuple[SkippedFix, ...]): Fixes that were selected but not
+            applied.
+        remaining (tuple[Finding, ...]): Findings still present in the final
+            source.
+        parse_error (str | None): Why the source could not be analysed, if it
+            could not.
+        rounds (int): How many passes ran, including the final one that found
             nothing left to do.
 
     """
@@ -211,10 +255,12 @@ class _Pass:
     """Everything the fixes of one pass share.
 
     Attributes:
-        index: Subjects of the module by path and position.
-        facts: Resolved imports and lazily computed hints.
-        table: Applier functions.
-        edited: Identities of nodes already edited, extended in place.
+        index (dict[tuple[str, int, int], Subject]): Subjects of the module by
+            path and position.
+        facts (ModuleFacts): Resolved imports and lazily computed hints.
+        table (Mapping[str, Applier]): Applier functions.
+        edited (set[int]): Identities of nodes already edited, extended in
+            place.
 
     """
 
@@ -226,15 +272,16 @@ class _Pass:
 
 @final
 @dataclass(frozen=True, slots=True)
-class _Job:
+class Job:
     """What stays fixed while one file is fixed.
 
     Attributes:
-        filename: Name used for parsing and spans.
-        catalog: Rules and fixes.
-        registries: Declared vocabulary.
-        settings: Safety ceiling and options.
-        cache: Type-hint inference shared by every pass over the same text.
+        filename (str): Name used for parsing and spans.
+        catalog (Catalog): Rules and fixes.
+        registries (Registries): Declared vocabulary.
+        settings (FixSettings): Safety ceiling and options.
+        cache (HintCache): Type-hint inference shared by every pass over the
+            same text.
 
     """
 
@@ -247,15 +294,15 @@ class _Job:
 
 @final
 @dataclass(frozen=True, slots=True)
-class _Round:
+class Round:
     """Outcome of one pass.
 
     Attributes:
-        source: Source after the pass.
-        applied: Fixes applied in the pass.
-        skipped: Fixes skipped in the pass.
-        parse_error: Parse error, if any.
-        findings: Findings of the pass's input text.
+        source (str): Source after the pass.
+        applied (tuple[AppliedFix, ...]): Fixes applied in the pass.
+        skipped (tuple[SkippedFix, ...]): Fixes skipped in the pass.
+        parse_error (str | None): Parse error, if any.
+        findings (tuple[Finding, ...]): Findings of the pass's input text.
 
     """
 
@@ -264,6 +311,186 @@ class _Round:
     skipped: tuple[SkippedFix, ...]
     parse_error: str | None
     findings: tuple[Finding, ...] = ()
+
+
+@final
+class _CheckerBatch:
+    """Own cached, original-source probes for one rejected checker batch."""
+
+    def __init__(
+        self,
+        *,
+        source: str,
+        pairs: ListTupleFindingFix,
+        job: Job,
+    ) -> None:
+        """Keep stable IDs and scope the cache to one recovery operation.
+
+        Args:
+            source (str): Original source of every probe.
+            pairs (ListTupleFindingFix): Findings and fixes in application
+                order.
+            job (Job): Unchanged run configuration.
+
+        """
+        self._source: str = source
+        self._pairs: ListTupleFindingFix = pairs
+        self._job: Job = job
+        self._outcomes: dict[frozenset[int], Round | SkipCode] = {
+            frozenset(range(len(pairs))): SkipCode.checker_rejected,
+        }
+        self._groups: tuple[tuple[int, ...], ...] = _function_groups(
+            source=source,
+            pairs=pairs,
+        )
+
+    def recover(self) -> Round:
+        """Remove minimal failing cores until the remaining batch passes.
+
+        Returns:
+            Round: Verified remaining edits and
+                explicit refusals for removed cores.
+
+        """
+        remaining: tuple[int, ...] = tuple(range(len(self._pairs)))
+        skipped: list[SkippedFix] = []
+        while not isinstance(
+            outcome := self._probe(changes=remaining),
+            Round,
+        ):
+            core: tuple[int, ...] = self._core(remaining=remaining)
+            # The empty subset always yields an unchanged Round, so a failed
+            # nonempty batch necessarily has an attributable nonempty core.
+            if not core:
+                core = remaining
+            reason: Round | SkipCode = self._probe(changes=core)
+            code: SkipCode = (
+                reason if isinstance(reason, SkipCode) else outcome
+            )
+            for index in core:
+                finding, fix = self._pairs[index]
+                skipped.append(_refused(finding=finding, fix=fix, code=code))
+            removed: frozenset[int] = frozenset(core)
+            remaining = tuple(
+                item for item in remaining if item not in removed
+            )
+        return replace(outcome, skipped=(*outcome.skipped, *skipped))
+
+    def __call__(self, *, changes: tuple[int, ...]) -> bool:
+        """Tell whether an original-source subset can be accepted.
+
+        Args:
+            changes (tuple[int, ...]): Stable fix IDs in application order.
+
+        Returns:
+            bool: Whether application, write-back and checker validation pass.
+
+        """
+        return isinstance(self._probe(changes=changes), Round)
+
+    def _core(self, *, remaining: tuple[int, ...]) -> tuple[int, ...]:
+        """Minimize function groups, then their individual edits.
+
+        Args:
+            remaining (tuple[int, ...]): Active fixes in original application
+                order.
+
+        Returns:
+            tuple[int, ...]: A 1-minimal failing fix subset.
+
+        """
+        active: frozenset[int] = frozenset(remaining)
+        groups: tuple[int, ...] = tuple(
+            index
+            for index, group in enumerate(iterable=self._groups)
+            if active.intersection(group)
+        )
+
+        def grouped_test(*, changes: tuple[int, ...]) -> bool:
+            """Test whole function groups before individual edits.
+
+            Args:
+                changes (tuple[int, ...]): Function-group identifiers.
+
+            Returns:
+                bool: Whether the active fixes in the groups pass.
+
+            """
+            selected: frozenset[int] = frozenset(
+                item for index in changes for item in self._groups[index]
+            )
+            return self(
+                changes=tuple(item for item in remaining if item in selected),
+            )
+
+        coarse: tuple[int, ...] = ddmin(
+            changes=groups,
+            test=grouped_test,
+        )
+        selected: frozenset[int] = frozenset(
+            item for index in coarse for item in self._groups[index]
+        )
+        return ddmin(
+            changes=tuple(item for item in remaining if item in selected),
+            test=self,
+        )
+
+    def _probe(self, *, changes: tuple[int, ...]) -> Round | SkipCode:
+        """Evaluate each subset at most once within this batch.
+
+        Args:
+            changes (tuple[int, ...]): Stable fix IDs in application order.
+
+        Returns:
+            Round | SkipCode: Cached output or the explicit refusal code.
+
+        """
+        key: frozenset[int] = frozenset(changes)
+        if key not in self._outcomes:
+            self._outcomes[key] = attempt(
+                source=self._source,
+                pairs=[self._pairs[index] for index in changes],
+                job=self._job,
+            )
+        return self._outcomes[key]
+
+
+def _function_groups(
+    *,
+    source: str,
+    pairs: ListTupleFindingFix,
+) -> tuple[tuple[int, ...], ...]:
+    """Group edits by their innermost function, preserving fix order.
+
+    Args:
+        source (str): Original Python source.
+        pairs (ListTupleFindingFix): Findings and fixes to group.
+
+    Returns:
+        tuple[tuple[int, ...], ...]: Ordered change IDs per function;
+            module-level edits share a group.
+
+    """
+    functions: list[FunctionDef | AsyncFunctionDef] = [
+        node
+        for node in walk(node=ast_parse(source=source))
+        if isinstance(node, (FunctionDef, AsyncFunctionDef))
+    ]
+    grouped: dict[int, list[int]] = {}
+    for index, (finding, _) in enumerate(iterable=pairs):
+        enclosing: FunctionDef | AsyncFunctionDef | None = next(
+            (
+                node
+                for node in reversed(functions)
+                if node.lineno
+                <= finding.span.start_line
+                <= (node.end_lineno or node.lineno)
+            ),
+            None,
+        )
+        owner: int = enclosing.lineno if enclosing is not None else 0
+        grouped.setdefault(owner, []).append(index)
+    return tuple(tuple(group) for group in grouped.values())
 
 
 def fix_source(
@@ -280,26 +507,32 @@ def fix_source(
     tree is written back once. Failures are reported, never raised.
 
     Args:
-        source: Python source text.
-        filename: Name used for parsing and spans.
-        catalog: Rules and fixes.
-        registries: Declared vocabulary.
-        settings: Safety ceiling and options.
+        source (str): Python source text.
+        filename (str): Name used for parsing and spans.
+        catalog (Catalog): Rules and fixes.
+        registries (Registries): Declared vocabulary.
+        settings (FixSettings): Safety ceiling and options.
 
     Returns:
-        The final source, what was applied and skipped, and what remains.
+        FixResult:
+            The final source, what was applied and skipped, and what remains.
 
     Raises:
-        ValueError: If the ceiling is not ``proven`` or ``guarded``.
+        ValueError: If settings contain an invalid ceiling or round count.
 
     """
-    if settings.ceiling not in Constants.allowed_ceilings:
-        msg: str = "ceiling must be FixSafety.proven or FixSafety.guarded"
+    if (
+        settings.ceiling not in Constants.allowed_ceilings
+        or settings.max_rounds < 1
+    ):
+        msg: str = (
+            "ceiling must be FixSafety.proven or FixSafety.guarded"
+            if settings.ceiling not in Constants.allowed_ceilings
+            else "max_rounds must be at least 1"
+        )
         raise ValueError(msg)
-    if settings.max_rounds < 1:
-        msg = "max_rounds must be at least 1"
-        raise ValueError(msg)
-    job: _Job = _Job(
+
+    job: Job = Job(
         filename=filename,
         catalog=catalog,
         registries=registries,
@@ -316,36 +549,51 @@ def fix_source(
     parse_error: str | None = None
     settled: tuple[Finding, ...] | None = None
     rounds: int = 0
+
     for _round in range(settings.max_rounds):
         rounds += 1
-        outcome: _Round = _run_round(source=current, job=job)
+        outcome: Round = _run_round(source=current, job=job)
         if outcome.parse_error is not None:
             parse_error = outcome.parse_error
             settled = ()
             break
+
         applied.extend(outcome.applied)
         for item in outcome.skipped:
             skipped[item.fix_key, item.rule_key, item.subject_path] = item
         for done in outcome.applied:
-            _ = skipped.pop(
+            skipped.pop(
                 (done.fix_key, done.rule_key, done.subject_path),
                 None,
             )
+
         stable: bool = not outcome.applied or outcome.source == current
         current = outcome.source
         if stable:
             settled = outcome.findings
             break
+
+    if settings.optimize_aliases and parse_error is None:
+        aliased: str | None = _optimize_aliases(
+            source=current,
+            filename=filename,
+            target=settings.target,
+        )
+        if aliased is not None and aliased != current:
+            current = aliased
+            settled = None
+
     if settled is None:
         final: CheckResult = check(
             source=current,
             filename=filename,
             catalog=catalog,
             registries=registries,
-            options=_options(job=job),
+            options=options(job=job),
         )
         settled = final.findings
         parse_error = parse_error or final.parse_error
+
     return FixResult(
         source=current,
         applied=tuple(applied),
@@ -356,14 +604,48 @@ def fix_source(
     )
 
 
-def _options(*, job: _Job) -> CheckOptions:
+def _optimize_aliases(
+    *,
+    source: str,
+    filename: str,
+    target: PythonTarget | None,
+) -> str | None:
+    """Extract repeated type patterns into PEP 695 aliases.
+
+    Args:
+        source (str): Final fixed source text.
+        filename (str): Name used for parsing and alias evidence identifiers.
+        target (PythonTarget | None): Oldest Python version emitted code must
+            run on, or ``None`` when unconstrained.
+
+    Returns:
+        str | None:
+            The aliased source, or ``None`` when the target predates the
+            ``type`` statement or the pass cannot preserve a parseable
+            module; the caller keeps the pre-alias source either way.
+
+    """
+    if target is not None and not target.type_statement:
+        return None
+    try:
+        module: CommentedModule = parse(source=source, filename=filename)
+        AliasOptimizer(tree=module, module_id=filename).optimize()
+        text: str = unparse(tree=module, preserve_formatting=True)
+        _ = ast_parse(source=text)
+    except (SyntaxError, ValueError, TypeError, AttributeError):
+        return None
+    return text
+
+
+def options(*, job: Job) -> CheckOptions:
     """Build the check options of a job.
 
     Args:
-        job: Fixed parameters of the run.
+        job (Job): Fixed parameters of the run.
 
     Returns:
-        Options carrying the stub directory and the shared hint cache.
+        CheckOptions:
+            Options carrying the stub directory and the shared hint cache.
 
     """
     return CheckOptions(
@@ -371,6 +653,7 @@ def _options(*, job: _Job) -> CheckOptions:
         hint_cache=job.cache,
         create_constants=job.settings.create_constants,
         stub_docstrings=job.settings.stub_docstrings,
+        docstring_types=job.settings.docstring_types,
         annotate_variables=job.settings.annotate_variables,
         negotiate=job.settings.negotiate,
         engine=job.settings.engine,
@@ -384,10 +667,10 @@ def _fix_order(*, catalog: Catalog) -> dict[str, int]:
     """Rank fixes so that ``before`` and ``after`` relations hold.
 
     Args:
-        catalog: Rules and fixes.
+        catalog (Catalog): Rules and fixes.
 
     Returns:
-        A position for every fix key; ties are broken by key.
+        dict[str, int]: A position for every fix key; ties are broken by key.
 
     """
     keys: list[str] = sorted(fix.key for fix in catalog.fixes)
@@ -415,31 +698,32 @@ def _fix_order(*, catalog: Catalog) -> dict[str, int]:
     return {key: position for position, key in enumerate(iterable=order)}
 
 
-def _eligible(
+def eligible(
     *,
     findings: tuple[Finding, ...],
     catalog: Catalog,
     ceiling: FixSafety,
     minimum: float,
     excluded: tuple[str, ...] = (),
-) -> list[tuple[Finding, Fix]]:
+) -> ListTupleFindingFix:
     """Select offers within the ceiling, in application order.
 
     Args:
-        findings: Findings of the current source.
-        catalog: Rules and fixes.
-        ceiling: Highest fix safety to apply.
-        minimum: Offers with less confidence than this are left out, as are
-            offers below their own fix's ``min_confidence``.
-        excluded: Fix-key prefixes that are never applied.
+        findings (tuple[Finding, ...]): Findings of the current source.
+        catalog (Catalog): Rules and fixes.
+        ceiling (FixSafety): Highest fix safety to apply.
+        minimum (float): Offers with less confidence than this are left out, as
+            are offers below their own fix's ``min_confidence``.
+        excluded (tuple[str, ...]): Fix-key prefixes that are never applied.
 
     Returns:
-        (finding, fix) pairs ordered by fix relations, then position.
+        ListTupleFindingFix:
+            (finding, fix) pairs ordered by fix relations, then position.
 
     """
     limit: int = Constants.safety_rank[ceiling]
     order: dict[str, int] = _fix_order(catalog=catalog)
-    pairs: list[tuple[Finding, Fix]] = [
+    pairs: ListTupleFindingFix = [
         (finding, catalog.fix(key=offer.fix_key))
         for finding in findings
         for offer in finding.fix_offers
@@ -458,15 +742,15 @@ def _eligible(
     return pairs
 
 
-def _run_round(*, source: str, job: _Job) -> _Round:
+def _run_round(*, source: str, job: Job) -> Round:
     """Run one pass: check, apply, write back, degrading if needed.
 
     Args:
-        source: Current source text.
-        job: Fixed parameters of the run.
+        source (str): Current source text.
+        job (Job): Fixed parameters of the run.
 
     Returns:
-        The pass outcome.
+        Round: The pass outcome.
 
     """
     found: CheckResult = check(
@@ -474,49 +758,50 @@ def _run_round(*, source: str, job: _Job) -> _Round:
         filename=job.filename,
         catalog=job.catalog,
         registries=job.registries,
-        options=_options(job=job),
+        options=options(job=job),
     )
     if found.parse_error is not None:
-        return _Round(
+        return Round(
             source=source,
             applied=(),
             skipped=(),
             parse_error=found.parse_error,
         )
-    pairs: list[tuple[Finding, Fix]] = _eligible(
+    pairs: ListTupleFindingFix = eligible(
         findings=found.findings,
         catalog=job.catalog,
         ceiling=job.settings.ceiling,
         minimum=job.settings.min_confidence,
         excluded=job.settings.excluded_prefixes,
     )
-    outcome: _Round = _degrade(source=source, pairs=pairs, job=job)
+    outcome: Round = _degrade(source=source, pairs=pairs, job=job)
     return replace(outcome, findings=found.findings)
 
 
-def _attempt(
+def attempt(
     *,
     source: str,
-    pairs: list[tuple[Finding, Fix]],
-    job: _Job,
-) -> _Round | SkipCode:
+    pairs: ListTupleFindingFix,
+    job: Job,
+) -> Round | SkipCode:
     """Apply fixes to one fresh tree and write it back once.
 
     Args:
-        source: Source the findings were computed on.
-        pairs: Findings and the fixes to apply to them.
-        job: Fixed parameters of the run.
+        source (str): Source the findings were computed on.
+        pairs (ListTupleFindingFix): Findings and the fixes to apply to them.
+        job (Job): Fixed parameters of the run.
 
     Returns:
-        The outcome, or the code saying why the tree was not accepted: it
-        cannot be written back, or the external checker rejected it.
+        Round | SkipCode:
+            The outcome, or the code saying why the tree was not accepted:
+            it cannot be written back, or the external checker rejected it.
 
     """
-    text_pairs: list[tuple[Finding, Fix]] = [
-        pair for pair in pairs if pair[1].key in _TEXT_FIXES
+    text_pairs: ListTupleFindingFix = [
+        pair for pair in pairs if pair[1].key in Constants.text_fixes
     ]
-    ast_pairs: list[tuple[Finding, Fix]] = [
-        pair for pair in pairs if pair[1].key not in _TEXT_FIXES
+    ast_pairs: ListTupleFindingFix = [
+        pair for pair in pairs if pair[1].key not in Constants.text_fixes
     ]
     applied: list[AppliedFix] = []
     skipped: list[SkippedFix] = []
@@ -526,7 +811,7 @@ def _attempt(
         if fix.key in seen:
             continue
         seen.add(fix.key)
-        update: Callable[[str], str] = _TEXT_FIXES[fix.key]
+        update: Callable[[str], str] = Constants.text_fixes[fix.key]
         updated: str = update(edited)
         if updated == edited:
             skipped.append(
@@ -559,12 +844,16 @@ def _attempt(
                 cache=job.cache,
                 create_constants=settings.create_constants,
                 stub_docstrings=settings.stub_docstrings,
+                docstring_types=settings.docstring_types,
                 annotate_variables=settings.annotate_variables,
                 negotiate=settings.negotiate,
                 engine=settings.engine,
                 project=settings.project,
                 libraries=settings.libraries,
                 target=settings.target,
+                runtime_protocols=settings.runtime_protocols,
+                accept_general=settings.accept_general,
+                protocol_placement=settings.protocol_placement,
             ),
         ),
         table=Appliers.table
@@ -597,7 +886,7 @@ def _attempt(
                 ),
             )
     if not applied:
-        return _Round(
+        return Round(
             source=source,
             applied=(),
             skipped=tuple(skipped),
@@ -623,7 +912,7 @@ def _attempt(
         )
     ):
         return SkipCode.checker_rejected
-    return _Round(
+    return Round(
         source=text,
         applied=tuple(applied),
         skipped=tuple(skipped),
@@ -634,58 +923,50 @@ def _attempt(
 def _degrade(
     *,
     source: str,
-    pairs: list[tuple[Finding, Fix]],
-    job: _Job,
-) -> _Round:
-    """Apply as many fixes as can be written back, by halving.
+    pairs: ListTupleFindingFix,
+    job: Job,
+) -> Round:
+    """Recover checker failures by delta debugging, write failures by halving.
 
     Tries all fixes at once. When the combined write-back fails, the first
     half is applied on its own, the second half is re-matched against the
-    resulting text by fingerprint, and the process recurses. A single fix that
-    cannot be written back is skipped.
+    resulting text by fingerprint, and the process recurses. Checker failures
+    instead remove minimal failing cores against the original source.
 
     Args:
-        source: Source the findings were computed on.
-        pairs: Findings and the fixes to apply to them.
-        job: Fixed parameters of the run.
+        source (str): Source the findings were computed on.
+        pairs (ListTupleFindingFix): Findings and the fixes to apply to them.
+        job (Job): Fixed parameters of the run.
 
     Returns:
-        The combined outcome.
+        Round: The combined outcome.
 
     """
     if not pairs:
-        return _Round(source=source, applied=(), skipped=(), parse_error=None)
-    attempt: _Round | SkipCode = _attempt(source=source, pairs=pairs, job=job)
-    if isinstance(attempt, _Round):
-        return attempt
+        return Round(source=source, applied=(), skipped=(), parse_error=None)
+    outcome: Round | SkipCode = attempt(source=source, pairs=pairs, job=job)
+    if isinstance(outcome, Round):
+        return outcome
+    if outcome is SkipCode.checker_rejected and len(pairs) > 1:
+        return _CheckerBatch(source=source, pairs=pairs, job=job).recover()
     if len(pairs) == 1:
         finding, fix = pairs[0]
-        return _Round(
+        return Round(
             source=source,
             applied=(),
-            skipped=(
-                SkippedFix(
-                    fix_key=fix.key,
-                    rule_key=finding.rule_key,
-                    subject_path=finding.subject_path,
-                    reason=Constants.checker_reason
-                    if attempt is SkipCode.checker_rejected
-                    else Constants.write_back_reason,
-                    code=attempt,
-                ),
-            ),
+            skipped=(_refused(finding=finding, fix=fix, code=outcome),),
             parse_error=None,
         )
     middle: int = len(pairs) // 2
-    first: _Round = _degrade(source=source, pairs=pairs[:middle], job=job)
-    rest: list[tuple[Finding, Fix]] = _rematch(
+    first: Round = _degrade(source=source, pairs=pairs[:middle], job=job)
+    rest: ListTupleFindingFix = _rematch(
         previous=source,
         current=first.source,
         pairs=pairs[middle:],
         job=job,
     )
-    second: _Round = _degrade(source=first.source, pairs=rest, job=job)
-    return _Round(
+    second: Round = _degrade(source=first.source, pairs=rest, job=job)
+    return Round(
         source=second.source,
         applied=(*first.applied, *second.applied),
         skipped=(*first.skipped, *second.skipped),
@@ -693,24 +974,48 @@ def _degrade(
     )
 
 
+def _refused(*, finding: Finding, fix: Fix, code: SkipCode) -> SkippedFix:
+    """Describe an edit rejected during batch recovery.
+
+    Args:
+        finding (Finding): Finding whose edit was refused.
+        fix (Fix): Selected fix.
+        code (SkipCode): Checker or write-back refusal.
+
+    Returns:
+        SkippedFix: Structured refusal retaining the original subject identity.
+
+    """
+    return SkippedFix(
+        fix_key=fix.key,
+        rule_key=finding.rule_key,
+        subject_path=finding.subject_path,
+        reason=Constants.checker_reason
+        if code is SkipCode.checker_rejected
+        else Constants.write_back_reason,
+        code=code,
+    )
+
+
 def _rematch(
     *,
     previous: str,
     current: str,
-    pairs: list[tuple[Finding, Fix]],
-    job: _Job,
-) -> list[tuple[Finding, Fix]]:
+    pairs: ListTupleFindingFix,
+    job: Job,
+) -> ListTupleFindingFix:
     """Re-locate findings in edited text through their fingerprints.
 
     Args:
-        previous: Source the pairs were computed on.
-        current: Source after earlier fixes.
-        pairs: Findings and fixes to carry over.
-        job: Fixed parameters of the run.
+        previous (str): Source the pairs were computed on.
+        current (str): Source after earlier fixes.
+        pairs (ListTupleFindingFix): Findings and fixes to carry over.
+        job (Job): Fixed parameters of the run.
 
     Returns:
-        Pairs valid for ``current``; findings an earlier fix resolved, or
-        that no longer offer the fix, are dropped.
+        ListTupleFindingFix:
+            Pairs valid for ``current``; findings an earlier fix
+            resolved, or that no longer offer the fix, are dropped.
 
     """
     if current == previous:
@@ -720,10 +1025,10 @@ def _rematch(
         filename=job.filename,
         catalog=job.catalog,
         registries=job.registries,
-        options=_options(job=job),
+        options=options(job=job),
     )
     by_print: dict[str, Finding] = {f.fingerprint: f for f in found.findings}
-    carried: list[tuple[Finding, Fix]] = []
+    carried: ListTupleFindingFix = []
     for finding, fix in pairs:
         match: Finding | None = by_print.get(finding.fingerprint)
         if match is not None and any(
@@ -742,12 +1047,13 @@ def _apply_one(
     """Apply one fix to one finding's subject.
 
     Args:
-        finding: Finding being fixed.
-        fix: Fix to apply.
-        state: Shared state of the pass.
+        finding (Finding): Finding being fixed.
+        fix (Fix): Fix to apply.
+        state (_Pass): Shared state of the pass.
 
     Returns:
-        ``None`` when applied, otherwise the reason it was skipped.
+        tuple[SkipCode, str] | None:
+            ``None`` when applied, otherwise the reason it was skipped.
 
     """
     subject: Subject | None = state.index.get(

@@ -2,6 +2,7 @@
 
 The analyzer never evaluates analyzed Python code. A type estimate is distinct
 from a declared annotation, and conflicting contracts remain inspectable.
+
 """
 
 from __future__ import annotations
@@ -53,10 +54,18 @@ from collections import deque
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Final, final
 
+from astart.graph.dispatch import handler_names
 from astart.semantic.parameter_kinds import ParameterKind
 from astart.semantic.type_expressions import (
     TypeExpression,
     TypeExpressionCodec,
+)
+from astart.semantic.type_shapes import (
+    TypeShape,
+    atomic,
+    join_types,
+    type_shape,
+    union_shapes,
 )
 from astart.semantic.typing_contracts import (
     ArgumentOrigin,
@@ -68,6 +77,14 @@ from astart.semantic.typing_contracts import (
     bind_signature,
 )
 from astart.semantic.typing_relations import specialize, subtype, unify
+from astart.semantic.values import (
+    AbstractValue,
+    LiteralValue,
+    MappingValue,
+    SequenceValue,
+    UnionValue,
+)
+from astart.source.node_attributes import read_attribute, write_attribute
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -78,22 +95,9 @@ if TYPE_CHECKING:
     from astart.semantic.stubs import StubIndex, StubSignature
     from astart.semantic.typing_contracts import ClassContract
     from astart.semantic.typing_relations import Compatibility
-from astart._graph.dispatch import handler_names
-from astart.node_attributes import read_attribute, write_attribute
-from astart.semantic.type_shapes import (
-    TypeShape,
-    atomic,
-    join_types,
-    type_shape,
-    union_shapes,
-)
-from astart.semantic.values import (
-    AbstractValue,
-    LiteralValue,
-    MappingValue,
-    SequenceValue,
-    UnionValue,
-)
+
+type DictIntTypeShape = dict[int, TypeShape]
+type DictTypeShape = dict[str, TypeShape]
 
 
 @final
@@ -102,11 +106,11 @@ class TypeEvidence:
     """Proof origin for a type or value statement, without executing source.
 
     Attributes:
-        dependencies: Dependencies retained as tuple[int, ...] by this
-            instance.
-        description: Description retained as str by this instance.
-        kind: Kind retained as str by this instance.
-        node_id: Node id retained as int by this instance.
+        dependencies (tuple[int, ...]): Dependencies retained as tuple[int,
+            ...] by this instance.
+        description (str): Description retained as str by this instance.
+        kind (str): Kind retained as str by this instance.
+        node_id (int): Node id retained as int by this instance.
 
     """
 
@@ -122,12 +126,14 @@ class TypeInference:
     """A type estimate with immutable evidence and contract diagnostics.
 
     Attributes:
-        conflicts: Conflicts retained as tuple[str, ...] by this instance.
-        declared: Declared retained as TypeShape | None by this instance.
-        evidence: Evidence retained as tuple[TypeEvidence, ...] by this
-            instance.
-        inferred: Inferred retained as TypeShape by this instance.
-        stable: Stable retained as bool by this instance.
+        conflicts (tuple[str, ...]): Conflicts retained as tuple[str, ...] by
+            this instance.
+        declared (TypeShape | None): Declared retained as TypeShape | None by
+            this instance.
+        evidence (tuple[TypeEvidence, ...]): Evidence retained as
+            tuple[TypeEvidence, ...] by this instance.
+        inferred (TypeShape): Inferred retained as TypeShape by this instance.
+        stable (bool): Stable retained as bool by this instance.
 
     """
 
@@ -144,14 +150,15 @@ class CallArguments:
     """Inferred types of a call's positional and named arguments.
 
     Attributes:
-        named: Named retained as dict[str, TypeShape] by this instance.
-        positional: Positional retained as tuple[TypeShape, ...] by this
+        named (DictTypeShape): Named retained as dict[str, TypeShape] by this
             instance.
+        positional (tuple[TypeShape, ...]): Positional retained as
+            tuple[TypeShape, ...] by this instance.
 
     """
 
     positional: tuple[TypeShape, ...]
-    named: dict[str, TypeShape]
+    named: DictTypeShape
 
 
 @final
@@ -160,8 +167,8 @@ class TypeBudgets:
     """Resource limits for the bounded type constraint solver.
 
     Attributes:
-        max_visits: Maximum analysis-context visits before stopping.
-        max_evidence: Maximum retained evidence records per type fact.
+        max_visits (int): Maximum analysis-context visits before stopping.
+        max_evidence (int): Maximum retained evidence records per type fact.
 
     """
 
@@ -175,137 +182,22 @@ class CallSite:
     """A call expression with its inferred arguments and local context.
 
     Attributes:
-        arguments: Arguments retained as CallArguments by this instance.
-        env: Env retained as dict[int, TypeShape] by this instance.
-        name: Identifier used to refer to the name.
-        narrowing: Narrowing retained as dict[str, TypeShape] | None by this
+        arguments (CallArguments): Arguments retained as CallArguments by this
             instance.
-        node: AST node associated with this record.
+        env (DictIntTypeShape): Env retained as dict[int, TypeShape] by this
+            instance.
+        name (str | None): Identifier used to refer to the name.
+        narrowing (DictTypeShape | None): Narrowing retained as dict[str,
+            TypeShape] | None by this instance.
+        node (Call): AST node associated with this record.
 
     """
 
     node: Call
     name: str | None
     arguments: CallArguments
-    env: dict[int, TypeShape]
-    narrowing: dict[str, TypeShape] | None
-
-
-# Qualified names of imported constructors whose call arguments are typed
-# from a curated signature.  Each entry maps the qualified name to
-# ``(parameter name, kind, annotation source, optional)`` tuples; ``self``
-# and ``cls`` receivers are excluded.  The table covers the constructors
-# ``rules.imports.Constants.constructors`` recognizes plus their qualified
-# origins, and stays deliberately small: anything absent resolves to
-# ``Unknown`` rather than guessing.
-_IMPORTED_CONSTRUCTOR_PARAMS: Final[
-    dict[str, tuple[tuple[str, ParameterKind, str, bool], ...]]
-] = {
-    "datetime.date": (
-        ("year", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
-        ("month", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
-        ("day", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
-    ),
-    "datetime.datetime": (
-        ("year", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
-        ("month", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
-        ("day", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
-        ("hour", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
-        ("minute", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
-        ("second", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
-        ("microsecond", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
-        ("tzinfo", ParameterKind.POSITIONAL_OR_KEYWORD, "tzinfo | None", True),
-        ("fold", ParameterKind.KEYWORD_ONLY, "int", True),
-    ),
-    "datetime.time": (
-        ("hour", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
-        ("minute", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
-        ("second", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
-        ("microsecond", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
-        ("tzinfo", ParameterKind.POSITIONAL_OR_KEYWORD, "tzinfo | None", True),
-        ("fold", ParameterKind.KEYWORD_ONLY, "int", True),
-    ),
-    "datetime.timedelta": tuple(
-        (name, ParameterKind.POSITIONAL_OR_KEYWORD, "float | Decimal", True)
-        for name in (
-            "days",
-            "seconds",
-            "microseconds",
-            "milliseconds",
-            "minutes",
-            "hours",
-            "weeks",
-        )
-    ),
-    "decimal.Decimal": (
-        (
-            "value",
-            ParameterKind.POSITIONAL_OR_KEYWORD,
-            "Decimal | float | str | tuple[int, ...]",
-            True,
-        ),
-        (
-            "context",
-            ParameterKind.POSITIONAL_OR_KEYWORD,
-            "Context | None",
-            True,
-        ),
-    ),
-    "fractions.Fraction": (
-        (
-            "numerator",
-            ParameterKind.POSITIONAL_OR_KEYWORD,
-            "int | float | Decimal | Fraction",
-            True,
-        ),
-        (
-            "denominator",
-            ParameterKind.POSITIONAL_OR_KEYWORD,
-            "int | float | Decimal | Fraction | None",
-            True,
-        ),
-    ),
-    "pathlib.Path": (
-        (
-            "args",
-            ParameterKind.VAR_POSITIONAL,
-            "str | PathLike[str]",
-            False,
-        ),
-    ),
-    "pathlib.PurePath": (
-        (
-            "args",
-            ParameterKind.VAR_POSITIONAL,
-            "str | PathLike[str]",
-            False,
-        ),
-    ),
-    "uuid.UUID": (
-        ("hex", ParameterKind.POSITIONAL_OR_KEYWORD, "str | None", True),
-        ("bytes", ParameterKind.POSITIONAL_OR_KEYWORD, "bytes | None", True),
-        (
-            "bytes_le",
-            ParameterKind.POSITIONAL_OR_KEYWORD,
-            "bytes | None",
-            True,
-        ),
-        (
-            "fields",
-            ParameterKind.POSITIONAL_OR_KEYWORD,
-            "tuple[int, int, int, int, int, int] | None",
-            True,
-        ),
-        ("int", ParameterKind.POSITIONAL_OR_KEYWORD, "int | None", True),
-        ("version", ParameterKind.POSITIONAL_OR_KEYWORD, "int | None", True),
-        (
-            "is_safe",
-            ParameterKind.POSITIONAL_OR_KEYWORD,
-            "UUIDSafe | None",
-            True,
-        ),
-    ),
-}
+    env: DictIntTypeShape
+    narrowing: DictTypeShape | None
 
 
 @final
@@ -313,14 +205,19 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        builtin_call_results: Grouped module constant.
-        str_to_str: Grouped module constant.
-        str_to_bool: Grouped module constant.
-        str_to_int: Grouped module constant.
-        mutating_methods: Grouped module constant.
-        container_methods: Grouped module constant.
-        implicit_origins: Grouped module constant.
-        pair_size: Grouped module constant.
+        builtin_call_results (Final[dict[str, TypeShape]]): Grouped module
+            constant.
+        str_to_str (Final[frozenset[str]]): Grouped module constant.
+        str_to_bool (Final[frozenset[str]]): Grouped module constant.
+        str_to_int (Final[frozenset[str]]): Grouped module constant.
+        mutating_methods (Final[frozenset[str]]): Grouped module constant.
+        container_methods (Final[frozenset[str]]): Grouped module constant.
+        implicit_origins (Final[tuple[ArgumentOrigin, ...]]): Grouped module
+            constant.
+        pair_size (Final[int]): Grouped module constant.
+        imported_constructor_params: Final[
+                dict[str, tuple[tuple[str, ParameterKind, str, bool], ...]]
+            ]: Grouped module constant.
 
     """
 
@@ -406,6 +303,147 @@ class Constants:
     )
     pair_size: Final[int] = 2
 
+    # Qualified names of imported constructors whose call arguments are typed
+    # from a curated signature.  Each entry maps the qualified name to
+    # ``(parameter name, kind, annotation source, optional)`` tuples; ``self``
+    # and ``cls`` receivers are excluded.  The table covers the constructors
+    # ``rules.imports.Constants.constructors`` recognizes plus their qualified
+    # origins, and stays deliberately small: anything absent resolves to
+    # ``Unknown`` rather than guessing.
+    imported_constructor_params: Final[
+        dict[str, tuple[tuple[str, ParameterKind, str, bool], ...]]
+    ] = {
+        "datetime.date": (
+            ("year", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+            ("month", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+            ("day", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+        ),
+        "datetime.datetime": (
+            ("year", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+            ("month", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+            ("day", ParameterKind.POSITIONAL_OR_KEYWORD, "int", False),
+            ("hour", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+            ("minute", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+            ("second", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+            ("microsecond", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+            (
+                "tzinfo",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "tzinfo | None",
+                True,
+            ),
+            ("fold", ParameterKind.KEYWORD_ONLY, "int", True),
+        ),
+        "datetime.time": (
+            ("hour", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+            ("minute", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+            ("second", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+            ("microsecond", ParameterKind.POSITIONAL_OR_KEYWORD, "int", True),
+            (
+                "tzinfo",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "tzinfo | None",
+                True,
+            ),
+            ("fold", ParameterKind.KEYWORD_ONLY, "int", True),
+        ),
+        "datetime.timedelta": tuple(
+            (
+                name,
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "float | Decimal",
+                True,
+            )
+            for name in (
+                "days",
+                "seconds",
+                "microseconds",
+                "milliseconds",
+                "minutes",
+                "hours",
+                "weeks",
+            )
+        ),
+        "decimal.Decimal": (
+            (
+                "value",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "Decimal | float | str | tuple[int, ...]",
+                True,
+            ),
+            (
+                "context",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "Context | None",
+                True,
+            ),
+        ),
+        "fractions.Fraction": (
+            (
+                "numerator",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "int | float | Decimal | Fraction",
+                True,
+            ),
+            (
+                "denominator",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "int | float | Decimal | Fraction | None",
+                True,
+            ),
+        ),
+        "pathlib.Path": (
+            (
+                "args",
+                ParameterKind.VAR_POSITIONAL,
+                "str | PathLike[str]",
+                False,
+            ),
+        ),
+        "pathlib.PurePath": (
+            (
+                "args",
+                ParameterKind.VAR_POSITIONAL,
+                "str | PathLike[str]",
+                False,
+            ),
+        ),
+        "uuid.UUID": (
+            ("hex", ParameterKind.POSITIONAL_OR_KEYWORD, "str | None", True),
+            (
+                "bytes",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "bytes | None",
+                True,
+            ),
+            (
+                "bytes_le",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "bytes | None",
+                True,
+            ),
+            (
+                "fields",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "tuple[int, int, int, int, int, int] | None",
+                True,
+            ),
+            ("int", ParameterKind.POSITIONAL_OR_KEYWORD, "int | None", True),
+            (
+                "version",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "int | None",
+                True,
+            ),
+            (
+                "is_safe",
+                ParameterKind.POSITIONAL_OR_KEYWORD,
+                "UUIDSafe | None",
+                True,
+            ),
+        ),
+    }
+
 
 def _builtin_str_method(
     *,
@@ -415,11 +453,11 @@ def _builtin_str_method(
     """Return the result type of a modeled ``str`` method, if it is one.
 
     Args:
-        method: Method supplied as str for this operation.
-        receiver_name: Identifier of the receiver being resolved.
+        method (str): Method supplied as str for this operation.
+        receiver_name (str): Identifier of the receiver being resolved.
 
     Returns:
-        TypeShape | None produced by this operation.
+        TypeShape | None: TypeShape | None produced by this operation.
 
     """
     if receiver_name != "str":
@@ -442,12 +480,14 @@ def _container_method_result(
     """Return the result type of a modeled list, dict or set method.
 
     Args:
-        args: Collection of args supplied for this operation.
-        method: Method supplied as str for this operation.
-        receiver: Receiver supplied as TypeShape for this operation.
+        args (tuple[TypeShape, ...]): Collection of args supplied for this
+            operation.
+        method (str): Method supplied as str for this operation.
+        receiver (TypeShape): Receiver supplied as TypeShape for this
+            operation.
 
     Returns:
-        TypeShape produced by this operation.
+        TypeShape: TypeShape produced by this operation.
 
     """
     if (
@@ -481,12 +521,15 @@ def _receiver_update(
     """Return a container's updated type and why, if the call mutates it.
 
     Args:
-        args: Collection of args supplied for this operation.
-        method: Method supplied as str for this operation.
-        receiver: Receiver supplied as TypeShape for this operation.
+        args (tuple[TypeShape, ...]): Collection of args supplied for this
+            operation.
+        method (str): Method supplied as str for this operation.
+        receiver (TypeShape): Receiver supplied as TypeShape for this
+            operation.
 
     Returns:
-        tuple[TypeShape, str] | None produced by this operation.
+        tuple[TypeShape, str] | None:
+            tuple[TypeShape, str] | None produced by this operation.
 
     """
     if receiver.name in ("list", "set") and args:
@@ -542,10 +585,10 @@ def _iterated_element(*, site: CallSite) -> TypeShape:
     ``int``.
 
     Args:
-        site: Call whose first positional argument is the iterable.
+        site (CallSite): Call whose first positional argument is the iterable.
 
     Returns:
-        The element type, or ``Unknown`` when indeterminate.
+        TypeShape: The element type, or ``Unknown`` when indeterminate.
 
     """
     if len(site.arguments.positional) != 1:
@@ -575,11 +618,11 @@ def _builtin_call(*, name: str, site: CallSite) -> TypeShape:
     keeps the mapping's key and value types.
 
     Args:
-        name: Callee identifier.
-        site: Call site with inferred argument shapes.
+        name (str): Callee identifier.
+        site (CallSite): Call site with inferred argument shapes.
 
     Returns:
-        The result shape.
+        TypeShape: The result shape.
 
     """
     base: TypeShape | None = Constants.builtin_call_results.get(name)
@@ -611,10 +654,10 @@ class TypeSolveStatistics:
     """Bounded constraint propagation counts and convergence status.
 
     Attributes:
-        changes: Changes retained as int by this instance.
-        converged: Converged retained as bool by this instance.
-        reused: Reused retained as int by this instance.
-        visits: Visits retained as int by this instance.
+        changes (int): Changes retained as int by this instance.
+        converged (bool): Converged retained as bool by this instance.
+        reused (int): Reused retained as int by this instance.
+        visits (int): Visits retained as int by this instance.
 
     """
 
@@ -628,11 +671,11 @@ def _hint(*, node: AST | None) -> TypeShape:
     """Parse an annotation structurally without running annotation code.
 
     Args:
-        node: The node examined while parse an annotation structurally without
-            running annotation code.
+        node (AST | None): The node examined while parse an annotation
+            structurally without running annotation code.
 
     Returns:
-        TypeShape produced by this operation.
+        TypeShape: TypeShape produced by this operation.
 
     """
     return (
@@ -646,11 +689,11 @@ def _literal(*, value: AbstractValue) -> TypeShape:
     """Project an abstract exact value to a conservative nominal type.
 
     Args:
-        value: The value examined while project an abstract exact value to a
-            conservative nominal type.
+        value (AbstractValue): The value examined while project an abstract
+            exact value to a conservative nominal type.
 
     Returns:
-        TypeShape produced by this operation.
+        TypeShape: TypeShape produced by this operation.
 
     """
     if isinstance(value, LiteralValue):
@@ -688,6 +731,7 @@ class TypeConstraintSolver:
     treats an annotation as proof that an incompatible runtime value cannot
     occur. Changed revisions create fresh solver state; unchanged revisions
     reuse their immutable results.
+
     """
 
     def __init__(
@@ -702,12 +746,16 @@ class TypeConstraintSolver:
         """Prepare the symbol/AST graph and solve to a bounded fixed point.
 
         Args:
-            budgets: Budgets supplied as TypeBudgets | None for this operation.
-            graph_conversion: Graph conversion supplied as
+            budgets (TypeBudgets | None): Budgets supplied as TypeBudgets |
+                None for this operation.
+            graph_conversion (tuple[GraphAnnotation, ...]): Graph conversion
+                supplied as
                 tuple[GraphAnnotation, ...] for this operation.
-            root: Filesystem path identifying the root.
-            scopes: Collection of scopes supplied for this operation.
-            stubs: Stubs supplied as StubIndex | None for this operation.
+            root (Module): Filesystem path identifying the root.
+            scopes (ScopeGraph): Collection of scopes supplied for this
+                operation.
+            stubs (StubIndex | None): Stubs supplied as StubIndex | None for
+                this operation.
 
         """
         limits: TypeBudgets = budgets if budgets is not None else TypeBudgets()
@@ -728,14 +776,14 @@ class TypeConstraintSolver:
         self._type_variable_bounds: dict[str, tuple[TypeShape, ...]] = {}
         self._scan_type_variables()
         self._imports: dict[str, str] = {}
-        self.types: dict[int, TypeShape] = {}
-        self.declarations: dict[int, TypeShape] = {}
+        self.types: DictIntTypeShape = {}
+        self.declarations: DictIntTypeShape = {}
         self.proofs: dict[int, list[TypeEvidence]] = {}
-        self.node_types: dict[int, TypeShape] = {}
+        self.node_types: DictIntTypeShape = {}
         self.node_proofs: dict[int, list[TypeEvidence]] = {}
         self.conflicts: dict[int, set[str]] = {}
         self._definitions: dict[str, FunctionDef | AsyncFunctionDef] = {}
-        self._return_types: dict[str, TypeShape] = {}
+        self._return_types: DictTypeShape = {}
         self._parameters: dict[str, tuple[int, ...]] = {}
         self._call_edges: dict[str, set[str]] = {}
         self._calls: dict[str, list[Call]] = {}
@@ -769,20 +817,22 @@ class TypeConstraintSolver:
     @staticmethod
     def infer_constant(
         node: Constant,
-        _env: dict[int, TypeShape],
-        _narrowing: dict[str, TypeShape] | None,
+        _env: DictIntTypeShape,
+        _narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer Constant for ``_infer``.
 
         Args:
-            _env: Env supplied as dict[int, TypeShape] for this operation.
-            _narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            _env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer Constant for ``_infer``.
+            _narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Constant): The node examined while infer Constant for
+                ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         atomic(name="Unknown")
@@ -793,20 +843,21 @@ class TypeConstraintSolver:
     def infer_name(
         self,
         node: Name,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer Name for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer Name for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Name): The node examined while infer Name for ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         atomic(name="Unknown")
@@ -821,21 +872,22 @@ class TypeConstraintSolver:
     def infer_list(
         self,
         node: List | Set | Tuple,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer List or Set or Tuple for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer List or Set or Tuple for
-                ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (List | Set | Tuple): The node examined while infer List
+                or Set or Tuple for ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         atomic(name="Unknown")
@@ -857,20 +909,22 @@ class TypeConstraintSolver:
     def infer_set(
         self,
         node: List | Set | Tuple,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Alias of ``infer_list`` for Set.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while alias of ``infer_list`` for Set.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (List | Set | Tuple): The node examined while alias of
+                ``infer_list`` for Set.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         return self.infer_list(node, env, narrowing)
@@ -878,20 +932,22 @@ class TypeConstraintSolver:
     def infer_tuple(
         self,
         node: List | Set | Tuple,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Alias of ``infer_list`` for Tuple.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while alias of ``infer_list`` for Tuple.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (List | Set | Tuple): The node examined while alias of
+                ``infer_list`` for Tuple.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         return self.infer_list(node, env, narrowing)
@@ -899,20 +955,21 @@ class TypeConstraintSolver:
     def infer_dict(
         self,
         node: Dict,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer Dict for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer Dict for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Dict): The node examined while infer Dict for ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         atomic(name="Unknown")
@@ -936,20 +993,22 @@ class TypeConstraintSolver:
     def infer_subscript(
         self,
         node: Subscript,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer Subscript for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer Subscript for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Subscript): The node examined while infer Subscript for
+                ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         result: TypeShape = atomic(name="Unknown")
@@ -994,20 +1053,21 @@ class TypeConstraintSolver:
     def infer_await(
         self,
         node: Await,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer Await for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer Await for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Await): The node examined while infer Await for ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         result: TypeShape = atomic(name="Unknown")
@@ -1023,20 +1083,22 @@ class TypeConstraintSolver:
     def infer_namedexpr(
         self,
         node: NamedExpr,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer NamedExpr for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer NamedExpr for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (NamedExpr): The node examined while infer NamedExpr for
+                ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         result: TypeShape = atomic(name="Unknown")
@@ -1047,29 +1109,30 @@ class TypeConstraintSolver:
     def infer_ifexp(
         self,
         node: IfExp,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer IfExp for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer IfExp for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (IfExp): The node examined while infer IfExp for ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         atomic(name="Unknown")
         self._infer(node=node.test, env=env, narrowing=narrowing)
-        true_narrow: dict[str, TypeShape] = self._narrow(
+        true_narrow: DictTypeShape = self._narrow(
             test=node.test,
             yes=True,
         )
-        false_narrow: dict[str, TypeShape] = self._narrow(
+        false_narrow: DictTypeShape = self._narrow(
             test=node.test,
             yes=False,
         )
@@ -1089,21 +1152,23 @@ class TypeConstraintSolver:
     def infer_compare(
         self,
         node: Compare | BoolOp | UnaryOp,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer Compare or BoolOp or UnaryOp for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer Compare or BoolOp or UnaryOp
-                for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Compare | BoolOp | UnaryOp): The node examined while infer
+                Compare
+                or BoolOp or UnaryOp for ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         atomic(name="Unknown")
@@ -1119,21 +1184,22 @@ class TypeConstraintSolver:
     def infer_boolop(
         self,
         node: Compare | BoolOp | UnaryOp,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Alias of ``infer_compare`` for BoolOp.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while alias of ``infer_compare`` for
-                BoolOp.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Compare | BoolOp | UnaryOp): The node examined while alias of
+                ``infer_compare`` for BoolOp.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         return self.infer_compare(node, env, narrowing)
@@ -1141,21 +1207,22 @@ class TypeConstraintSolver:
     def infer_unaryop(
         self,
         node: Compare | BoolOp | UnaryOp,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Alias of ``infer_compare`` for UnaryOp.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while alias of ``infer_compare`` for
-                UnaryOp.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Compare | BoolOp | UnaryOp): The node examined while alias of
+                ``infer_compare`` for UnaryOp.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         return self.infer_compare(node, env, narrowing)
@@ -1163,20 +1230,21 @@ class TypeConstraintSolver:
     def infer_binop(
         self,
         node: BinOp,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer BinOp for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer BinOp for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (BinOp): The node examined while infer BinOp for ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         result: TypeShape = atomic(name="Unknown")
@@ -1208,20 +1276,22 @@ class TypeConstraintSolver:
     def infer_attribute(
         self,
         node: Attribute,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer Attribute for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer Attribute for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Attribute): The node examined while infer Attribute for
+                ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         result: TypeShape = atomic(name="Unknown")
@@ -1271,20 +1341,21 @@ class TypeConstraintSolver:
     def infer_call(
         self,
         node: Call,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
         /,
     ) -> TypeShape:
         """Infer Call for ``_infer``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer Call for ``_infer``.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Call): The node examined while infer Call for ``_infer``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         atomic(name="Unknown")
@@ -1293,20 +1364,22 @@ class TypeConstraintSolver:
     def suite_assign(
         self,
         statement: Assign | AnnAssign,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         _owner: str,
         /,
     ) -> bool:
         """Propagate an assignment's value into its targets.
 
         Args:
-            _owner: Owner supplied as str for this operation.
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            statement: The statement examined while propagate an assignment's
-                value into its targets.
+            _owner (str): Owner supplied as str for this operation.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            statement (Assign | AnnAssign): The statement examined while
+                propagate
+                an assignment's value into its targets.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         self._declare_annotation(statement=statement)
@@ -1347,20 +1420,21 @@ class TypeConstraintSolver:
     def suite_annassign(
         self,
         statement: AnnAssign,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         owner: str,
         /,
     ) -> bool:
         """Propagate an annotated assignment (see ``suite_assign``).
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            owner: Owner supplied as str for this operation.
-            statement: The statement examined while propagate an annotated
-                assignment (see ``suite_assign``).
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            owner (str): Owner supplied as str for this operation.
+            statement (AnnAssign): The statement examined while propagate an
+                annotated assignment (see ``suite_assign``).
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         return self.suite_assign(statement, env, owner)
@@ -1368,20 +1442,21 @@ class TypeConstraintSolver:
     def suite_augassign(
         self,
         statement: AugAssign,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         _owner: str,
         /,
     ) -> bool:
         """Join an augmented assignment's value into its target.
 
         Args:
-            _owner: Owner supplied as str for this operation.
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            statement: The statement examined while join an augmented
-                assignment's value into its target.
+            _owner (str): Owner supplied as str for this operation.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            statement (AugAssign): The statement examined while join an
+                augmented assignment's value into its target.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         old: TypeShape = self._infer(node=statement.target, env=env)
@@ -1396,20 +1471,21 @@ class TypeConstraintSolver:
     def suite_expr(
         self,
         statement: Expr,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         _owner: str,
         /,
     ) -> bool:
         """Infer an expression statement for its effects.
 
         Args:
-            _owner: Owner supplied as str for this operation.
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            statement: The statement examined while infer an expression
+            _owner (str): Owner supplied as str for this operation.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            statement (Expr): The statement examined while infer an expression
                 statement for its effects.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         self._infer(node=statement.value, env=env)
@@ -1418,20 +1494,21 @@ class TypeConstraintSolver:
     def suite_assert(
         self,
         statement: Assert,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         _owner: str,
         /,
     ) -> bool:
         """Narrow names by an assertion's test.
 
         Args:
-            _owner: Owner supplied as str for this operation.
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            statement: The statement examined while narrow names by an
+            _owner (str): Owner supplied as str for this operation.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            statement (Assert): The statement examined while narrow names by an
                 assertion's test.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         self._infer(node=statement.test, env=env)
@@ -1445,20 +1522,21 @@ class TypeConstraintSolver:
     def suite_return(
         self,
         statement: Return,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         owner: str,
         /,
     ) -> bool:
         """Join a returned value into the function's return type.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            owner: Owner supplied as str for this operation.
-            statement: The statement examined while join a returned value into
-                the function's return type.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            owner (str): Owner supplied as str for this operation.
+            statement (Return): The statement examined while join a returned
+                value into the function's return type.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         changed: bool = False
@@ -1486,25 +1564,26 @@ class TypeConstraintSolver:
     def suite_if(
         self,
         statement: If,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         owner: str,
         /,
     ) -> bool:
         """Analyze both branches and join their environments.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            owner: Owner supplied as str for this operation.
-            statement: The statement examined while analyze both branches and
-                join their environments.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            owner (str): Owner supplied as str for this operation.
+            statement (If): The statement examined while analyze both
+                branches and join their environments.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         self._infer(node=statement.test, env=env)
-        true_env: dict[int, TypeShape] = dict(env)
-        false_env: dict[int, TypeShape] = dict(env)
+        true_env: DictIntTypeShape = dict(env)
+        false_env: DictIntTypeShape = dict(env)
         self._apply_narrowing(
             test=statement.test,
             narrowing=self._narrow(test=statement.test, yes=True),
@@ -1533,24 +1612,25 @@ class TypeConstraintSolver:
     def suite_while(
         self,
         statement: While,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         owner: str,
         /,
     ) -> bool:
         """Analyze a loop body once and join it with the entry state.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            owner: Owner supplied as str for this operation.
-            statement: The statement examined while analyze a loop body once
-                and join it with the entry state.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            owner (str): Owner supplied as str for this operation.
+            statement (While): The statement examined while analyze a loop
+                body once and join it with the entry state.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         self._infer(node=statement.test, env=env)
-        after: dict[int, TypeShape] = dict(env)
+        after: DictIntTypeShape = dict(env)
         changed: bool = self._suite(
             statements=statement.body,
             env=after,
@@ -1566,20 +1646,22 @@ class TypeConstraintSolver:
     def suite_functiondef(
         self,
         statement: FunctionDef | AsyncFunctionDef,
-        _env: dict[int, TypeShape],
+        _env: DictIntTypeShape,
         _owner: str,
         /,
     ) -> bool:
         """Queue a nested function for its own analysis.
 
         Args:
-            _env: Env supplied as dict[int, TypeShape] for this operation.
-            _owner: Owner supplied as str for this operation.
-            statement: The statement examined while queue a nested function for
-                its own analysis.
+            _env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            _owner (str): Owner supplied as str for this operation.
+            statement (FunctionDef | AsyncFunctionDef): The statement examined
+                while queue a
+                nested function for its own analysis.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         self._schedule(name=statement.name)
@@ -1588,20 +1670,22 @@ class TypeConstraintSolver:
     def suite_asyncfunctiondef(
         self,
         statement: AsyncFunctionDef,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         owner: str,
         /,
     ) -> bool:
         """Queue a nested async function (see ``suite_functiondef``).
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            owner: Owner supplied as str for this operation.
-            statement: The statement examined while queue a nested async
-                function (see ``suite_functiondef``).
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            owner (str): Owner supplied as str for this operation.
+            statement (AsyncFunctionDef): The statement examined while queue a
+                nested
+                async function (see ``suite_functiondef``).
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         return self.suite_functiondef(statement, env, owner)
@@ -1610,11 +1694,11 @@ class TypeConstraintSolver:
         """Return a current syntax node's type and supporting evidence.
 
         Args:
-            node: The node examined while return a current syntax node's type
-                and supporting evidence.
+            node (AST): The node examined while return a current
+                syntax node's type and supporting evidence.
 
         Returns:
-            TypeInference produced by this operation.
+            TypeInference: TypeInference produced by this operation.
 
         """
         identity: int = self.identities.node_id(node=node)
@@ -1643,10 +1727,10 @@ class TypeConstraintSolver:
         """Return the aggregated inferred type and declaration of a symbol.
 
         Args:
-            symbol_id: Symbol id supplied as int for this operation.
+            symbol_id (int): Symbol id supplied as int for this operation.
 
         Returns:
-            TypeInference produced by this operation.
+            TypeInference: TypeInference produced by this operation.
 
         """
         return TypeInference(
@@ -1666,12 +1750,14 @@ class TypeConstraintSolver:
         """Type of ``Enum.MEMBER.value`` or of a generic enum ``.value``.
 
         Args:
-            contract: Class contract supplying enum member declarations.
-            node: The node examined while type of ``Enum.MEMBER.value`` or of a
-                generic enum ``.value``.
+            contract (ClassContract): Class contract supplying enum member
+                declarations.
+            node (Attribute): The node examined while type of
+                ``Enum.MEMBER.value``
+                or of a generic enum ``.value``.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         result: TypeShape = atomic(name="Unknown")
@@ -1803,8 +1889,9 @@ class TypeConstraintSolver:
         """Register one function's parameters, declared types and returns.
 
         Args:
-            function: The function examined while register one function's
-                parameters, declared types and returns.
+            function (FunctionDef | AsyncFunctionDef): The function examined
+                while register one
+                function's parameters, declared types and returns.
 
         """
         parameter_nodes: tuple[arg, ...] = (
@@ -1874,12 +1961,12 @@ class TypeConstraintSolver:
         """Return ``target`` when it is ``<receiver>.<attr>``.
 
         Args:
-            receiver: Receiver supplied as str for this operation.
-            target: The target examined while return ``target`` when it is
-                ``<receiver>.<attr>``.
+            receiver (str): Receiver supplied as str for this operation.
+            target (AST): The target examined while return ``target``
+                when it is ``<receiver>.<attr>``.
 
         Returns:
-            Attribute | None produced by this operation.
+            Attribute | None: Attribute | None produced by this operation.
 
         """
         if (
@@ -1894,7 +1981,7 @@ class TypeConstraintSolver:
         """Record class-level ``name = value`` assignments.
 
         Args:
-            _cls: The class definition to index.
+            _cls (ClassDef): The class definition to index.
 
         """
         for item in _cls.body:
@@ -1916,8 +2003,8 @@ class TypeConstraintSolver:
         """Index one method's parameters and register its receiver.
 
         Args:
-            _cls: Class definition.
-            item: Method definition.
+            _cls (ClassDef): Class definition.
+            item (FunctionDef | AsyncFunctionDef): Method definition.
 
         """
         parameters: tuple[arg, ...] = (
@@ -1987,9 +2074,9 @@ class TypeConstraintSolver:
         """Record one ``self.attr = value`` or annotated write.
 
         Args:
-            node: Assignment statement inside a method.
-            context: ``(class name, receiver, is classmethod)`` of the
-                enclosing method.
+            node (AST): Assignment statement inside a method.
+            context: ``(class name, receiver, is classmethod)``
+                of the enclosing method.
 
         """
         class_name, receiver, _ = context
@@ -2031,14 +2118,14 @@ class TypeConstraintSolver:
         """Type of ``self.attr`` inside a method of a known class.
 
         Args:
-            attr: Attribute supplied as str for this operation.
-            class_name: Class name supplied as str for this operation.
-            instance: Instance supplied as bool for this operation.
-            node: The node examined while type of ``self.attr`` inside a
-                method of a known class.
+            attr (str): Attribute supplied as str for this operation.
+            class_name (str): Class name supplied as str for this operation.
+            instance (bool): Instance supplied as bool for this operation.
+            node (Attribute): The node examined while type of ``self.attr``
+                inside a method of a known class.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         cls: ClassContract | None = self.contracts.classes.get(class_name)
@@ -2095,6 +2182,7 @@ class TypeConstraintSolver:
 
         Proposals retain their original node identity. They do not masquerade
         as explicit annotations, and they do not replace existing contracts.
+
         """
         for proposal in self.graph_conversion:
             target: AST = proposal.target
@@ -2148,11 +2236,11 @@ class TypeConstraintSolver:
         """Resolve a declaration or reference via the scope index.
 
         Args:
-            node: The node examined while resolve a declaration or reference
-                via the scope index.
+            node (AST): The node examined while resolve a declaration
+                or reference via the scope index.
 
         Returns:
-            int | None produced by this operation.
+            int | None: int | None produced by this operation.
 
         """
         identity: int = self.identities.node_id(node=node)
@@ -2178,15 +2266,15 @@ class TypeConstraintSolver:
         """Create evidence with a stable source node identity.
 
         Args:
-            dependencies: Dependencies supplied as tuple[int, ...] for this
-                operation.
-            description: Description supplied as str for this operation.
-            kind: Kind supplied as str for this operation.
-            node: The node examined while create evidence with a stable source
-                node identity.
+            dependencies (tuple[int, ...]): Dependencies supplied as tuple[int,
+                ...] for this operation.
+            description (str): Description supplied as str for this operation.
+            kind (str): Kind supplied as str for this operation.
+            node (AST): The node examined while create evidence
+                with a stable source node identity.
 
         Returns:
-            TypeEvidence produced by this operation.
+            TypeEvidence: TypeEvidence produced by this operation.
 
         """
         return TypeEvidence(
@@ -2200,10 +2288,10 @@ class TypeConstraintSolver:
         """Record an explicit annotation without overwriting observed types.
 
         Args:
-            node: The node examined while record an explicit annotation without
-                overwriting observed types.
-            shape: Shape supplied as TypeShape for this operation.
-            symbol_id: Symbol id supplied as int for this operation.
+            node (AST): The node examined while record an explicit
+                annotation without overwriting observed types.
+            shape (TypeShape): Shape supplied as TypeShape for this operation.
+            symbol_id (int): Symbol id supplied as int for this operation.
 
         """
         self.declarations[symbol_id] = shape
@@ -2229,13 +2317,14 @@ class TypeConstraintSolver:
         """Join new information, keeping provenance and conflicts.
 
         Args:
-            contract: Contract supplied as bool for this operation.
-            evidence: Evidence supplied as TypeEvidence for this operation.
-            shape: Shape supplied as TypeShape for this operation.
-            symbol_id: Symbol id supplied as int for this operation.
+            contract (bool): Contract supplied as bool for this operation.
+            evidence (TypeEvidence): Evidence supplied as TypeEvidence for this
+                operation.
+            shape (TypeShape): Shape supplied as TypeShape for this operation.
+            symbol_id (int): Symbol id supplied as int for this operation.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         old: TypeShape = self.types.get(symbol_id, atomic(name="Never"))
@@ -2280,15 +2369,15 @@ class TypeConstraintSolver:
         """Store local inferred syntax shape and causal evidence.
 
         Args:
-            dependencies: Dependencies supplied as tuple[int, ...] for this
-                operation.
-            kind: Kind supplied as str for this operation.
-            node: The node examined while store local inferred syntax shape and
-                causal evidence.
-            shape: Shape supplied as TypeShape for this operation.
+            dependencies (tuple[int, ...]): Dependencies supplied as tuple[int,
+                ...] for this operation.
+            kind (str): Kind supplied as str for this operation.
+            node (AST): The node examined while store local
+                inferred syntax shape and causal evidence.
+            shape (TypeShape): Shape supplied as TypeShape for this operation.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         identity: int = self.identities.node_id(node=node)
@@ -2318,20 +2407,21 @@ class TypeConstraintSolver:
         self,
         *,
         node: AST,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None = None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None = None,
     ) -> TypeShape:
         """Infer an expression without executing user-defined operations.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while infer an expression without executing
-                user-defined operations.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (AST): The node examined while infer an expression
+                without executing user-defined operations.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         result: TypeShape = atomic(name="Unknown")
@@ -2355,12 +2445,13 @@ class TypeConstraintSolver:
         """Type of an attribute read through a known class contract.
 
         Args:
-            contract: Class contract supplying attribute type information.
-            node: The node examined while type of an attribute read through a
-                known class contract.
+            contract (ClassContract): Class contract supplying attribute type
+                information.
+            node (Attribute): The node examined while type of an attribute
+                read through a known class contract.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         if contract.is_enum:
@@ -2391,15 +2482,16 @@ class TypeConstraintSolver:
         *,
         test: AST,
         yes: bool,
-    ) -> dict[str, TypeShape] | None:
+    ) -> DictTypeShape | None:
         """Narrow ``x is None`` and ``x is not None``; ``None`` if not one.
 
         Args:
-            test: Test supplied as AST for this operation.
-            yes: Yes supplied as bool for this operation.
+            test (AST): Test supplied as AST for this operation.
+            yes (bool): Yes supplied as bool for this operation.
 
         Returns:
-            dict[str, TypeShape] | None produced by this operation.
+            DictTypeShape | None:
+                dict[str, TypeShape] | None produced by this operation.
 
         """
         if not (
@@ -2439,13 +2531,12 @@ class TypeConstraintSolver:
         """Return the expected type of an isinstance or guard call.
 
         Returns:
-            The expected type and whether the negative branch may narrow.
-
-
+            tuple[TypeShape, bool] | None:
+                The expected type and whether the negative branch may narrow.
 
         Args:
-            name: Identifier of the name being resolved.
-            test: Test supplied as Call for this operation.
+            name (str): Identifier of the name being resolved.
+            test (Call): Test supplied as Call for this operation.
 
         """
         if name == "isinstance" and len(test.args) == Constants.pair_size:
@@ -2488,13 +2579,15 @@ class TypeConstraintSolver:
         """Keep alternatives that do (or do not) match any known type.
 
         Args:
-            alternatives: Alternatives supplied as tuple[TypeShape, ...] for
-                this operation.
-            known: Known supplied as tuple[TypeShape, ...] for this operation.
-            matching: Matching supplied as bool for this operation.
+            alternatives (tuple[TypeShape, ...]): Alternatives supplied as
+                tuple[TypeShape, ...] for this operation.
+            known (tuple[TypeShape, ...]): Known supplied as tuple[TypeShape,
+                ...] for this operation.
+            matching (bool): Matching supplied as bool for this operation.
 
         Returns:
-            tuple[TypeShape, ...] produced by this operation.
+            tuple[TypeShape, ...]: tuple[TypeShape, ...] produced by this
+                operation.
 
         """
         return tuple(
@@ -2512,15 +2605,15 @@ class TypeConstraintSolver:
             == matching
         )
 
-    def _narrow_call(self, *, test: Call, yes: bool) -> dict[str, TypeShape]:
+    def _narrow_call(self, *, test: Call, yes: bool) -> DictTypeShape:
         """Narrow ``isinstance`` and user-defined guard calls.
 
         Args:
-            test: Test supplied as Call for this operation.
-            yes: Yes supplied as bool for this operation.
+            test (Call): Test supplied as Call for this operation.
+            yes (bool): Yes supplied as bool for this operation.
 
         Returns:
-            dict[str, TypeShape] produced by this operation.
+            DictTypeShape: dict[str, TypeShape] produced by this operation.
 
         """
         if not isinstance(test.func, Name) or not test.args:
@@ -2569,20 +2662,20 @@ class TypeConstraintSolver:
             else {}
         )
 
-    def _narrow(self, *, test: AST, yes: bool) -> dict[str, TypeShape]:
+    def _narrow(self, *, test: AST, yes: bool) -> DictTypeShape:
         """Narrow isinstance, TypeGuard, TypeIs and None tests safely.
 
         Args:
-            test: Test supplied as AST for this operation.
-            yes: Yes supplied as bool for this operation.
+            test (AST): Test supplied as AST for this operation.
+            yes (bool): Yes supplied as bool for this operation.
 
         Returns:
-            dict[str, TypeShape] produced by this operation.
+            DictTypeShape: dict[str, TypeShape] produced by this operation.
 
         """
         if isinstance(test, UnaryOp) and isinstance(test.op, Not):
             return self._narrow(test=test.operand, yes=not yes)
-        none_result: dict[str, TypeShape] | None = self._narrow_none_test(
+        none_result: DictTypeShape | None = self._narrow_none_test(
             test=test,
             yes=yes,
         )
@@ -2597,20 +2690,21 @@ class TypeConstraintSolver:
         *,
         target: AST,
         shape: TypeShape,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         origin: AST,
     ) -> bool:
         """Apply a binding and register a producer-to-consumer causal proof.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            origin: Origin supplied as AST for this operation.
-            shape: Shape supplied as TypeShape for this operation.
-            target: The target examined while apply a binding and register a
-                producer-to-consumer causal proof.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            origin (AST): Origin supplied as AST for this operation.
+            shape (TypeShape): Shape supplied as TypeShape for this operation.
+            target (AST): The target examined while apply a binding and
+                register a producer-to-consumer causal proof.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         if isinstance(target, Name):
@@ -2659,12 +2753,12 @@ class TypeConstraintSolver:
         """Reject imported contracts shadowed or rebound in lexical scope.
 
         Args:
-            alias: Alias supplied as str for this operation.
-            node: The node examined while reject imported contracts shadowed or
-                rebound in lexical scope.
+            alias (str): Alias supplied as str for this operation.
+            node (AST): The node examined while reject imported
+                contracts shadowed or rebound in lexical scope.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         origin: int | None = self.scopes.scope_symbols[
@@ -2689,20 +2783,23 @@ class TypeConstraintSolver:
         self,
         *,
         node: Call,
-        named: dict[str, TypeShape],
+        named: DictTypeShape,
         infer_unpacked: bool,
     ) -> tuple[tuple[str | None, TypeShape], ...]:
         """Pair each keyword with its inferred type for signature binding.
 
         Args:
-            infer_unpacked: Infer unpacked supplied as bool for this operation.
-            named: Named supplied as dict[str, TypeShape] for this operation.
-            node: The node examined while pair each keyword with its inferred
-                type for signature binding.
+            infer_unpacked (bool): Infer unpacked supplied as bool for this
+                operation.
+            named (DictTypeShape): Named supplied as dict[str, TypeShape] for
+                this operation.
+            node (Call): The node examined while pair each keyword
+                with its inferred type for signature binding.
 
         Returns:
-            tuple[tuple[str | None, TypeShape], ...] produced by this
-            operation.
+            tuple[tuple[str | None, TypeShape], ...]: tuple[tuple[str | None,
+                TypeShape],
+                ...] produced by this operation.
 
         """
         unknown: TypeShape = atomic(name="Unknown")
@@ -2726,10 +2823,11 @@ class TypeConstraintSolver:
         """Give an omitted argument the type of its default or annotation.
 
         Args:
-            argument: Argument supplied as BoundArgument for this operation.
+            argument (BoundArgument): Argument supplied as BoundArgument for
+                this operation.
 
         Returns:
-            BoundArgument produced by this operation.
+            BoundArgument: BoundArgument produced by this operation.
 
         """
         if argument.origin not in (
@@ -2758,20 +2856,21 @@ class TypeConstraintSolver:
         *,
         argument: BoundArgument,
         generics: frozenset[str],
-        assignments: dict[str, TypeShape],
+        assignments: DictTypeShape,
     ) -> tuple[int, bool]:
         """Score one bound argument against its declared parameter type.
 
         Returns:
-            The quality gained and whether the argument rejects the overload.
-
-
+            tuple[int, bool]: The quality gained and whether
+                the argument rejects the overload.
 
         Args:
-            argument: Argument supplied as BoundArgument for this operation.
-            assignments: Assignments supplied as dict[str, TypeShape] for this
-                operation.
-            generics: Generics supplied as frozenset[str] for this operation.
+            argument (BoundArgument): Argument supplied as BoundArgument for
+                this operation.
+            assignments (DictTypeShape): Assignments supplied as dict[str,
+                TypeShape] for this operation.
+            generics (frozenset[str]): Generics supplied as frozenset[str] for
+                this operation.
 
         """
         if (
@@ -2824,19 +2923,22 @@ class TypeConstraintSolver:
         expected: TypeShape,
         actual: TypeShape,
         generics: frozenset[str],
-        assignments: dict[str, TypeShape],
+        assignments: DictTypeShape,
     ) -> tuple[int, bool]:
         """Score one inferred value against an expected parameter type.
 
         Args:
-            actual: Actual supplied as TypeShape for this operation.
-            assignments: Assignments supplied as dict[str, TypeShape] for this
+            actual (TypeShape): Actual supplied as TypeShape for this
                 operation.
-            expected: Expected supplied as TypeShape for this operation.
-            generics: Generics supplied as frozenset[str] for this operation.
+            assignments (DictTypeShape): Assignments supplied as dict[str,
+                TypeShape] for this operation.
+            expected (TypeShape): Expected supplied as TypeShape for this
+                operation.
+            generics (frozenset[str]): Generics supplied as frozenset[str] for
+                this operation.
 
         Returns:
-            tuple[int, bool] produced by this operation.
+            tuple[int, bool]: tuple[int, bool] produced by this operation.
 
         """
         if expected.name in generics or any(
@@ -2875,22 +2977,24 @@ class TypeConstraintSolver:
         *,
         signature: CallableContract,
         bound: BoundCall,
-    ) -> tuple[int, dict[str, TypeShape]] | None:
+    ) -> tuple[int, DictTypeShape] | None:
         """Score a bound overload; ``None`` when any argument rejects it.
 
         Args:
-            bound: Bound supplied as BoundCall for this operation.
-            signature: Signature supplied as CallableContract for this
-                operation.
+            bound (BoundCall): Bound supplied as BoundCall for this operation.
+            signature (CallableContract): Signature supplied as
+                CallableContract for this operation.
 
         Returns:
-            tuple[int, dict[str, TypeShape]] | None produced by this operation.
+            tuple[int, DictTypeShape] | None:
+                tuple[int, dict[str, TypeShape]] |
+                None produced by this operation.
 
         """
         generics: frozenset[str] = frozenset(
             (*signature.type_parameters, *self._type_variables),
         )
-        assignments: dict[str, TypeShape] = {}
+        assignments: DictTypeShape = {}
         quality: int = 0
         for argument in bound.arguments:
             gained, rejected = self._score_argument(
@@ -2907,22 +3011,24 @@ class TypeConstraintSolver:
         self,
         *,
         signature: CallableContract,
-        assignments: dict[str, TypeShape],
+        assignments: DictTypeShape,
         receiver: TypeShape | None,
         constructor: str | None,
     ) -> TypeShape:
         """Specialize an overload's declared return for this call.
 
         Args:
-            assignments: Assignments supplied as dict[str, TypeShape] for this
-                operation.
-            constructor: Constructor supplied as str | None for this operation.
-            receiver: Receiver supplied as TypeShape | None for this operation.
-            signature: Signature supplied as CallableContract for this
-                operation.
+            assignments (DictTypeShape): Assignments supplied as dict[str,
+                TypeShape] for this operation.
+            constructor (str | None): Constructor supplied as str | None for
+                this operation.
+            receiver (TypeShape | None): Receiver supplied as TypeShape | None
+                for this operation.
+            signature (CallableContract): Signature supplied as
+                CallableContract for this operation.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         raw_return: TypeShape = (
@@ -2958,9 +3064,10 @@ class TypeConstraintSolver:
         """Store a call's binding and resolved signature on its node.
 
         Args:
-            binding: Binding supplied as BoundCall for this operation.
-            node: The node examined while store a call's binding and resolved
-                signature on its node.
+            binding (BoundCall): Binding supplied as BoundCall for this
+                operation.
+            node (Call): The node examined while store a call's
+                binding and resolved signature on its node.
 
         """
         self.call_bindings[self.identities.node_id(node=node)] = binding
@@ -2987,12 +3094,15 @@ class TypeConstraintSolver:
         """Describe a call no overload accepts, using the first variant.
 
         Args:
-            arguments: Collection of arguments supplied for this operation.
-            node: The node examined while describe a call no overload accepts,
-                using the first variant.
-            receiver: Receiver supplied as TypeShape | None for this operation.
-            variants: Variants supplied as tuple[CallableContract, ...] for
+            arguments (CallArguments): Collection of arguments supplied for
                 this operation.
+            node (Call): The node examined while describe a call no
+                overload accepts, using the first variant.
+            receiver (TypeShape | None): Receiver supplied as TypeShape | None
+                for this operation.
+            variants (tuple[CallableContract, ...]): Variants supplied as
+                tuple[CallableContract,
+                ...] for this operation.
 
         """
         if variants:
@@ -3030,11 +3140,12 @@ class TypeConstraintSolver:
         """Attach parameter metadata to an argument expression.
 
         Args:
-            argument: Argument supplied as BoundArgument for this operation.
-            node: The node examined while attach parameter metadata to an
-                argument expression.
-            source: The source examined while attach parameter metadata to an
-                argument expression.
+            argument (BoundArgument): Argument supplied as BoundArgument for
+                this operation.
+            node (Call): The node examined while attach parameter
+                metadata to an argument expression.
+            source (AST): The source examined while attach parameter
+                metadata to an argument expression.
 
         """
         write_attribute(
@@ -3078,10 +3189,12 @@ class TypeConstraintSolver:
         """Feed argument types into the callee's parameter symbols.
 
         Args:
-            argument: Argument supplied as BoundArgument for this operation.
-            chosen: Chosen supplied as BoundCall for this operation.
-            node: The node examined while feed argument types into the callee's
-                parameter symbols.
+            argument (BoundArgument): Argument supplied as BoundArgument for
+                this operation.
+            chosen (BoundCall): Chosen supplied as BoundCall for this
+                operation.
+            node (Call): The node examined while feed argument
+                types into the callee's parameter symbols.
 
         """
         if not isinstance(
@@ -3114,9 +3227,10 @@ class TypeConstraintSolver:
         """Publish the winning overload and propagate its argument types.
 
         Args:
-            chosen: Chosen supplied as BoundCall for this operation.
-            node: The node examined while publish the winning overload and
-                propagate its argument types.
+            chosen (BoundCall): Chosen supplied as BoundCall for this
+                operation.
+            node (Call): The node examined while publish the winning
+                overload and propagate its argument types.
 
         """
         self._publish_call_binding(node=node, binding=chosen)
@@ -3151,16 +3265,20 @@ class TypeConstraintSolver:
         """Select applicable overloads from named bindings and constraints.
 
         Args:
-            arguments: Collection of arguments supplied for this operation.
-            constructor: Constructor supplied as str | None for this operation.
-            node: The node examined while select applicable overloads from
-                named bindings and constraints.
-            receiver: Receiver supplied as TypeShape | None for this operation.
-            variants: Variants supplied as tuple[CallableContract, ...] for
+            arguments (CallArguments): Collection of arguments supplied for
                 this operation.
+            constructor (str | None): Constructor supplied as str | None for
+                this operation.
+            node (Call): The node examined while select applicable
+                overloads from named bindings and constraints.
+            receiver (TypeShape | None): Receiver supplied as TypeShape | None
+                for this operation.
+            variants (tuple[CallableContract, ...]): Variants supplied as
+                tuple[CallableContract,
+                ...] for this operation.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         candidates: list[
@@ -3187,11 +3305,9 @@ class TypeConstraintSolver:
                     for argument in bound.arguments
                 ),
             )
-            scored: tuple[int, dict[str, TypeShape]] | None = (
-                self._score_variant(
-                    signature=signature,
-                    bound=bound,
-                )
+            scored: tuple[int, DictTypeShape] | None = self._score_variant(
+                signature=signature,
+                bound=bound,
             )
             if scored is None:
                 continue
@@ -3243,10 +3359,10 @@ class TypeConstraintSolver:
         """Type-check a ``NewType`` constructor call.
 
         Args:
-            site: Site supplied as CallSite for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape | None produced by this operation.
+            TypeShape | None: TypeShape | None produced by this operation.
 
         """
         name, args = (site.name, site.arguments.positional)
@@ -3287,10 +3403,10 @@ class TypeConstraintSolver:
         """Use the ``Callable[[...], R]`` contract of a called variable.
 
         Args:
-            site: Site supplied as CallSite for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape | None produced by this operation.
+            TypeShape | None: TypeShape | None produced by this operation.
 
         """
         name, node = (site.name, site.node)
@@ -3348,10 +3464,10 @@ class TypeConstraintSolver:
         """Resolve a call of a function with a source-defined contract.
 
         Args:
-            site: Site supplied as CallSite for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape | None produced by this operation.
+            TypeShape | None: TypeShape | None produced by this operation.
 
         """
         if site.name is None or site.name not in self.contracts.functions:
@@ -3370,10 +3486,10 @@ class TypeConstraintSolver:
         """Resolve a call of a class through its constructor contract.
 
         Args:
-            site: Site supplied as CallSite for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape | None produced by this operation.
+            TypeShape | None: TypeShape | None produced by this operation.
 
         """
         if site.name is None or site.name not in self.contracts.classes:
@@ -3401,17 +3517,18 @@ class TypeConstraintSolver:
         """Build the curated contract for a known imported constructor.
 
         Args:
-            qualified_name: Qualified import origin such as
+            qualified_name (str): Qualified import origin such as
                 ``pathlib.Path``.
 
         Returns:
-            CallableContract | None produced by this operation.
+            CallableContract | None:
+                CallableContract | None produced by this operation.
 
         """
         if qualified_name in self._imported_constructors:
             return self._imported_constructors[qualified_name]
         parameters: tuple[tuple[str, ParameterKind, str, bool], ...] = (
-            _IMPORTED_CONSTRUCTOR_PARAMS.get(qualified_name, ())
+            Constants.imported_constructor_params.get(qualified_name, ())
         )
         contract: CallableContract | None = (
             CallableContract(
@@ -3431,7 +3548,8 @@ class TypeConstraintSolver:
                     name=qualified_name.rsplit(sep=".", maxsplit=1)[-1],
                 ),
             )
-            if parameters or qualified_name in _IMPORTED_CONSTRUCTOR_PARAMS
+            if parameters
+            or qualified_name in Constants.imported_constructor_params
             else None
         )
         self._imported_constructors[qualified_name] = contract
@@ -3445,10 +3563,10 @@ class TypeConstraintSolver:
         """Resolve a call of an imported constructor from its signature.
 
         Args:
-            site: Site supplied as CallSite for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape | None produced by this operation.
+            TypeShape | None: TypeShape | None produced by this operation.
 
         """
         node: Call = site.node
@@ -3482,10 +3600,10 @@ class TypeConstraintSolver:
         """Resolve a method call on a receiver with a known class contract.
 
         Args:
-            site: Site supplied as CallSite for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape | None produced by this operation.
+            TypeShape | None: TypeShape | None produced by this operation.
 
         """
         node: Call = site.node
@@ -3545,9 +3663,10 @@ class TypeConstraintSolver:
         """Flow call arguments into the parameters of a local function.
 
         Args:
-            function: The function examined while flow call arguments into the
-                parameters of a local function.
-            site: Site supplied as CallSite for this operation.
+            function (FunctionDef | AsyncFunctionDef): The function examined
+                while flow call arguments
+                into the parameters of a local function.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         """
         node, args = (site.node, site.arguments.positional)
@@ -3605,11 +3724,11 @@ class TypeConstraintSolver:
         """Type a call of a plain name: a local function or a builtin.
 
         Args:
-            name: Identifier of the name being resolved.
-            site: Site supplied as CallSite for this operation.
+            name (str): Identifier of the name being resolved.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         if name in self._definitions:
@@ -3636,9 +3755,10 @@ class TypeConstraintSolver:
         """Model mutation of a container variable by a method call.
 
         Args:
-            method: Method supplied as str for this operation.
-            receiver: Receiver supplied as TypeShape for this operation.
-            site: Site supplied as CallSite for this operation.
+            method (str): Method supplied as str for this operation.
+            receiver (TypeShape): Receiver supplied as TypeShape for this
+                operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         """
         func: expr = site.node.func
@@ -3673,11 +3793,11 @@ class TypeConstraintSolver:
         """Type a method call using modeled builtin container effects.
 
         Args:
-            func: Func supplied as Attribute for this operation.
-            site: Site supplied as CallSite for this operation.
+            func (Attribute): Func supplied as Attribute for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         receiver: TypeShape = self._infer(
@@ -3712,10 +3832,10 @@ class TypeConstraintSolver:
         """Type a call by local flow, builtin tables and modeled effects.
 
         Args:
-            site: Site supplied as CallSite for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         func: expr = site.node.func
@@ -3729,10 +3849,10 @@ class TypeConstraintSolver:
         """Qualified import-based name of the called object, if any.
 
         Args:
-            site: Site supplied as CallSite for this operation.
+            site (CallSite): Site supplied as CallSite for this operation.
 
         Returns:
-            str | None produced by this operation.
+            str | None: str | None produced by this operation.
 
         """
         func: expr = site.node.func
@@ -3769,13 +3889,13 @@ class TypeConstraintSolver:
         """Resolve an unknown call through bundled typeshed stubs.
 
         Args:
-            result: The result examined while resolve an unknown call through
-                bundled typeshed stubs.
-            site: Site supplied as CallSite for this operation.
-            stubs: Stubs supplied as StubIndex for this operation.
+            result (TypeShape): The result examined while resolve an unknown
+                call through bundled typeshed stubs.
+            site (CallSite): Site supplied as CallSite for this operation.
+            stubs (StubIndex): Stubs supplied as StubIndex for this operation.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         qualified: str | None = self._qualified_call_name(site=site)
@@ -3824,20 +3944,21 @@ class TypeConstraintSolver:
         self,
         *,
         node: Call,
-        env: dict[int, TypeShape],
-        narrowing: dict[str, TypeShape] | None,
+        env: DictIntTypeShape,
+        narrowing: DictTypeShape | None,
     ) -> TypeShape:
         """Propagate local function contracts and modeled built-in effects.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] | None for
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
                 this operation.
-            node: The node examined while propagate local function contracts
-                and modeled built-in effects.
+            narrowing (DictTypeShape | None): Narrowing supplied as dict[str,
+                TypeShape] | None for this operation.
+            node (Call): The node examined while propagate local function
+                contracts and modeled built-in effects.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         args: tuple[TypeShape, ...] = tuple(
@@ -3848,7 +3969,7 @@ class TypeConstraintSolver:
             )
             for item in node.args
         )
-        keywords: dict[str, TypeShape] = {
+        keywords: DictTypeShape = {
             item.arg: self._infer(
                 node=item.value,
                 env=env,
@@ -3889,7 +4010,7 @@ class TypeConstraintSolver:
         *,
         node: AST,
         required: TypeShape,
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         origin: AST,
     ) -> bool:
         """Propagate syntactic contracts backward through pure shapes.
@@ -3898,16 +4019,17 @@ class TypeConstraintSolver:
         runtime values satisfy the annotation. Unsupported operators stop the
         propagation rather than inventing constraints.
 
-
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            node: The node examined while propagate syntactic contracts
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            node (AST): The node examined while propagate syntactic contracts
                 backward through pure shapes.
-            origin: Origin supplied as AST for this operation.
-            required: Required supplied as TypeShape for this operation.
+            origin (AST): Origin supplied as AST for this operation.
+            required (TypeShape): Required supplied as TypeShape for this
+                operation.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         if required.name in ("Never", "Unknown"):
@@ -3975,7 +4097,7 @@ class TypeConstraintSolver:
         """Queue an analysis context once, with bounded reprocessing.
 
         Args:
-            name: Identifier of the name being resolved.
+            name (str): Identifier of the name being resolved.
 
         """
         if name != "<module>" and name not in self._definitions:
@@ -3988,16 +4110,17 @@ class TypeConstraintSolver:
         self,
         *,
         test: AST,
-        narrowing: dict[str, TypeShape],
-        env: dict[int, TypeShape],
+        narrowing: DictTypeShape,
+        env: DictIntTypeShape,
     ) -> None:
         """Bind narrowed shapes to the first matching name in ``test``.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            narrowing: Narrowing supplied as dict[str, TypeShape] for this
-                operation.
-            test: Test supplied as AST for this operation.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            narrowing (DictTypeShape): Narrowing supplied as dict[str,
+                TypeShape] for this operation.
+            test (AST): Test supplied as AST for this operation.
 
         """
         for name, shape in narrowing.items():
@@ -4012,8 +4135,9 @@ class TypeConstraintSolver:
         """Record the declared type of an annotated assignment target.
 
         Args:
-            statement: The statement examined while record the declared type of
-                an annotated assignment target.
+            statement (Assign | AnnAssign): The statement examined while record
+                the declared
+                type of an annotated assignment target.
 
         """
         if isinstance(statement, AnnAssign) and isinstance(
@@ -4032,18 +4156,20 @@ class TypeConstraintSolver:
         self,
         *,
         statements: Sequence[AST],
-        env: dict[int, TypeShape],
+        env: DictIntTypeShape,
         owner: str,
     ) -> bool:
         """Propagate suite contracts, with bounded joins across branches.
 
         Args:
-            env: Env supplied as dict[int, TypeShape] for this operation.
-            owner: Owner supplied as str for this operation.
-            statements: Collection of statements supplied for this operation.
+            env (DictIntTypeShape): Env supplied as dict[int, TypeShape] for
+                this operation.
+            owner (str): Owner supplied as str for this operation.
+            statements (Sequence[AST]): Collection of statements supplied for
+                this operation.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         changed: bool = False
@@ -4066,6 +4192,7 @@ class TypeConstraintSolver:
         :meth:`_index_methods`; their bodies join the same constraint
         system so attribute reads resolve against declared members and
         recorded writes.
+
         """
         for _ in range(8):
             changed: bool = False
@@ -4075,7 +4202,7 @@ class TypeConstraintSolver:
                     *function.args.args,
                     *function.args.kwonlyargs,
                 )
-                env: dict[int, TypeShape] = {
+                env: DictIntTypeShape = {
                     sid: self.types[sid]
                     for parameter in parameters
                     if (sid := self._symbol_id(node=parameter)) is not None
@@ -4096,7 +4223,8 @@ class TypeConstraintSolver:
         """Iterate call and return constraints until stable or exhausted.
 
         Returns:
-            TypeSolveStatistics produced by this operation.
+            TypeSolveStatistics:
+                TypeSolveStatistics produced by this operation.
 
         """
         visits: int = 0
@@ -4105,7 +4233,7 @@ class TypeConstraintSolver:
             name: str = self._work.popleft()
             self._queued.discard(name)
             visits += 1
-            env: dict[int, TypeShape] = (
+            env: DictIntTypeShape = (
                 {}
                 if name == "<module>"
                 else {

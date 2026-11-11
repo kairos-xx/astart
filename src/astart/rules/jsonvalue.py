@@ -13,15 +13,12 @@ def canonical_dumps(*, value: JsonValue) -> str:
     """Serialize a value with sorted keys and a trailing newline.
 
     Args:
-        value: JSON-compatible value to serialize.
+        value (JsonValue): JSON-compatible value to serialize.
 
     Returns:
-        Stable text, two-space indented, ending with a newline.
+        str: Stable text, two-space indented, ending with a newline.
 
     """
     return (
-        dumps(obj=value, indent=2, sort_keys=True, ensure_ascii=False)
-        + """\
-
-"""
+        dumps(obj=value, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     )

@@ -4,6 +4,7 @@ No source is imported or executed. Bound arguments and signatures are
 immutable; AST nodes referenced by records remain mutable, and a newly
 created index must be used after any mutation. All static contracts are
 evidence, not runtime proofs.
+
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        newtype_argument_count: Grouped module constant.
+        newtype_argument_count (Final[int]): Grouped module constant.
 
     """
 
@@ -94,14 +95,15 @@ class ParameterContract:
     """A source parameter with declaration, kind, and optional default.
 
     Attributes:
-        annotation: Annotation retained as TypeExpression | None by this
+        annotation (TypeExpression | None): Annotation retained as
+            TypeExpression | None by this instance.
+        declaration (AST | None): Declaration retained as AST | None by this
             instance.
-        declaration: Declaration retained as AST | None by this instance.
-        default: Default retained as AST | None by this instance.
-        factory: Factory retained as AST | None by this instance.
-        kind: Kind retained as ParameterKind by this instance.
-        name: Identifier used to refer to the name.
-        optional: Optional retained as bool by this instance.
+        default (AST | None): Default retained as AST | None by this instance.
+        factory (AST | None): Factory retained as AST | None by this instance.
+        kind (ParameterKind): Kind retained as ParameterKind by this instance.
+        name (str): Identifier used to refer to the name.
+        optional (bool): Optional retained as bool by this instance.
 
     """
 
@@ -118,7 +120,7 @@ class ParameterContract:
         """Whether the parameter may be omitted by its caller.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         return (
@@ -134,16 +136,18 @@ class CallableContract:
     """Callable declaration including full parameter-kind semantics.
 
     Attributes:
-        declaration: Declaration retained as AST | None by this instance.
-        is_overload: Is overload retained as bool by this instance.
-        method_kind: Method kind retained as str by this instance.
-        parameters: Parameters retained as tuple[ParameterContract, ...] by
-            this instance.
-        qualified_name: Identifier used to refer to the qualified.
-        returns: Returns retained as TypeExpression | None by this instance.
-        source_path: Path to the source used by this instance.
-        type_parameters: Type parameters retained as tuple[str, ...] by this
+        declaration (AST | None): Declaration retained as AST | None by this
             instance.
+        is_overload (bool): Is overload retained as bool by this instance.
+        method_kind (str): Method kind retained as str by this instance.
+        parameters (tuple[ParameterContract, ...]): Parameters retained as
+            tuple[ParameterContract, ...] by this instance.
+        qualified_name (str): Identifier used to refer to the qualified.
+        returns (TypeExpression | None): Returns retained as TypeExpression |
+            None by this instance.
+        source_path (str | None): Path to the source used by this instance.
+        type_parameters (tuple[str, ...]): Type parameters retained as
+            tuple[str, ...] by this instance.
 
     """
 
@@ -161,7 +165,7 @@ class CallableContract:
         """Render an inspect.Signature-inspired declaration faithfully.
 
         Returns:
-            Rendered source text produced by this operation.
+            str: Rendered source text produced by this operation.
 
         """
         pieces: list[str] = []
@@ -214,11 +218,15 @@ class BoundArgument:
     """Resolved effective argument, including omitted/defaulted arguments.
 
     Attributes:
-        definite: Definite retained as bool by this instance.
-        origin: Origin retained as ArgumentOrigin by this instance.
-        parameter: Parameter retained as ParameterContract by this instance.
-        types: Types retained as tuple[TypeShape, ...] by this instance.
-        values: Values retained as tuple[AST, ...] by this instance.
+        definite (bool): Definite retained as bool by this instance.
+        origin (ArgumentOrigin): Origin retained as ArgumentOrigin by this
+            instance.
+        parameter (ParameterContract): Parameter retained as ParameterContract
+            by this instance.
+        types (tuple[TypeShape, ...]): Types retained as tuple[TypeShape, ...]
+            by this instance.
+        values (tuple[AST, ...]): Values retained as tuple[AST, ...] by this
+            instance.
 
     """
 
@@ -233,7 +241,7 @@ class BoundArgument:
         """Parameter's declared keyword name even when passed positionally.
 
         Returns:
-            str produced by this operation.
+            str: str produced by this operation.
 
         """
         return self.parameter.name
@@ -243,7 +251,8 @@ class BoundArgument:
         """Return the declared parameter contract, if available.
 
         Returns:
-            TypeExpression | None produced by this operation.
+            TypeExpression | None:
+                TypeExpression | None produced by this operation.
 
         """
         return self.parameter.annotation
@@ -255,12 +264,14 @@ class BoundCall:
     """A complete inspect-like binding with errors and uncertain expansions.
 
     Attributes:
-        arguments: Arguments retained as tuple[BoundArgument, ...] by this
+        arguments (tuple[BoundArgument, ...]): Arguments retained as
+            tuple[BoundArgument, ...] by this instance.
+        call (Call): Call retained as Call by this instance.
+        errors (tuple[str, ...]): Errors retained as tuple[str, ...] by this
             instance.
-        call: Call retained as Call by this instance.
-        errors: Errors retained as tuple[str, ...] by this instance.
-        indeterminate: Indeterminate retained as bool by this instance.
-        signature: Signature retained as CallableContract by this instance.
+        indeterminate (bool): Indeterminate retained as bool by this instance.
+        signature (CallableContract): Signature retained as CallableContract by
+            this instance.
 
     """
 
@@ -275,7 +286,7 @@ class BoundCall:
         """Whether all statically decidable binding checks passed.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         return not self.errors
@@ -284,10 +295,11 @@ class BoundCall:
         """Find a named effective binding, including an omitted default.
 
         Args:
-            name: Identifier of the name being resolved.
+            name (str): Identifier of the name being resolved.
 
         Returns:
-            BoundArgument | None produced by this operation.
+            BoundArgument | None:
+                BoundArgument | None produced by this operation.
 
         """
         return next(
@@ -302,16 +314,19 @@ class FieldContract:
     """Resolved field declaration with dataclass constructor configuration.
 
     Attributes:
-        annotation: Annotation retained as TypeExpression by this instance.
-        class_variable: Class variable retained as bool by this instance.
-        default: Default retained as AST | None by this instance.
-        factory: Factory retained as AST | None by this instance.
-        init: Init retained as bool by this instance.
-        init_variable: Init variable retained as bool by this instance.
-        kw_only: Kw only retained as bool by this instance.
-        name: Identifier used to refer to the name.
-        optional: Optional retained as bool by this instance.
-        source: Original source text retained for parsing and reconstruction.
+        annotation (TypeExpression): Annotation retained as TypeExpression by
+            this instance.
+        class_variable (bool): Class variable retained as bool by this
+            instance.
+        default (AST | None): Default retained as AST | None by this instance.
+        factory (AST | None): Factory retained as AST | None by this instance.
+        init (bool): Init retained as bool by this instance.
+        init_variable (bool): Init variable retained as bool by this instance.
+        kw_only (bool): Kw only retained as bool by this instance.
+        name (str): Identifier used to refer to the name.
+        optional (bool): Optional retained as bool by this instance.
+        source (AnnAssign): Original source text retained for parsing and
+            reconstruction.
 
     """
 
@@ -333,21 +348,25 @@ class ClassContract:
     """Source-defined nominal class, protocol, dataclass, enum or TypedDict.
 
     Attributes:
-        bases: Bases retained as tuple[str, ...] by this instance.
-        fields: Fields retained as tuple[FieldContract, ...] by this instance.
-        is_dataclass: Is dataclass retained as bool by this instance.
-        is_enum: Is enum retained as bool by this instance.
-        is_named_tuple: Is named tuple retained as bool by this instance.
-        is_protocol: Is protocol retained as bool by this instance.
-        is_typed_dict: Is typed dict retained as bool by this instance.
-        members: Members retained as tuple[tuple[str, TypeExpression], ...] by
-            this instance.
-        methods: Methods retained as tuple[CallableContract, ...] by this
+        bases (tuple[str, ...]): Bases retained as tuple[str, ...] by this
             instance.
-        name: Identifier used to refer to the name.
-        node: AST node associated with this record.
-        type_parameters: Type parameters retained as tuple[str, ...] by this
+        fields (tuple[FieldContract, ...]): Fields retained as
+            tuple[FieldContract, ...] by this instance.
+        is_dataclass (bool): Is dataclass retained as bool by this instance.
+        is_enum (bool): Is enum retained as bool by this instance.
+        is_named_tuple (bool): Is named tuple retained as bool by this
             instance.
+        is_protocol (bool): Is protocol retained as bool by this instance.
+        is_typed_dict (bool): Is typed dict retained as bool by this instance.
+        members (tuple[tuple[str, TypeExpression], ...]): Members retained as
+            tuple[tuple[str,
+            TypeExpression], ...] by this instance.
+        methods (tuple[CallableContract, ...]): Methods retained as
+            tuple[CallableContract, ...] by this instance.
+        name (str): Identifier used to refer to the name.
+        node (ClassDef): AST node associated with this record.
+        type_parameters (tuple[str, ...]): Type parameters retained as
+            tuple[str, ...] by this instance.
 
     """
 
@@ -368,10 +387,11 @@ class ClassContract:
         """Find a field type without executing its initializer.
 
         Args:
-            name: Identifier of the name being resolved.
+            name (str): Identifier of the name being resolved.
 
         Returns:
-            TypeExpression | None produced by this operation.
+            TypeExpression | None:
+                TypeExpression | None produced by this operation.
 
         """
         return next(
@@ -386,9 +406,9 @@ class ContractDiagnostic:
     """A static class-contract or override diagnostic with source syntax.
 
     Attributes:
-        code: Code retained as str by this instance.
-        description: Description retained as str by this instance.
-        node: AST node associated with this record.
+        code (str): Code retained as str by this instance.
+        description (str): Description retained as str by this instance.
+        node (AST): AST node associated with this record.
 
     """
 
@@ -401,11 +421,11 @@ def _decorator_name(*, node: AST) -> str:
     """Read a decorator name without executing decorator expressions.
 
     Args:
-        node: The node examined while read a decorator name without executing
-            decorator expressions.
+        node (AST): The node examined while read a decorator name
+            without executing decorator expressions.
 
     Returns:
-        str produced by this operation.
+        str: str produced by this operation.
 
     """
     return (
@@ -419,11 +439,11 @@ def _qualified(*, node: AST) -> str:
     """Resolve syntactic dotted names or preserve source spelling.
 
     Args:
-        node: The node examined while resolve syntactic dotted names or
+        node (AST): The node examined while resolve syntactic dotted names or
             preserve source spelling.
 
     Returns:
-        Rendered source text produced by this operation.
+        str: Rendered source text produced by this operation.
 
     """
     if isinstance(node, Name):
@@ -439,11 +459,12 @@ def _annotation(*, node: AST | None) -> TypeExpression | None:
     """Parse a declaration annotation while retaining forward references.
 
     Args:
-        node: The node examined while parse a declaration annotation while
-            retaining forward references.
+        node (AST | None): The node examined while parse a declaration
+            annotation while retaining forward references.
 
     Returns:
-        TypeExpression | None produced by this operation.
+        TypeExpression | None:
+            TypeExpression | None produced by this operation.
 
     """
     return (
@@ -458,11 +479,11 @@ def _type_parameters(
     """Collect PEP 695 type parameter identifiers.
 
     Args:
-        node: The node examined while collect PEP 695 type parameter
-            identifiers.
+        node (FunctionDef | AsyncFunctionDef | ClassDef): The node examined
+            while collect PEP 695 type parameter identifiers.
 
     Returns:
-        tuple[str, ...] produced by this operation.
+        tuple[str, ...]: tuple[str, ...] produced by this operation.
 
     """
     return tuple(
@@ -481,13 +502,15 @@ def function_contract(
     """Construct a source signature with Python's five binding kinds.
 
     Args:
-        method_kind: Method kind supplied as str for this operation.
-        node: The node examined while construct a source signature with
-            Python's five binding kinds.
-        qualified_name: Identifier of the qualified being resolved.
+        method_kind (str): Method kind supplied as str for this operation.
+        node (FunctionDef | AsyncFunctionDef): The node examined while
+            construct a source
+            signature with Python's five binding kinds.
+        qualified_name (str | None): Identifier of the qualified being
+            resolved.
 
     Returns:
-        CallableContract produced by this operation.
+        CallableContract: CallableContract produced by this operation.
 
     """
     args: arguments = node.args
@@ -561,12 +584,15 @@ class _CallTerms:
     """Literal-expanded call terms and expansion uncertainty flags.
 
     Attributes:
-        named: Named retained as tuple[tuple[str, AST, TypeShape], ...] by this
+        named (tuple[tuple[str, AST, TypeShape], ...]): Named retained as
+            tuple[tuple[str, AST,
+            TypeShape], ...] by this instance.
+        positional (tuple[tuple[AST,TypeShape,ArgumentOrigin],...]): Positional
+            retained as
+            tuple[tuple[AST, TypeShape, ArgumentOrigin], ...] by this instance.
+        unknown_keyword (bool): Unknown keyword retained as bool by this
             instance.
-        positional: Positional retained as tuple[tuple[AST, TypeShape,
-            ArgumentOrigin], ...] by this instance.
-        unknown_keyword: Unknown keyword retained as bool by this instance.
-        unknown_positional: Unknown positional retained as bool by this
+        unknown_positional (bool): Unknown positional retained as bool by this
             instance.
 
     """
@@ -581,7 +607,7 @@ class _CallTerms:
         """Whether any expansion could not be resolved statically.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         return self.unknown_positional or self.unknown_keyword
@@ -595,12 +621,13 @@ def _star_expansion(
     """Expand a literal list/tuple `*` into positional terms, if literal.
 
     Args:
-        item: Item supplied as Starred for this operation.
-        shape: Shape supplied as TypeShape for this operation.
+        item (Starred): Item supplied as Starred for this operation.
+        shape (TypeShape): Shape supplied as TypeShape for this operation.
 
     Returns:
-        tuple[tuple[AST, TypeShape, ArgumentOrigin], ...] | None produced by
-        this operation.
+        tuple[tuple[AST, TypeShape, ArgumentOrigin], ...] | None:
+            tuple[tuple[AST, TypeShape, ArgumentOrigin],
+            ...] | None produced by this operation.
 
     """
     if not isinstance(item.value, (List, Tuple)):
@@ -620,12 +647,13 @@ def _dict_expansion(
     """Expand a literal dict `**` into named terms, when keys are strings.
 
     Args:
-        part: Part supplied as keyword for this operation.
-        shape: Shape supplied as TypeShape for this operation.
+        part (keyword): Part supplied as keyword for this operation.
+        shape (TypeShape): Shape supplied as TypeShape for this operation.
 
     Returns:
-        tuple[tuple[str, AST, TypeShape], ...] | None produced by this
-        operation.
+        tuple[tuple[str, AST, TypeShape], ...] | None:
+            tuple[tuple[str, AST, TypeShape], ...]
+            | None produced by this operation.
 
     """
     if not isinstance(part.value, Dict):
@@ -652,15 +680,16 @@ def _call_terms(
     """Collect literal-expanded call terms and flag unknown `*`/`**` uses.
 
     Args:
-        call: The call examined while collect literal-expanded call terms and
-            flag unknown `*`/`**` uses.
-        keyword_types: Keyword types supplied as tuple[tuple[str | None,
-            TypeShape], ...] for this operation.
-        positional_types: Positional types supplied as tuple[TypeShape, ...]
-            for this operation.
+        call (Call): The call examined while collect literal-expanded
+            call terms and flag unknown `*` /`**` uses.
+        keyword_types (tuple[tuple[str | None, TypeShape], ...]): Keyword types
+            supplied as tuple[tuple[str |
+            None, TypeShape], ...] for this operation.
+        positional_types (tuple[TypeShape, ...]): Positional types supplied as
+            tuple[TypeShape, ...] for this operation.
 
     Returns:
-        _CallTerms produced by this operation.
+        _CallTerms: _CallTerms produced by this operation.
 
     """
     positional: list[tuple[AST, TypeShape, ArgumentOrigin]] = []
@@ -711,11 +740,12 @@ class _SignatureBinder:
         """Keep the signature, terms, and binding progress together.
 
         Args:
-            receiver_type: Receiver type supplied as TypeShape | None for this
+            receiver_type (TypeShape | None): Receiver type supplied as
+                TypeShape | None for this operation.
+            signature (CallableContract): Signature supplied as
+                CallableContract for this operation.
+            terms (_CallTerms): Terms supplied as _CallTerms for this
                 operation.
-            signature: Signature supplied as CallableContract for this
-                operation.
-            terms: Terms supplied as _CallTerms for this operation.
 
         """
         self.signature: CallableContract = signature
@@ -730,8 +760,8 @@ class _SignatureBinder:
         """Bind one parameter through each admissible term channel.
 
         Args:
-            parameter: Parameter supplied as ParameterContract for this
-                operation.
+            parameter (ParameterContract): Parameter supplied as
+                ParameterContract for this operation.
 
         """
         if self._receiver(parameter=parameter):
@@ -750,11 +780,11 @@ class _SignatureBinder:
         """Report leftover terms and seal the complete binding.
 
         Args:
-            call: The call examined while report leftover terms and seal the
-                complete binding.
+            call (Call): The call examined while report leftover
+                terms and seal the complete binding.
 
         Returns:
-            BoundCall produced by this operation.
+            BoundCall: BoundCall produced by this operation.
 
         """
         if self.position < len(self.terms.positional):
@@ -780,11 +810,11 @@ class _SignatureBinder:
         """Bind an implicit receiver to a method's leading parameter.
 
         Args:
-            parameter: Parameter supplied as ParameterContract for this
-                operation.
+            parameter (ParameterContract): Parameter supplied as
+                ParameterContract for this operation.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         if (
@@ -807,11 +837,11 @@ class _SignatureBinder:
         """Consume all remaining positional terms for `*args`.
 
         Args:
-            parameter: Parameter supplied as ParameterContract for this
-                operation.
+            parameter (ParameterContract): Parameter supplied as
+                ParameterContract for this operation.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         if parameter.kind is not ParameterKind.VAR_POSITIONAL:
@@ -835,11 +865,11 @@ class _SignatureBinder:
         """Consume every unconsumed named term for `**kwargs`.
 
         Args:
-            parameter: Parameter supplied as ParameterContract for this
-                operation.
+            parameter (ParameterContract): Parameter supplied as
+                ParameterContract for this operation.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         if parameter.kind is not ParameterKind.VAR_KEYWORD:
@@ -865,11 +895,11 @@ class _SignatureBinder:
         """Consume the next positional term for positional-capable kinds.
 
         Args:
-            parameter: Parameter supplied as ParameterContract for this
-                operation.
+            parameter (ParameterContract): Parameter supplied as
+                ParameterContract for this operation.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         if parameter.kind not in (
@@ -899,11 +929,11 @@ class _SignatureBinder:
         """Consume a named term, flagging positional-only misuse.
 
         Args:
-            parameter: Parameter supplied as ParameterContract for this
-                operation.
+            parameter (ParameterContract): Parameter supplied as
+                ParameterContract for this operation.
 
         Returns:
-            Whether the requested condition holds.
+            bool: Whether the requested condition holds.
 
         """
         matches: list[tuple[int, AST, TypeShape]] = [
@@ -941,8 +971,8 @@ class _SignatureBinder:
         """Bind an unsupplied parameter to a default, expansion or a gap.
 
         Args:
-            parameter: Parameter supplied as ParameterContract for this
-                operation.
+            parameter (ParameterContract): Parameter supplied as
+                ParameterContract for this operation.
 
         """
         if parameter.has_default:
@@ -996,20 +1026,21 @@ def bind_signature(
     tuples/lists/dictionaries can be expanded safely. Every parameter gets a
     record even if omitted; implicit receivers and defaults are represented.
 
-
     Args:
-        call: The call examined while bind source call arguments against a
-            contract without execution.
-        keyword_types: Keyword types supplied as tuple[tuple[str | None,
-            TypeShape], ...] for this operation.
-        positional_types: Positional types supplied as tuple[TypeShape, ...]
+        call (Call): The call examined while bind source call
+            arguments against a contract without execution.
+        keyword_types (tuple[tuple[str | None, TypeShape], ...]): Keyword types
+            supplied as tuple[tuple[str |
+            None, TypeShape], ...] for this operation.
+        positional_types (tuple[TypeShape, ...]): Positional types supplied as
+            tuple[TypeShape, ...] for this operation.
+        receiver_type (TypeShape | None): Receiver type supplied as TypeShape |
+            None for this operation.
+        signature (CallableContract): Signature supplied as CallableContract
             for this operation.
-        receiver_type: Receiver type supplied as TypeShape | None for this
-            operation.
-        signature: Signature supplied as CallableContract for this operation.
 
     Returns:
-        BoundCall produced by this operation.
+        BoundCall: BoundCall produced by this operation.
 
     """
     binder: _SignatureBinder = _SignatureBinder(
@@ -1034,7 +1065,7 @@ class ContractIndex:
         """Build a module-local index without running analyzed code.
 
         Args:
-            root: Filesystem path identifying the root.
+            root (Module): Filesystem path identifying the root.
 
         """
         self.root: Module = root
@@ -1076,10 +1107,11 @@ class ContractIndex:
         """Return all source overloads, including implementation contracts.
 
         Args:
-            qualified_name: Identifier of the qualified being resolved.
+            qualified_name (str): Identifier of the qualified being resolved.
 
         Returns:
-            tuple[CallableContract, ...] produced by this operation.
+            tuple[CallableContract, ...]: tuple[CallableContract, ...] produced
+                by this operation.
 
         """
         if "." in qualified_name:
@@ -1101,11 +1133,12 @@ class ContractIndex:
         """Look up an annotated member through source-defined base classes.
 
         Args:
-            name: Identifier of the name being resolved.
-            owner: Owner supplied as str for this operation.
+            name (str): Identifier of the name being resolved.
+            owner (str): Owner supplied as str for this operation.
 
         Returns:
-            TypeExpression | None produced by this operation.
+            TypeExpression | None:
+                TypeExpression | None produced by this operation.
 
         """
         pending: list[str] = [owner]
@@ -1127,10 +1160,11 @@ class ContractIndex:
         """Provide a synthesized dataclass/NamedTuple/TypedDict constructor.
 
         Args:
-            name: Identifier of the name being resolved.
+            name (str): Identifier of the name being resolved.
 
         Returns:
-            CallableContract | None produced by this operation.
+            CallableContract | None:
+                CallableContract | None produced by this operation.
 
         """
         cls: ClassContract | None = self.classes.get(name)
@@ -1191,11 +1225,12 @@ class ContractIndex:
         """Resolve a method from explicitly named source-defined bases.
 
         Args:
-            method: Method supplied as str for this operation.
-            owner: Owner supplied as str for this operation.
+            method (str): Method supplied as str for this operation.
+            owner (str): Owner supplied as str for this operation.
 
         Returns:
-            CallableContract | None produced by this operation.
+            CallableContract | None:
+                CallableContract | None produced by this operation.
 
         """
         current: list[str] = [owner]
@@ -1222,11 +1257,11 @@ class ContractIndex:
         """Extract inheritance, field declarations and method signatures.
 
         Args:
-            node: The node examined while extract inheritance, field
+            node (ClassDef): The node examined while extract inheritance, field
                 declarations and method signatures.
 
         Returns:
-            ClassContract produced by this operation.
+            ClassContract: ClassContract produced by this operation.
 
         """
         bases: tuple[str, ...] = tuple(
@@ -1385,7 +1420,8 @@ class ContractIndex:
         """Verify source-known override parameter and result variance.
 
         Returns:
-            tuple[ContractDiagnostic, ...] produced by this operation.
+            tuple[ContractDiagnostic, ...]: tuple[ContractDiagnostic, ...]
+                produced by this operation.
 
         """
         diagnostics: list[ContractDiagnostic] = []
@@ -1402,10 +1438,11 @@ class ContractIndex:
         """Flag inheritance from a source class marked as final.
 
         Args:
-            _cls: The class contract to check.
+            _cls (ClassContract): The class contract to check.
 
         Returns:
-            tuple[ContractDiagnostic, ...] produced by this operation.
+            tuple[ContractDiagnostic, ...]: tuple[ContractDiagnostic, ...]
+                produced by this operation.
 
         """
         diagnostics: list[ContractDiagnostic] = []
@@ -1434,10 +1471,11 @@ class ContractIndex:
         """Check one class's methods against inherited contracts.
 
         Args:
-            _cls: The class contract to check.
+            _cls (ClassContract): The class contract to check.
 
         Returns:
-            tuple[ContractDiagnostic, ...] produced by this operation.
+            tuple[ContractDiagnostic, ...]: tuple[ContractDiagnostic, ...]
+                produced by this operation.
 
         """
         diagnostics: list[ContractDiagnostic] = []

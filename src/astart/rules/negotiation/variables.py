@@ -44,11 +44,12 @@ def _first_assignments(*, module: CommentedModule) -> dict[str, Assign]:
     """Find the first plain assignment of every local, by variable path.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        The first single-target, unannotated ``name = value`` statement of
-        each local, skipping names declared ``global`` or ``nonlocal``.
+        dict[str, Assign]: The first single-target, unannotated
+            ``name = value`` statement of
+            each local, skipping names declared ``global`` or ``nonlocal``.
 
     """
     found: dict[str, Assign] = {}
@@ -83,14 +84,14 @@ def variable_hints(
     """Find the local variables whose type the evidence proves.
 
     Args:
-        module: Parsed module.
-        engine: The inference engine's local annotations by variable path,
-            taken only for variables the evidence leaves undecided
-            (conversion mode).
+        module (CommentedModule): Parsed module.
+        engine (Mapping[str, str] | None): The inference engine's local
+            annotations by variable path, taken
+            only for variables the evidence leaves undecided (conversion mode).
 
     Returns:
-        A hint for each assignment statement that can carry an annotation,
-        by the statement's node identity.
+        dict[Key, Hint]: A hint for each assignment statement that can carry
+            an annotation, by the statement's node identity.
 
     """
     built: Built = build_contracts(
@@ -150,9 +151,10 @@ class LazyVariables:
         """Remember the module.
 
         Args:
-            module: Parsed module.
-            forced: Whether the user asked for variable annotations.
-            conversion: The inference engine's output, in conversion mode.
+            module (CommentedModule): Parsed module.
+            forced (bool): Whether the user asked for variable annotations.
+            conversion (LazyConversion | None): The inference engine's output,
+                in conversion mode.
 
         """
         self._module: CommentedModule = module
@@ -166,8 +168,8 @@ class LazyVariables:
         """Tell whether variables should be annotated in this module.
 
         Returns:
-            ``True`` when asked for, or when the module already annotates
-            some function-local variable (its author's style).
+            bool: ``True`` when asked for, or when the module already annotates
+                some function-local variable (its author's style).
 
         """
         if self._forced:
@@ -185,10 +187,10 @@ class LazyVariables:
         """Give the annotation justified for an assignment statement.
 
         Args:
-            node: An assignment statement.
+            node (AST): An assignment statement.
 
         Returns:
-            The hint, or ``None``.
+            Hint | None: The hint, or ``None``.
 
         """
         if not self.enabled:

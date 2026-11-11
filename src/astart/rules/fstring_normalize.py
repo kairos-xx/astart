@@ -3,9 +3,10 @@
 Rewrites whitespace *placement* inside ``JoinedStr`` fields —
 ``f"{ x }"`` → ``f"{x}"``, ``f"{x !r}"`` → ``f"{x!r}"`` — while
 preserving the expression text, conversion flags and format-spec text
-verbatim.  ``=``-debug fields, unusual expression spacing and anything
-the scanner cannot prove safe are refused.  Standalone module;
+verbatim. ``=``-debug fields, unusual expression spacing and anything
+the scanner cannot prove safe are refused. Standalone module;
 catalog/applier wiring is deferred (M8-22).
+
 """
 
 from __future__ import annotations
@@ -29,8 +30,8 @@ class FStringChange:
     """One applied interior rewrite.
 
     Attributes:
-        kind: Always ``"interior"``.
-        line: 1-based line of the field.
+        kind (str): Always ``"interior"``.
+        line (int): 1-based line of the field.
 
     """
 
@@ -44,9 +45,9 @@ class FStringReport:
     """Outcome of an f-string normalisation pass.
 
     Attributes:
-        changes: Applied rewrites.
-        output: Rewritten source.
-        skipped: Refusal reason to count.
+        changes (list[FStringChange]): Applied rewrites.
+        output (str): Rewritten source.
+        skipped (dict[str, int]): Refusal reason to count.
 
     """
 
@@ -65,8 +66,9 @@ class _InteriorScanner:
     """Depth/string-aware scanner for one field interior.
 
     Tracks bracket depth and string literals while recording the first
-    top-level ``!``, ``:``, ``=`` positions.  ``step`` consumes one
+    top-level ``!``, ``:``, ``=`` positions. ``step`` consumes one
     lexical unit (char, escape pair or triple-quote opener).
+
     """
 
     __slots__ = (
@@ -91,11 +93,11 @@ class _InteriorScanner:
         """Consume the unit starting at ``index``.
 
         Args:
-            index: Current offset.
-            text: Interior text.
+            index (int): Current offset.
+            text (str): Interior text.
 
         Returns:
-            Number of characters consumed (1, 2 or 3).
+            int: Number of characters consumed (1, 2 or 3).
 
         """
         char: str = text[index]
@@ -109,11 +111,11 @@ class _InteriorScanner:
         """Advance inside a quoted region.
 
         Args:
-            index: Current offset.
-            text: Interior text.
+            index (int): Current offset.
+            text (str): Interior text.
 
         Returns:
-            Characters consumed.
+            int: Characters consumed.
 
         """
         char: str = text[index]
@@ -133,12 +135,12 @@ class _InteriorScanner:
         """Open a quoted region, triple when the delimiter repeats.
 
         Args:
-            char: Quote character.
-            index: Current offset.
-            text: Interior text.
+            char (str): Quote character.
+            index (int): Current offset.
+            text (str): Interior text.
 
         Returns:
-            Characters consumed.
+            int: Characters consumed.
 
         """
         self.quote = char
@@ -151,11 +153,11 @@ class _InteriorScanner:
         """Advance outside strings: brackets and separators.
 
         Args:
-            char: Current character.
-            index: Current offset.
+            char (str): Current character.
+            index (int): Current offset.
 
         Returns:
-            Always 1.
+            int: Always 1.
 
         """
         if char in _BRACKETS:
@@ -170,8 +172,8 @@ class _InteriorScanner:
         """Record the first top-level separator positions.
 
         Args:
-            char: Current character.
-            index: Current offset.
+            char (str): Current character.
+            index (int): Current offset.
 
         """
         if char == "!" and self.bang_at < 0:
@@ -186,12 +188,13 @@ def _scan_interior(*, text: str) -> tuple[str, str, str] | None:
     """Split field interior into ``(expr, conv, spec)`` parts.
 
     Args:
-        text: Raw text between ``{`` and ``}``.
+        text (str): Raw text between ``{`` and ``}``.
 
     Returns:
-        ``(expr, conversion, spec)`` where conversion includes the
+        tuple[str, str, str] | None:
+            ``(expr, conversion, spec)`` where conversion includes the
         leading ``!`` (or is empty) and spec includes the leading ``:``
-        (or is empty); ``None`` when the interior is unsafe.
+            (or is empty); ``None`` when the interior is unsafe.
 
     """
     scanner: _InteriorScanner = _InteriorScanner()
@@ -234,11 +237,11 @@ def _has_debug_equals(*, text: str, position: int) -> bool:
     """Whether the interior carries a top-level ``=`` debug marker.
 
     Args:
-        position: Offset of the first top-level ``=`` (-1 when absent).
-        text: Interior text.
+        position (int): Offset of the first top-level ``=`` (-1 when absent).
+        text (str): Interior text.
 
     Returns:
-        ``True`` when a bare ``=`` appears outside strings/brackets and
+        bool: ``True`` when a bare ``=`` appears outside strings/brackets and
         is not part of ``==``, ``!=``, ``<=``, ``>=`` or ``:=``.
 
     """
@@ -253,11 +256,11 @@ def _normalise_spec(*, spec: str) -> str:
     """Strip whitespace between ``:`` and spec start.
 
     Args:
-        spec: Spec text including the leading colon (or empty).
+        spec (str): Spec text including the leading colon (or empty).
 
     Returns:
-        Spec with leading whitespace removed; spec content is
-        preserved byte-for-byte.
+        str: Spec with leading whitespace removed; spec content is
+            preserved byte-for-byte.
 
     """
     return spec.lstrip()
@@ -267,12 +270,12 @@ def _normalise_spec_fields(*, spec: str) -> str:
     """Normalise replacement fields nested inside a format spec.
 
     Args:
-        spec: Spec text including the leading colon.
+        spec (str): Spec text including the leading colon.
 
     Returns:
-        Spec with each nested ``{...}`` interior canonicalised;
-        literal ``{{``/``}}`` escapes and unparseable fields are
-        preserved.
+        str: Spec with each nested ``{...}`` interior canonicalised;
+            literal ``{{``/``}}`` escapes and unparseable fields are
+            preserved.
 
     """
     output: list[str] = []
@@ -314,11 +317,11 @@ def _match_brace(*, text: str, start: int) -> int:
     """Index of the ``}`` matching ``text[start] == '{'``, or -1.
 
     Args:
-        start: Position of the opening brace.
-        text: Source text.
+        start (int): Position of the opening brace.
+        text (str): Source text.
 
     Returns:
-        Closing brace index or -1.
+        int: Closing brace index or -1.
 
     """
     depth: int = 0
@@ -350,10 +353,10 @@ def _line_offsets(*, source: str) -> list[int]:
     """Absolute offset of each line start.
 
     Args:
-        source: Module source.
+        source (str): Module source.
 
     Returns:
-        Offsets list.
+        list[int]: Offsets list.
 
     """
     offsets: list[int] = [0]
@@ -371,12 +374,12 @@ def _field_brace_indices(
     """Collect indices of OP ``{`` tokens that open f-string fields.
 
     Args:
-        offsets: Line-start offsets.
-        source: Module source.
-        tokens: Token stream.
+        offsets (list[int]): Line-start offsets.
+        source (str): Module source.
+        tokens (list[TokenInfo]): Token stream.
 
     Returns:
-        Token indices of field-opening braces.
+        list[int]: Token indices of field-opening braces.
 
     """
 
@@ -384,10 +387,10 @@ def _field_brace_indices(
         """Convert a ``(line, column)`` pair to a source offset.
 
         Args:
-            position: One-based line and zero-based column.
+            position (tuple[int, int]): One-based line and zero-based column.
 
         Returns:
-            Absolute offset in the source.
+            int: Absolute offset in the source.
 
         """
         line, column = position
@@ -428,13 +431,13 @@ def _rewrite_field(
     """Compute the canonical replacement for one field.
 
     Args:
-        offsets: Line-start offsets.
-        report: Report to record skips/changes on.
-        source: Module source.
-        token: The field's opening ``{`` token.
+        offsets (list[int]): Line-start offsets.
+        report (FStringReport): Report to record skips/changes on.
+        source (str): Module source.
+        token (TokenInfo): The field's opening ``{`` token.
 
     Returns:
-        ``(start, end, replacement)`` or ``None``.
+        tuple[int, int, str] | None: ``(start, end, replacement)`` or ``None``.
 
     """
 
@@ -442,10 +445,10 @@ def _rewrite_field(
         """Convert a ``(line, column)`` pair to a source offset.
 
         Args:
-            position: One-based line and zero-based column.
+            position (tuple[int, int]): One-based line and zero-based column.
 
         Returns:
-            Absolute offset in the source.
+            int: Absolute offset in the source.
 
         """
         line, column = position
@@ -476,10 +479,10 @@ def normalize_fstrings(*, source: str) -> FStringReport:
     """Normalise replacement-field interiors in ``source``.
 
     Args:
-        source: Python module source.
+        source (str): Python module source.
 
     Returns:
-        Report with rewritten output and evidence.
+        FStringReport: Report with rewritten output and evidence.
 
     """
     report: FStringReport = FStringReport(output=source)

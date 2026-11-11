@@ -9,6 +9,10 @@ unchanged files are never reparsed, and answers cross-module call sites;
 :class:`LibraryIndex` loads typeshed, ``py.typed`` and stub-package
 signatures; :class:`PythonTarget` gates emitted syntax on the project's
 ``requires-python`` floor.
+:class:`TypeshedClientIndex` optionally answers lookups through the
+third-party ``typeshed_client`` package when it is installed; it is off
+by default and the hand-written readers remain the fallback.
+
 """
 
 from __future__ import annotations
@@ -32,6 +36,10 @@ from astart.project.table import (
     SymbolKind,
     SymbolTable,
 )
+from astart.project.typeshed_client import (
+    ClientConfig,
+    TypeshedClientIndex,
+)
 from astart.project.versions import (
     PythonTarget,
     find_pyproject,
@@ -43,6 +51,7 @@ from astart.project.versions import (
 __all__: list[str] = [
     "BuildResult",
     "CallRecord",
+    "ClientConfig",
     "ImportKind",
     "ImportRecord",
     "LibraryIndex",
@@ -54,6 +63,7 @@ __all__: list[str] = [
     "ResolvedSymbol",
     "SymbolKind",
     "SymbolTable",
+    "TypeshedClientIndex",
     "build_index",
     "find_library_roots",
     "find_pyproject",

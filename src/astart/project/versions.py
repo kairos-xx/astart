@@ -6,6 +6,7 @@ configuration when present, otherwise from the ``requires-python``
 specifier of the project's ``pyproject.toml``, otherwise from the
 interpreter astart itself runs on — generated code must at least run
 there.
+
 """
 
 from __future__ import annotations
@@ -25,9 +26,12 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        floor_specifiers: Operators whose clause sets a lower bound.
-        floor_markers: Longest-first operator spellings.
-        table_key: ``pyproject.toml`` keys locating ``requires-python``.
+        floor_specifiers (Final[frozenset[str]]): Operators whose clause sets a
+            lower bound.
+        floor_markers (Final[tuple[str, ...]]): Longest-first operator
+            spellings.
+        table_key (Final[tuple[str, ...]]): ``pyproject.toml`` keys locating
+            ``requires-python``.
 
     """
 
@@ -44,7 +48,7 @@ class PythonTarget:
     """The oldest Python version generated code must run on.
 
     Attributes:
-        floor: ``(major, minor)`` lower bound.
+        floor (tuple[int, int]): ``(major, minor)`` lower bound.
 
     """
 
@@ -55,7 +59,7 @@ class PythonTarget:
         """Whether ``X | Y`` annotation syntax is allowed.
 
         Returns:
-            ``True`` for Python 3.10 and newer.
+            bool: ``True`` for Python 3.10 and newer.
 
         """
         return self.floor >= (3, 10)
@@ -65,7 +69,7 @@ class PythonTarget:
         """Whether PEP 695 ``def f[T]()``/``class C[T]`` is allowed.
 
         Returns:
-            ``True`` for Python 3.12 and newer.
+            bool: ``True`` for Python 3.12 and newer.
 
         """
         return self.floor >= (3, 12)
@@ -75,7 +79,7 @@ class PythonTarget:
         """Whether the PEP 695 ``type X = ...`` statement is allowed.
 
         Returns:
-            ``True`` for Python 3.12 and newer.
+            bool: ``True`` for Python 3.12 and newer.
 
         """
         return self.floor >= (3, 12)
@@ -85,7 +89,7 @@ class PythonTarget:
         """Whether ``typing.Self`` exists in ``typing``.
 
         Returns:
-            ``True`` for Python 3.11 and newer.
+            bool: ``True`` for Python 3.11 and newer.
 
         """
         return self.floor >= (3, 11)
@@ -95,7 +99,17 @@ class PythonTarget:
         """Whether ``typing.TypeAlias`` exists in ``typing``.
 
         Returns:
-            ``True`` for Python 3.10 and newer.
+            bool: ``True`` for Python 3.10 and newer.
+
+        """
+        return self.floor >= (3, 10)
+
+    @property
+    def param_spec(self) -> bool:
+        """Whether PEP 612 ``typing.ParamSpec`` exists in ``typing``.
+
+        Returns:
+            bool: ``True`` for Python 3.10 and newer.
 
         """
         return self.floor >= (3, 10)
@@ -104,10 +118,10 @@ class PythonTarget:
         """Spell a union for this target.
 
         Args:
-            members: Type names joined by ``" | "``.
+            members (str): Type names joined by ``" | "``.
 
         Returns:
-            ``X | Y`` when allowed, otherwise ``Union[X, Y]``.
+            str: ``X | Y`` when allowed, otherwise ``Union[X, Y]``.
 
         """
         if self.union_syntax:
@@ -118,10 +132,10 @@ class PythonTarget:
         """Spell ``T | None`` for this target.
 
         Args:
-            inner: The non-``None`` member.
+            inner (str): The non-``None`` member.
 
         Returns:
-            ``T | None`` when allowed, otherwise ``Optional[T]``.
+            str: ``T | None`` when allowed, otherwise ``Optional[T]``.
 
         """
         if self.union_syntax:
@@ -133,11 +147,11 @@ def parse_version(*, text: str) -> tuple[int, int] | None:
     """Parse a ``major.minor`` version string.
 
     Args:
-        text: Version text like ``"3.10"`` or ``"3.10.4"``.
+        text (str): Version text like ``"3.10"`` or ``"3.10.4"``.
 
     Returns:
-        ``(major, minor)``, or ``None`` when the text is not a plain
-        version.
+        tuple[int, int] | None: ``(major, minor)``, or ``None``
+            when the text is not a plain version.
 
     """
     parts: list[str] = text.strip().split(sep=".")
@@ -155,10 +169,12 @@ def _floor_of(*, specifier: str) -> tuple[int, int] | None:
     too-new syntax).
 
     Args:
-        specifier: The ``requires-python`` string, e.g. ``">=3.9,!=3.10"``.
+        specifier (str): The ``requires-python`` string, e.g.
+            ``">=3.9,!=3.10"``.
 
     Returns:
-        The lowest allowed ``(major, minor)``, or ``None``.
+        tuple[int, int] | None:
+            The lowest allowed ``(major, minor)``, or ``None``.
 
     """
     floors: list[tuple[int, int]] = []
@@ -179,11 +195,11 @@ def requires_python_floor(*, pyproject: Path) -> tuple[int, int] | None:
     """Read the minimum Python version of a ``pyproject.toml``.
 
     Args:
-        pyproject: Path to the project's ``pyproject.toml``.
+        pyproject (Path): Path to the project's ``pyproject.toml``.
 
     Returns:
-        ``(major, minor)`` of the ``requires-python`` floor, or ``None``
-        when absent or unreadable.
+        tuple[int, int] | None: ``(major, minor)`` of the ``requires-python``
+            floor, or ``None`` when absent or unreadable.
 
     """
     try:
@@ -217,10 +233,10 @@ def find_pyproject(*, paths: Iterable[Path]) -> Path | None:
     its ancestors are tried, nearest first.
 
     Args:
-        paths: Files or directories the command will touch.
+        paths (Iterable[Path]): Files or directories the command will touch.
 
     Returns:
-        The first ``pyproject.toml`` found, or ``None``.
+        Path | None: The first ``pyproject.toml`` found, or ``None``.
 
     """
     for path in paths:
@@ -245,12 +261,12 @@ def resolve_target(
     wins over the running interpreter's own version.
 
     Args:
-        configured: Explicit ``major.minor`` target, or ``None``.
-        pyproject: ``pyproject.toml`` to read ``requires-python`` from, or
-            ``None``.
+        configured (str | None): Explicit ``major.minor`` target, or ``None``.
+        pyproject (Path | None): ``pyproject.toml`` to read ``requires-python``
+            from, or ``None``.
 
     Returns:
-        The target.
+        PythonTarget: The target.
 
     """
     if configured is not None:

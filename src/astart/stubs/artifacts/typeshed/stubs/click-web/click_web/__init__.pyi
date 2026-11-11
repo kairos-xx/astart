@@ -1,0 +1,19 @@
+import logging
+import types
+
+import click
+import flask
+from _typeshed import Incomplete
+
+jinja_env: Incomplete
+script_file: str | None
+click_root_cmd: str | None
+OUTPUT_FOLDER: str
+_flask_app: flask.Flask | None
+logger: logging.Logger | None
+
+def create_click_web_app(
+    module: types.ModuleType,
+    command: click.Command,
+    root: str = "/",
+) -> flask.Flask: ...

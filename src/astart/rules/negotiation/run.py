@@ -30,10 +30,12 @@ class Verdicts:
     """What negotiation concluded for a module.
 
     Attributes:
-        accepted: Annotation source by ``function.parameter`` or
+        accepted (dict[str, str]): Annotation source by ``function.parameter``
+            or
             ``function->``, the key format of the recovery benchmark.
-        conflicts: Every conflict found, including on unreported nodes.
-        exhausted: ``True`` when a bound stopped the solver early.
+        conflicts (tuple[Conflict, ...]): Every conflict found, including on
+            unreported nodes.
+        exhausted (bool): ``True`` when a bound stopped the solver early.
 
     """
 
@@ -52,15 +54,18 @@ def negotiate_module(
     """Build, solve and judge the contracts of a module.
 
     Args:
-        module: Parsed module.
-        corroboration: The inference engine's proposal by node path
+        module (CommentedModule): Parsed module.
+        corroboration (Mapping[str, str]): The inference engine's proposal by
+            node path
             (``function.parameter`` or ``function->``).
-        escaped: Names read as values, whose callers are unknown.
-        library: Resolver over typeshed for calls into the standard library;
+        escaped (frozenset[str]): Names read as values, whose callers are
+            unknown.
+        library (Resolver | None): Resolver over typeshed for calls into the
+            standard library;
             the host's by default, ``None`` is replaced by it.
 
     Returns:
-        The annotations the evidence justifies.
+        Verdicts: The annotations the evidence justifies.
 
     """
     built: Built = build_contracts(
@@ -94,11 +99,12 @@ def function_nodes(*, module: CommentedModule) -> dict[str, AST]:
     """Find every parameter and function node by the benchmark's name for it.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Node by path (``function.parameter`` or ``function->``); functions
-        whose qualified name is not unique are left out.
+        dict[str, AST]: Node by path (``function.parameter`` or ``function->``
+            );
+            functions whose qualified name is not unique are left out.
 
     """
     entries: list[tuple[str, Function, bool]] = list(
@@ -120,10 +126,10 @@ def function_paths(*, module: CommentedModule) -> dict[Key, str]:
     """Name every parameter and function by the identity the hint index uses.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Node path by :func:`~astart.rules.hints.node_key`.
+        dict[Key, str]: Node path by :func:`~astart.rules.hints.node_key`.
 
     """
     return {

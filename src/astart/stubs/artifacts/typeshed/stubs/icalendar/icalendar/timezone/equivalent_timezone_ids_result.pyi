@@ -1,0 +1,6 @@
+from typing import Final
+
+from _typeshed import Incomplete
+
+__all__ = ["lookup"]
+lookup: Final[Incomplete]

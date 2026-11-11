@@ -5,6 +5,7 @@ method of the class, has a type the syntax proves, they all agree (``None``
 plus one other type gives ``T | None``), and nothing else in the module can
 write it: no other receiver, no class-level binding, no base class that
 declares it, no dynamic ``setattr``.
+
 """
 
 from __future__ import annotations
@@ -49,9 +50,12 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        scalars: Types an attribute annotation may name directly.
-        init: Name of the constructor, where an attribute is declared.
-        numeric_ops: Operators that keep a numeric attribute numeric.
+        scalars (Final[frozenset[str]]): Types an attribute annotation may name
+            directly.
+        init (Final[str]): Name of the constructor, where an attribute is
+            declared.
+        numeric_ops (Final[tuple[type[AST], ...]]): Operators that keep a
+            numeric attribute numeric.
 
     """
 
@@ -68,9 +72,11 @@ class _Attribute:
     """What the class's methods do to one attribute.
 
     Attributes:
-        writes: ``(assignment, type, in_init)`` per plain assignment.
-        augments: ``(operator, value type)`` per augmented assignment.
-        bad: Whether some write cannot be understood.
+        writes (list[tuple[Assign,str,bool]]): ``(assignment, type, in_init)``
+            per plain assignment.
+        augments (list[tuple[AST, str | None]]): ``(operator, value type)`` per
+            augmented assignment.
+        bad (bool): Whether some write cannot be understood.
 
     """
 
@@ -83,11 +89,11 @@ def receiver_of(*, function: Function) -> str | None:
     """Name the parameter that holds the instance.
 
     Args:
-        function: Method definition.
+        function (Function): Method definition.
 
     Returns:
-        The first positional parameter, or ``None`` for static methods and
-        methods without one.
+        str | None: The first positional parameter, or ``None``
+            for static methods and methods without one.
 
     """
     first: list[arg] = [*function.args.posonlyargs, *function.args.args]
@@ -102,11 +108,11 @@ def _self_attribute(*, node: AST, receiver: str) -> str | None:
     """Read the attribute of ``receiver.attr``.
 
     Args:
-        node: Candidate expression.
-        receiver: Name that holds the instance.
+        node (AST): Candidate expression.
+        receiver (str): Name that holds the instance.
 
     Returns:
-        The attribute name, or ``None`` for any other expression.
+        str | None: The attribute name, or ``None`` for any other expression.
 
     """
     if (
@@ -124,10 +130,10 @@ class _Typing:
     """What typing a method's writes needs.
 
     Attributes:
-        env: Types of the names visible in the method.
-        counts: Module binding counts.
-        receiver: Name that holds the instance.
-        in_init: Whether the method is the constructor.
+        env (Mapping[str, str]): Types of the names visible in the method.
+        counts (Mapping[str, int]): Module binding counts.
+        receiver (str): Name that holds the instance.
+        in_init (bool): Whether the method is the constructor.
 
     """
 
@@ -147,10 +153,11 @@ def _record(
     """Record one plain or augmented assignment to an instance attribute.
 
     Args:
-        node: A statement of the method.
-        typing: How to type the assigned values.
-        seen: Attributes found so far, extended in place.
-        plain: Targets already understood, extended in place.
+        node (AST): A statement of the method.
+        typing (_Typing): How to type the assigned values.
+        seen (dict[str, _Attribute]): Attributes found so far, extended in
+            place.
+        plain (set[int]): Targets already understood, extended in place.
 
     """
     if isinstance(node, Assign):
@@ -212,9 +219,10 @@ def _scan_method(
     unprovable.
 
     Args:
-        method: Method definition.
-        typing: How to type the assigned values.
-        seen: Attributes found so far, extended in place.
+        method (Function): Method definition.
+        typing (_Typing): How to type the assigned values.
+        seen (dict[str, _Attribute]): Attributes found so far, extended in
+            place.
 
     """
     own: list[AST] = list(own_nodes(function=method))
@@ -243,11 +251,12 @@ def _compatible(*, kind: str, augments: list[tuple[AST, str | None]]) -> bool:
     """Tell whether augmented assignments keep an attribute's type.
 
     Args:
-        kind: The attribute's non-``None`` type.
-        augments: ``(operator, value type)`` per augmented assignment.
+        kind (str): The attribute's non-``None`` type.
+        augments (list[tuple[AST, str | None]]): ``(operator, value type)`` per
+            augmented assignment.
 
     Returns:
-        ``True`` when each keeps the type.
+        bool: ``True`` when each keeps the type.
 
     """
     for operator, value in augments:
@@ -273,12 +282,12 @@ def _agreed(*, slot: _Attribute, counts: Mapping[str, int]) -> str | None:
     """Combine the writes of one attribute into an annotation.
 
     Args:
-        slot: The attribute's writes.
-        counts: Module binding counts.
+        slot (_Attribute): The attribute's writes.
+        counts (Mapping[str, int]): Module binding counts.
 
     Returns:
-        ``T`` or ``T | None``, or ``None`` when the writes do not agree on a
-        single simple type.
+        str | None: ``T`` or ``T | None``, or ``None`` when the
+            writes do not agree on a single simple type.
 
     """
     if slot.bad or not slot.writes:
@@ -301,10 +310,10 @@ def _external_stores(*, module: Module) -> dict[str, int]:
     """Count the attribute writes in the whole module, by attribute name.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Store and delete counts by attribute name.
+        dict[str, int]: Store and delete counts by attribute name.
 
     """
     found: dict[str, int] = {}
@@ -323,11 +332,12 @@ class Scope:
     """What the attribute prover knows about the module.
 
     Attributes:
-        module: Parsed module.
-        counts: Module binding counts.
-        constants: Types of module-level constants.
-        accepted: Parameter hints already accepted, by function identity.
-        index: Method facts of the module.
+        module (Module): Parsed module.
+        counts (Mapping[str, int]): Module binding counts.
+        constants (Mapping[str, str]): Types of module-level constants.
+        accepted (Mapping[int, Mapping[str, str]]): Parameter hints already
+            accepted, by function identity.
+        index (MethodIndex): Method facts of the module.
 
     """
 
@@ -344,12 +354,13 @@ class Attributes:
     """What the attribute prover concluded about a module.
 
     Attributes:
-        annotations: For each assignment that should carry the annotation
-            (the first write in ``__init__``, else the first write), its
-            annotation source.
-        types: For each class (by identity), the agreed type of each of its
-            instance attributes; every read of ``self.name`` in the class has
-            that type.
+        annotations (dict[int, str]): For each assignment that should carry the
+            annotation (the first write in ``__init__``,
+            else the first write), its annotation source.
+        types (dict[int, dict[str, str]]): For each class (by identity), the
+            agreed type
+            of each of its instance attributes; every read
+            of ``self.name`` in the class has that type.
 
     """
 
@@ -361,10 +372,10 @@ def attribute_annotations(*, scope: Scope) -> Attributes:
     """Find the instance attributes whose type every write proves.
 
     Args:
-        scope: What is known about the module.
+        scope (Scope): What is known about the module.
 
     Returns:
-        The assignments to annotate and the agreed types by class.
+        Attributes: The assignments to annotate and the agreed types by class.
 
     """
     found: Attributes = Attributes(annotations={}, types={})
@@ -397,13 +408,13 @@ def _class_annotations(
     """Annotate the attributes of one class.
 
     Args:
-        _cls: A class that is safe to reason about.
-        scope: What is known about the module.
-        stores: Attribute writes in the module, by name.
-        agreed: Receives each attribute's agreed type.
+        _cls (ClassDef): A class that is safe to reason about.
+        scope (Scope): What is known about the module.
+        stores (Mapping[str, int]): Attribute writes in the module, by name.
+        agreed (dict[str, str]): Receives each attribute's agreed type.
 
     Returns:
-        Annotation sources by assignment identity.
+        dict[int, str]: Annotation sources by assignment identity.
 
     """
     seen: dict[str, _Attribute] = {}

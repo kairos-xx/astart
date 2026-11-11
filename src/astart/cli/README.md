@@ -8,6 +8,8 @@ Command-line layer over the rule engine and fix runner.
 ### Files
 
 - [`__init__.py`](__init__.py) — Command-line layer over the rule engine and fix runner.
+- [`atomic.py`](atomic.py) — Atomic file replacement shared by the CLI commands.
+- [`backup.py`](backup.py) — Before-images and undo journal for ``astart fix --backup``.
 - [`baseline.py`](baseline.py) — Persist and apply finding baselines.
 - [`cache.py`](cache.py) — Persistent content-hash cache for ``astart fix``.
 - [`commands.py`](commands.py) — Implement the ``check`` and ``fix`` commands.
@@ -18,6 +20,7 @@ Command-line layer over the rule engine and fix runner.
 - [`junit.py`](junit.py) — Render findings as a JUnit XML document.
 - [`render.py`](render.py) — Render findings as text lines or a JSON document.
 - [`sarif.py`](sarif.py) — Render findings as a SARIF 2.1.0 document.
+- [`transforms.py`](transforms.py) — Expose explicit native AST wrapping and insertion as a separate command.
 
 ### Subdirectories
 

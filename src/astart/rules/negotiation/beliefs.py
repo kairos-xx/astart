@@ -19,13 +19,11 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        default_limit: Most union members a settled type may have.
-        not_none: Constraint text that removes ``None`` from a type.
+        default_limit (Final[int]): Most union members a settled type may have.
 
     """
 
     default_limit: Final[int] = 3
-    not_none: Final[str] = "!None"
 
 
 @final
@@ -50,8 +48,8 @@ class Belief:
         """Start with an empty belief.
 
         Args:
-            path: Path text of the node.
-            limit: Most union members a settled type may have.
+            path (str): Path text of the node.
+            limit (int): Most union members a settled type may have.
 
         """
         self.path: str = path
@@ -66,11 +64,11 @@ class Belief:
         """Fold one candidate into the belief.
 
         Args:
-            candidate: The proposed type.
-            polarity: How it contributes.
+            candidate (Candidate): The proposed type.
+            polarity (Polarity): How it contributes.
 
         Returns:
-            ``True`` when the belief changed.
+            bool: ``True`` when the belief changed.
 
         """
         if polarity is Polarity.capability:
@@ -87,7 +85,7 @@ class Belief:
         """Measure how undecided the belief is.
 
         Returns:
-            Shannon entropy of the normalized candidate confidences.
+            float: Shannon entropy of the normalized candidate confidences.
 
         """
         total: float = sum(
@@ -106,8 +104,8 @@ class Belief:
         """List every conflict, recorded or implied by the constraints.
 
         Returns:
-            Recorded clashes plus one per constraint that no value of the
-            current candidates can satisfy.
+            list[Conflict]: Recorded clashes plus one per constraint that
+                no value of the current candidates can satisfy.
 
         """
         found: list[Conflict] = list(self._recorded)
@@ -115,7 +113,7 @@ class Belief:
         if base is None:
             return found
         for text in sorted(self.constraints):
-            if text == Constants.not_none:
+            if text.startswith("!") or " & " in text:
                 continue
             result: Intersection = self._algebra.intersect(
                 left=base,
@@ -136,8 +134,9 @@ class Belief:
         """List what the settled type rests on.
 
         Returns:
-            The candidates, or the constraints when there are no candidates
-            (a declared upper bound travelling backward).
+            list[Candidate]: The candidates, or the constraints when there are
+                no
+                candidates (a declared upper bound travelling backward).
 
         """
         return list(
@@ -150,7 +149,7 @@ class Belief:
         """Collect everything that supports the current candidates.
 
         Returns:
-            The union of the candidates' origins.
+            frozenset[Origin]: The union of the candidates' origins.
 
         """
         return frozenset(
@@ -163,9 +162,10 @@ class Belief:
         """Decide the one type the evidence supports.
 
         Returns:
-            The declaration or the union of all candidates, narrowed by every
-            constraint; ``None`` while a conflict is open, when nothing is
-            known, or when the union has more members than allowed.
+            str | None: The declaration or the union of all candidates,
+                narrowed by every constraint; ``None`` while
+                a conflict is open, when nothing is known, or
+                when the union has more members than allowed.
 
         """
         if self.conflicts:
@@ -183,11 +183,12 @@ class Belief:
         """Apply this node's constraints to a candidate that leaves it.
 
         Args:
-            candidate: A candidate the node holds or has just received.
+            candidate (Candidate): A candidate the node holds or has just
+                received.
 
         Returns:
-            The candidate with its type narrowed, or ``None`` when nothing of
-            it survives.
+            Candidate | None: The candidate with its type narrowed, or
+                ``None`` when nothing of it survives.
 
         """
         current: str = candidate.type_text
@@ -205,8 +206,9 @@ class Belief:
         """Combine the candidates before any narrowing.
 
         Returns:
-            The declaration, the union of the candidates, or the meet of the
-            constraints when there are no candidates; ``None`` when unknown.
+            str | None: The declaration, the union of the candidates,
+                or the meet of the constraints when there
+                are no candidates; ``None`` when unknown.
 
         """
         if self.declared is not None:
@@ -218,7 +220,7 @@ class Belief:
             )
         bound: str | None = None
         for text in sorted(self.constraints):
-            if text == Constants.not_none:
+            if text.startswith("!") or " & " in text:
                 return None
             if bound is None:
                 bound = text
@@ -236,34 +238,24 @@ class Belief:
         """Narrow a type by one constraint.
 
         Args:
-            current: The type so far.
-            constraint: Constraint text.
+            current (str): The type so far.
+            constraint (str): Constraint text.
 
         Returns:
-            The narrowed type; unchanged when the relation is unknown.
+            str | None:
+                The narrowed type; unchanged when the relation is unknown.
 
         """
-        if constraint == Constants.not_none:
-            kept: list[str] = [
-                member
-                for member in self._algebra.members(source=current)
-                if member != "None"
-            ]
-            return " | ".join(kept) if kept else None
-        result: Intersection = self._algebra.intersect(
-            left=current,
-            right=constraint,
-        )
-        return result.type_text if result.decided else current
+        return self._algebra.narrow(current=current, constraint=constraint)
 
     def _declare(self, *, candidate: Candidate) -> bool:
         """Record a hard declaration.
 
         Args:
-            candidate: The declared type.
+            candidate (Candidate): The declared type.
 
         Returns:
-            ``True`` when the declaration is new.
+            bool: ``True`` when the declaration is new.
 
         """
         if self.declared is None:
@@ -280,7 +272,8 @@ class Belief:
         """Record a conflict when a candidate cannot satisfy the declaration.
 
         Args:
-            candidate: A candidate that was believed before or after.
+            candidate (Candidate): A candidate that was believed before or
+                after.
 
         """
         if self.declared is None:
@@ -296,10 +289,10 @@ class Belief:
         """Union a candidate into the belief.
 
         Args:
-            candidate: The proposed type.
+            candidate (Candidate): The proposed type.
 
         Returns:
-            ``True`` when the belief changed.
+            bool: ``True`` when the belief changed.
 
         """
         if self.declared is not None:
@@ -338,10 +331,10 @@ class Belief:
         """Remember a narrowing constraint.
 
         Args:
-            candidate: The narrowing type.
+            candidate (Candidate): The narrowing type.
 
         Returns:
-            ``True`` when the constraint, or an origin of it, is new.
+            bool: ``True`` when the constraint, or an origin of it, is new.
 
         """
         current: Candidate | None = self.constraints.get(candidate.type_text)
@@ -364,10 +357,10 @@ class Belief:
         """Record a conflict against every differing candidate.
 
         Args:
-            candidate: The clashing type.
+            candidate (Candidate): The clashing type.
 
         Returns:
-            ``True`` when a conflict was recorded.
+            bool: ``True`` when a conflict was recorded.
 
         """
         before: int = len(self._recorded)
@@ -380,8 +373,8 @@ class Belief:
         """Remember one conflict once.
 
         Args:
-            left: The type already believed.
-            candidate: The type that clashes with it.
+            left (str): The type already believed.
+            candidate (Candidate): The type that clashes with it.
 
         """
         found: Conflict = Conflict(

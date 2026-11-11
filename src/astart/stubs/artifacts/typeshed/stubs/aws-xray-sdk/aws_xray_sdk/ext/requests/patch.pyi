@@ -1,0 +1,11 @@
+def patch() -> None: ...
+def requests_processor(
+    wrapped,
+    instance,
+    args,
+    kwargs,
+    return_value,
+    exception,
+    subsegment,
+    stack,
+) -> None: ...

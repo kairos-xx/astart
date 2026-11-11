@@ -30,7 +30,8 @@ class Constants:
     """Constants used in the conditions module.
 
     Attributes:
-        equality: Comparison operator names decided by equality.
+        equality (Final[frozenset[str]]): Comparison operator names decided by
+            equality.
 
     """
 
@@ -43,9 +44,9 @@ class Target:
     """The environment a stub is read for.
 
     Attributes:
-        version: Python ``(major, minor)``.
-        platform: Value of ``sys.platform``.
-        implementation: Value of ``sys.implementation.name``.
+        version (tuple[int, int]): Python ``(major, minor)``.
+        platform (str): Value of ``sys.platform``.
+        implementation (str): Value of ``sys.implementation.name``.
 
     """
 
@@ -66,12 +67,13 @@ def _compare(
     of the ``ast`` classes created the node.
 
     Args:
-        left: Left operand.
-        operator: An ``ast`` comparison operator instance.
-        right: Right operand.
+        left (tuple[int, ...] | str | int): Left operand.
+        operator (cmpop): An ``ast`` comparison operator instance.
+        right (tuple[int, ...] | str | int): Right operand.
 
     Returns:
-        The result, or ``None`` for an operator or operands not understood.
+        bool | None:
+            The result, or ``None`` for an operator or operands not understood.
 
     """
     if type(left) is not type(right):
@@ -96,10 +98,11 @@ def _literal(*, node: expr) -> tuple[int, ...] | str | int | None:
     """Read a constant a stub compares against.
 
     Args:
-        node: The comparator.
+        node (expr): The comparator.
 
     Returns:
-        An int, a string, a tuple of ints, or ``None``.
+        tuple[int, ...] | str | int | None:
+            An int, a string, a tuple of ints, or ``None``.
 
     """
     if isinstance(node, Constant) and isinstance(node.value, (int, str)):
@@ -124,12 +127,14 @@ def _subject(
     """Read the environment value a comparison's left side stands for.
 
     Args:
-        node: The left operand.
-        target: The environment.
+        node (expr): The left operand.
+        target (Target): The environment.
 
     Returns:
-        ``sys.version_info`` (or an index or prefix of it), ``sys.platform``
-        or ``sys.implementation.name``; ``None`` for anything else.
+        tuple[int, ...] | str | int | None:
+            ``sys.version_info`` (or an index or
+            prefix of it), ``sys.platform`` or
+            ``sys.implementation.name``; ``None`` for anything else.
 
     """
     text: str = unparse(ast_obj=node)
@@ -159,11 +164,11 @@ def _sized(
     ``sys.version_info >= (3, 9)`` compares the first two fields only.
 
     Args:
-        subject: The environment value.
-        other: The literal on the other side.
+        subject (tuple[int, ...] | str | int): The environment value.
+        other (tuple[int, ...] | str | int): The literal on the other side.
 
     Returns:
-        The subject, trimmed when both are tuples.
+        tuple[int, ...] | str | int: The subject, trimmed when both are tuples.
 
     """
     if isinstance(subject, tuple) and isinstance(other, tuple):
@@ -175,11 +180,11 @@ def _comparison(*, node: Compare, target: Target) -> bool | None:
     """Evaluate ``subject OP literal``.
 
     Args:
-        node: The comparison.
-        target: The environment.
+        node (Compare): The comparison.
+        target (Target): The environment.
 
     Returns:
-        The truth value, or ``None`` when it cannot be decided.
+        bool | None: The truth value, or ``None`` when it cannot be decided.
 
     """
     if len(node.ops) != 1:
@@ -204,11 +209,11 @@ def _platform_call(*, node: Call, target: Target) -> bool | None:
     """Evaluate ``sys.platform.startswith("linux")``.
 
     Args:
-        node: A call expression.
-        target: The environment.
+        node (Call): A call expression.
+        target (Target): The environment.
 
     Returns:
-        The truth value, or ``None`` for any other call.
+        bool | None: The truth value, or ``None`` for any other call.
 
     """
     if (
@@ -227,12 +232,13 @@ def _boolean(*, node: BoolOp, target: Target) -> bool | None:
     """Evaluate ``a and b`` / ``a or b`` with three-valued logic.
 
     Args:
-        node: The boolean operation.
-        target: The environment.
+        node (BoolOp): The boolean operation.
+        target (Target): The environment.
 
     Returns:
-        ``True``/``False`` when decided (a decided operand can settle an
-        ``and``/``or`` even if another is unknown), else ``None``.
+        bool | None:
+            ``True`` /``False`` when decided (a decided operand can settle
+            an ``and`` /``or`` even if another is unknown), else ``None``.
 
     """
     results: list[bool | None] = [
@@ -248,12 +254,12 @@ def evaluate(*, test: expr, target: Target) -> bool | None:
     """Decide a stub ``if`` test for an environment.
 
     Args:
-        test: The test expression.
-        target: The environment.
+        test (expr): The test expression.
+        target (Target): The environment.
 
     Returns:
-        ``True`` or ``False`` when decided; ``None`` when the test depends
-        on something this evaluator does not know.
+        bool | None: ``True`` or ``False`` when decided; ``None`` when the
+            test depends on something this evaluator does not know.
 
     """
     if isinstance(test, Constant) and isinstance(test.value, bool):

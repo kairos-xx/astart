@@ -1,0 +1,19 @@
+# `client/`
+
+Provide   init   pyi content.
+
+<!-- exactus:inventory:start -->
+## Directory contents
+
+### Files
+
+- [`__init__.pyi`](__init__.pyi) — Provide   init   pyi content.
+- [`build.pyi`](build.pyi) — Provide build pyi content.
+- [`dynamic.pyi`](dynamic.pyi) — Provide dynamic pyi content.
+- [`gencache.pyi`](gencache.pyi) — Provide gencache pyi content.
+
+### Subdirectories
+
+No subdirectories.
+
+<!-- exactus:inventory:end -->

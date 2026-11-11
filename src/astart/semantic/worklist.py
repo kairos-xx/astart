@@ -1,9 +1,10 @@
 """Incremental, deletion-safe, deterministic forward dataflow solver.
 
 The engine owns immutable fact mappings and accepts pure transfer
-functions.  It recomputes joins from predecessor outputs, rather than
+functions. It recomputes joins from predecessor outputs, rather than
 monotonically unioning previous inputs, so changed or deleted facts can be
 removed at a fixed point.
+
 """
 
 from __future__ import annotations
@@ -23,10 +24,12 @@ class SolveStatistics:
     """Counters for one incremental worklist pass.
 
     Attributes:
-        changed: Changed retained as frozenset[int] by this instance.
-        converged: Converged retained as bool by this instance.
-        transfers: Transfers retained as int by this instance.
-        visited: Visited retained as frozenset[int] by this instance.
+        changed (frozenset[int]): Changed retained as frozenset[int] by this
+            instance.
+        converged (bool): Converged retained as bool by this instance.
+        transfers (int): Transfers retained as int by this instance.
+        visited (frozenset[int]): Visited retained as frozenset[int] by this
+            instance.
 
     """
 
@@ -41,8 +44,9 @@ class IncrementalWorklist:
     """Compute and incrementally maintain a forward may-analysis fixed point.
 
     Transfer functions must be deterministic, monotone, and have finite-height
-    fact lattices.  When the caller changes the graph, it must pass changed
+    fact lattices. When the caller changes the graph, it must pass changed
     nodes as dirty nodes; changed predecessors are discovered automatically.
+
     """
 
     def __init__(
@@ -56,11 +60,14 @@ class IncrementalWorklist:
         """Initialize graph and an initially empty dataflow solution.
 
         Args:
-            entry: Entry supplied as int for this operation.
-            max_transfers: Max transfers supplied as int for this operation.
-            successors: Successors supplied as Mapping[int, tuple[int, ...]]
-                for this operation.
-            transfer: Transfer supplied as Transfer for this operation.
+            entry (int): Entry supplied as int for this operation.
+            max_transfers (int): Max transfers supplied as int for this
+                operation.
+            successors (Mapping[int, tuple[int, ...]]): Successors supplied as
+                Mapping[int,
+                tuple[int, ...]] for this operation.
+            transfer (Transfer): Transfer supplied as Transfer for this
+                operation.
 
         Raises:
             ValueError: If this operation cannot satisfy its documented
@@ -98,12 +105,14 @@ class IncrementalWorklist:
         """Replace edges, drop vanished blocks and solve the affected part.
 
         Args:
-            dirty: Dirty supplied as frozenset[int] for this operation.
-            successors: Successors supplied as Mapping[int, tuple[int, ...]]
-                for this operation.
+            dirty (frozenset[int]): Dirty supplied as frozenset[int] for this
+                operation.
+            successors (Mapping[int, tuple[int, ...]]): Successors supplied as
+                Mapping[int,
+                tuple[int, ...]] for this operation.
 
         Returns:
-            SolveStatistics produced by this operation.
+            SolveStatistics: SolveStatistics produced by this operation.
 
         """
         updated: dict[int, tuple[int, ...]] = dict(successors)
@@ -136,12 +145,12 @@ class IncrementalWorklist:
         A result that exceeds the budget is marked non-converged and MUST NOT
         be used as a sound fixed point by callers.
 
-
         Args:
-            dirty: Dirty supplied as frozenset[int] | None for this operation.
+            dirty (frozenset[int] | None): Dirty supplied as frozenset[int] |
+                None for this operation.
 
         Returns:
-            SolveStatistics produced by this operation.
+            SolveStatistics: SolveStatistics produced by this operation.
 
         """
         initial: tuple[int, ...] = (
@@ -209,11 +218,13 @@ class IncrementalWorklist:
         """Build a complete reverse index and reject dangling edge targets.
 
         Args:
-            successors: Successors supplied as Mapping[int, tuple[int, ...]]
-                for this operation.
+            successors (Mapping[int, tuple[int, ...]]): Successors supplied as
+                Mapping[int,
+                tuple[int, ...]] for this operation.
 
         Returns:
-            dict[int, set[int]] produced by this operation.
+            dict[int, set[int]]: dict[int, set[int]] produced by this
+                operation.
 
         Raises:
             ValueError: If this operation cannot satisfy its documented
@@ -236,10 +247,11 @@ class IncrementalWorklist:
         """Join incoming finite sets of facts deterministically.
 
         Args:
-            values: Values supplied as tuple[Facts, ...] for this operation.
+            values (tuple[Facts, ...]): Values supplied as tuple[Facts, ...]
+                for this operation.
 
         Returns:
-            Facts produced by this operation.
+            Facts: Facts produced by this operation.
 
         """
         merged: Facts = {}
@@ -258,10 +270,11 @@ class IncrementalWorklist:
         """Drop the facts of every block reachable from ``seeds``.
 
         Args:
-            seeds: Blocks whose transfer facts changed.
+            seeds (tuple[int, ...]): Blocks whose transfer facts changed.
 
         Returns:
-            Sorted identities of the seeds and all their transitive successors.
+            tuple[int, ...]: Sorted identities of the seeds and
+                all their transitive successors.
 
         """
         affected: set[int] = set(seeds)

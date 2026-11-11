@@ -21,11 +21,11 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        stdlib: Directory of the standard-library stubs.
-        stubs: Directory of the third-party stub distributions.
-        init: File that makes a stub directory a package.
-        suffix: Extension of a stub file.
-        depth: Longest import or alias chain that is followed.
+        stdlib (Final[str]): Directory of the standard-library stubs.
+        stubs (Final[str]): Directory of the third-party stub distributions.
+        init (Final[str]): File that makes a stub directory a package.
+        suffix (Final[str]): Extension of a stub file.
+        depth (Final[int]): Longest import or alias chain that is followed.
 
     """
 
@@ -42,9 +42,10 @@ class Resolved:
     """A name found, with the module that defines it.
 
     Attributes:
-        name: The definition.
-        module: The stub module it lives in.
-        owner: The class it is a member of, when it is a method.
+        name (StubName): The definition.
+        module (StubModule): The stub module it lives in.
+        owner (StubName | None): The class it is a member of, when it is a
+            method.
 
     """
 
@@ -61,8 +62,9 @@ class Resolver:
         """Index the layout of a typeshed copy.
 
         Args:
-            typeshed: A typeshed root (``stdlib/`` and ``stubs/``).
-            target: The Python version and platform to read the stubs for.
+            typeshed (Path): A typeshed root (``stdlib/`` and ``stubs/``).
+            target (Target): The Python version and platform to read the stubs
+                for.
 
         """
         self._root: Path = typeshed
@@ -80,11 +82,12 @@ class Resolver:
         """Read a module's stub, once.
 
         Args:
-            name: Dotted module name.
+            name (str): Dotted module name.
 
         Returns:
-            Its names, or ``None`` when there is no stub or the module does
-            not exist in the target Python version.
+            StubModule | None:
+                Its names, or ``None`` when there is no stub or the
+                module does not exist in the target Python version.
 
         """
         if name not in self._modules:
@@ -95,7 +98,8 @@ class Resolver:
         """Map each top-level third-party package to its stub directory.
 
         Returns:
-            Package name to the ``stubs/<dist>`` directory holding it.
+            dict[str, Path]: Package name to the ``stubs/<dist>`` directory
+                holding it.
 
         """
         if self._distributions is None:
@@ -116,10 +120,11 @@ class Resolver:
         """Find the stub file of a module.
 
         Args:
-            name: Dotted module name.
+            name (str): Dotted module name.
 
         Returns:
-            The path and whether it is a package ``__init__``, or ``None``.
+            tuple[Path, bool] | None: The path and whether it is a
+                package ``__init__``, or ``None``.
 
         """
         parts: list[str] = name.split(sep=".")
@@ -142,10 +147,10 @@ class Resolver:
         """Parse a module's stub file.
 
         Args:
-            name: Dotted module name.
+            name (str): Dotted module name.
 
         Returns:
-            The parsed module, or ``None``.
+            StubModule | None: The parsed module, or ``None``.
 
         """
         if not module_available(
@@ -176,23 +181,44 @@ class Resolver:
         class members are followed.
 
         Args:
-            qualified: A dotted name such as ``os.path.join``.
+            qualified (str): A dotted name such as ``os.path.join``.
 
         Returns:
-            The definition, or ``None`` when it is not found.
+            Resolved | None: The definition, or ``None`` when it is not found.
 
         """
         return self._walk(qualified=qualified, hops=0)
+
+    def resolve_method(
+        self,
+        *,
+        class_name: str,
+        method: str,
+    ) -> Resolved | None:
+        """Find a method on a stub class.
+
+        Args:
+            class_name (str): Qualified class name such as ``pathlib.Path``.
+            method (str): Method name.
+
+        Returns:
+            Resolved | None: The method with its owner set, or ``None``.
+
+        """
+        found: Resolved | None = self.resolve(
+            qualified=f"{class_name}.{method}",
+        )
+        return found if found is not None and found.owner is not None else None
 
     def _walk(self, *, qualified: str, hops: int) -> Resolved | None:
         """Resolve a dotted name, bounded against import cycles.
 
         Args:
-            qualified: A dotted name.
-            hops: Links followed so far.
+            qualified (str): A dotted name.
+            hops (int): Links followed so far.
 
         Returns:
-            The definition, or ``None``.
+            Resolved | None: The definition, or ``None``.
 
         """
         if hops > Constants.depth:
@@ -221,12 +247,12 @@ class Resolver:
         """Walk names inside a module, through classes and imports.
 
         Args:
-            module: The module the walk starts in.
-            path: Remaining names.
-            hops: Links followed so far.
+            module (StubModule): The module the walk starts in.
+            path (list[str]): Remaining names.
+            hops (int): Links followed so far.
 
         Returns:
-            The definition, or ``None``.
+            Resolved | None: The definition, or ``None``.
 
         """
         scope: dict[str, StubName] = module.names
@@ -266,12 +292,12 @@ class Resolver:
         """Look a name up in the modules a stub star-imports.
 
         Args:
-            module: The importing module.
-            part: The name.
+            module (StubModule): The importing module.
+            part (str): The name.
 
         Returns:
-            The exported definition and the module that defines it, or
-            ``None``.
+            tuple[StubName, StubModule] | None: The exported definition and the
+                module that defines it, or ``None``.
 
         """
         for star in module.stars:
@@ -294,13 +320,13 @@ class Resolver:
         """Follow an import or alias to the name it stands for.
 
         Args:
-            current: The import or alias entry.
-            module: The module it appears in.
-            rest: Names still to walk after it.
-            hops: Links followed so far.
+            current (StubName): The import or alias entry.
+            module (StubModule): The module it appears in.
+            rest (list[str]): Names still to walk after it.
+            hops (int): Links followed so far.
 
         Returns:
-            The definition, or ``None``.
+            Resolved | None: The definition, or ``None``.
 
         """
         target: str | None
@@ -319,10 +345,10 @@ def _qualified(*, imported: ImportedName) -> str:
     """Spell what an import refers to.
 
     Args:
-        imported: The import record.
+        imported (ImportedName): The import record.
 
     Returns:
-        ``module`` or ``module.name``.
+        str: ``module`` or ``module.name``.
 
     """
     return (
@@ -336,12 +362,12 @@ def _alias(*, module: StubModule, text: str) -> str:
     """Spell the target of an ``X = Y`` alias.
 
     Args:
-        module: The module with the assignment.
-        text: The right-hand side as dotted text.
+        module (StubModule): The module with the assignment.
+        text (str): The right-hand side as dotted text.
 
     Returns:
-        A qualified name: the module's own name for a bare name, or the
-        name as written for a dotted one (resolved from the root).
+        str: A qualified name: the module's own name for a bare name, or the
+            name as written for a dotted one (resolved from the root).
 
     """
     head, _, tail = text.partition(".")
@@ -360,12 +386,12 @@ def default_resolver(
     """Build the process-wide resolver for a target, once.
 
     Args:
-        version: Python ``(major, minor)``.
-        platform: ``sys.platform`` value.
+        version (tuple[int, int]): Python ``(major, minor)``.
+        platform (str): ``sys.platform`` value.
 
     Returns:
-        A resolver over the typeshed copy found on this machine, or ``None``
-        when there is none.
+        Resolver | None: A resolver over the typeshed copy found on
+            this machine, or ``None`` when there is none.
 
     """
     root: Path | None = find_typeshed()
@@ -381,7 +407,8 @@ def host_resolver() -> Resolver | None:
     """Give the resolver for the running Python and platform.
 
     Returns:
-        The process-wide resolver, or ``None`` without a typeshed copy.
+        Resolver | None:
+            The process-wide resolver, or ``None`` without a typeshed copy.
 
     """
     return default_resolver(

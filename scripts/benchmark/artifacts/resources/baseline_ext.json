@@ -1,0 +1,7106 @@
+{
+  "summary": {
+    "modules": 165,
+    "truth": 12789,
+    "correct": 2511,
+    "wrong": 6,
+    "compatible": 136,
+    "precision": 0.997738,
+    "recall": 0.196341,
+    "crashed": [],
+    "seconds": 878.9,
+    "new_errors": 0,
+    "rounds": [
+      [
+        2,
+        162
+      ],
+      [
+        3,
+        3
+      ]
+    ],
+    "missed_reasons": {
+      "no candidate": 3670,
+      "tainted": 2228,
+      "None default": 1083,
+      "uncorroborated": 561,
+      "call sites unknown": 477,
+      "return type not provable": 435,
+      "contains object": 351,
+      "not judged": 346,
+      "declaration body": 281,
+      "generator": 227,
+      "escapes as a value": 101,
+      "protocol result differs": 53,
+      "needs import or unknown name": 22,
+      "default disagrees": 14,
+      "call sites disagree": 1
+    }
+  },
+  "modules": [
+    {
+      "name": "anyio__anyio___backends___trio.py",
+      "truth": 311,
+      "correct": 72,
+      "wrong": [
+        "_SignalReceiver.__aiter__->: wrote '_Self', expected '_SignalReceiver'"
+      ],
+      "compatible": [
+        "CapacityLimiter.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "TaskGroup.start.return_handle: wrote 'bool' (looser), expected 'Literal[False, True]'",
+        "TestRunner.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "TrioBackend.open_signal_receiver->: wrote '_SignalReceiver' (unresolved), expected 'AbstractContextManager[AsyncIterator[Signals]]'"
+      ],
+      "synthesized": 4,
+      "seconds": 3.792,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          110
+        ],
+        [
+          "tainted",
+          72
+        ],
+        [
+          "None default",
+          18
+        ],
+        [
+          "return type not provable",
+          13
+        ],
+        [
+          "not judged",
+          6
+        ],
+        [
+          "contains object",
+          4
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "protocol result differs",
+          3
+        ],
+        [
+          "needs import or unknown name",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "generator",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "anyio__anyio___core___fileio.py",
+      "truth": 154,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [
+        "Path.cwd->: wrote '_Self' (unresolved), expected 'Self'",
+        "Path.home->: wrote '__Self' (unresolved), expected 'Self'"
+      ],
+      "synthesized": 0,
+      "seconds": 2.129,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          65
+        ],
+        [
+          "no candidate",
+          25
+        ],
+        [
+          "None default",
+          14
+        ],
+        [
+          "not judged",
+          13
+        ],
+        [
+          "uncorroborated",
+          7
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "protocol result differs",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "anyio__anyio___core___sockets.py",
+      "truth": 87,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 1.889,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          19
+        ],
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "None default",
+          14
+        ],
+        [
+          "not judged",
+          9
+        ],
+        [
+          "call sites unknown",
+          5
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "default disagrees",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "anyio__anyio___core___synchronization.py",
+      "truth": 140,
+      "correct": 38,
+      "wrong": [],
+      "compatible": [
+        "Condition.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "Lock.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "LockAdapter.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "ResourceGuard.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "Semaphore.__aexit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 5,
+      "seconds": 1.504,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          33
+        ],
+        [
+          "declaration body",
+          27
+        ],
+        [
+          "tainted",
+          22
+        ],
+        [
+          "None default",
+          5
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "protocol result differs",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "anyio__anyio___core___tempfile.py",
+      "truth": 95,
+      "correct": 13,
+      "wrong": [],
+      "compatible": [
+        "NamedTemporaryFile.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "TemporaryDirectory.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "TemporaryFile.__aexit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 1.055,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          28
+        ],
+        [
+          "not judged",
+          17
+        ],
+        [
+          "tainted",
+          17
+        ],
+        [
+          "no candidate",
+          14
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "anyio__anyio__abc___eventloop.py",
+      "truth": 120,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.413,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          52
+        ],
+        [
+          "declaration body",
+          44
+        ],
+        [
+          "None default",
+          9
+        ],
+        [
+          "not judged",
+          7
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "anyio__anyio__from_thread.py",
+      "truth": 79,
+      "correct": 17,
+      "wrong": [],
+      "compatible": [
+        "BlockingPortalProvider.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 5,
+      "seconds": 1.355,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          25
+        ],
+        [
+          "tainted",
+          9
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "generator",
+          1
+        ],
+        [
+          "needs import or unknown name",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "anyio__anyio__itertools.py",
+      "truth": 78,
+      "correct": 3,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 1.594,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          26
+        ],
+        [
+          "generator",
+          19
+        ],
+        [
+          "tainted",
+          6
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "needs import or unknown name",
+          4
+        ],
+        [
+          "not judged",
+          4
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "arrow__arrow__api.py",
+      "truth": 14,
+      "correct": 1,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.121,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          7
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "arrow__arrow__factory.py",
+      "truth": 14,
+      "correct": 2,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.457,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          7
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "None default",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "arrow__arrow__parser.py",
+      "truth": 26,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 2.062,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          6
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "no candidate",
+          3
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "arrow__arrow__util.py",
+      "truth": 15,
+      "correct": 3,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.19,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          5
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "tainted",
+          3
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "cattrs__cattrs__disambiguators.py",
+      "truth": 13,
+      "correct": 1,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 0.566,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "tainted",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "cattrs__cattrs__errors.py",
+      "truth": 27,
+      "correct": 2,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.251,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "tainted",
+          6
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "cattrs__cattrs__gen__typeddicts.py",
+      "truth": 16,
+      "correct": 2,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.71,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          5
+        ],
+        [
+          "tainted",
+          5
+        ],
+        [
+          "not judged",
+          3
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "cattrs__cattrs__preconf__msgspec.py",
+      "truth": 31,
+      "correct": 3,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 7,
+      "seconds": 0.513,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          11
+        ],
+        [
+          "tainted",
+          9
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "call sites unknown",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "click__click___compat.py",
+      "truth": 120,
+      "correct": 29,
+      "wrong": [],
+      "compatible": [
+        "_AtomicFile.__enter__->: wrote 'Self' (narrower), expected '_AtomicFile'",
+        "_AtomicFile.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "_wrap_io_open.errors: wrote 'str' (narrower), expected 'str | None'"
+      ],
+      "synthesized": 10,
+      "seconds": 2.505,
+      "rounds": 3,
+      "missed_reasons": [
+        [
+          "no candidate",
+          23
+        ],
+        [
+          "tainted",
+          22
+        ],
+        [
+          "call sites unknown",
+          12
+        ],
+        [
+          "escapes as a value",
+          6
+        ],
+        [
+          "return type not provable",
+          6
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "None default",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "not judged",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "click__click___termui_impl.py",
+      "truth": 90,
+      "correct": 23,
+      "wrong": [],
+      "compatible": [
+        "ProgressBar.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 2.99,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          16
+        ],
+        [
+          "call sites unknown",
+          14
+        ],
+        [
+          "None default",
+          10
+        ],
+        [
+          "no candidate",
+          8
+        ],
+        [
+          "generator",
+          5
+        ],
+        [
+          "not judged",
+          4
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "default disagrees",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "click__click__decorators.py",
+      "truth": 87,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 4,
+      "seconds": 1.153,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          42
+        ],
+        [
+          "tainted",
+          18
+        ],
+        [
+          "None default",
+          9
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "not judged",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "click__click__shell_completion.py",
+      "truth": 68,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [
+        "shell_complete->: wrote 'int' (looser), expected 'Literal[0, 1]'"
+      ],
+      "synthesized": 2,
+      "seconds": 1.196,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          34
+        ],
+        [
+          "tainted",
+          8
+        ],
+        [
+          "return type not provable",
+          6
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "click__click__termui.py",
+      "truth": 103,
+      "correct": 25,
+      "wrong": [],
+      "compatible": [
+        "_build_prompt.show_default: wrote 'bool' (narrower), expected 'bool | str'",
+        "prompt.confirmation_prompt: wrote 'bool' (narrower), expected 'bool | str'",
+        "prompt.show_default: wrote 'bool' (narrower), expected 'bool | str'"
+      ],
+      "synthesized": 1,
+      "seconds": 1.311,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          27
+        ],
+        [
+          "tainted",
+          13
+        ],
+        [
+          "not judged",
+          10
+        ],
+        [
+          "no candidate",
+          8
+        ],
+        [
+          "call sites unknown",
+          7
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "default disagrees",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "click__click__testing.py",
+      "truth": 92,
+      "correct": 18,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.721,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          17
+        ],
+        [
+          "no candidate",
+          16
+        ],
+        [
+          "None default",
+          9
+        ],
+        [
+          "not judged",
+          7
+        ],
+        [
+          "escapes as a value",
+          6
+        ],
+        [
+          "call sites unknown",
+          5
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "generator",
+          3
+        ],
+        [
+          "declaration body",
+          1
+        ],
+        [
+          "default disagrees",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "click__click__types.py",
+      "truth": 188,
+      "correct": 36,
+      "wrong": [],
+      "compatible": [
+        "Choice.get_metavar->: wrote 'str' (narrower), expected 'str | None'",
+        "_is_file_like->: wrote 'bool' (looser), expected 'TypeIs[IO[Any]]'"
+      ],
+      "synthesized": 1,
+      "seconds": 3.731,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          69
+        ],
+        [
+          "tainted",
+          38
+        ],
+        [
+          "None default",
+          14
+        ],
+        [
+          "uncorroborated",
+          10
+        ],
+        [
+          "call sites unknown",
+          7
+        ],
+        [
+          "declaration body",
+          4
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "protocol result differs",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "click__click__utils.py",
+      "truth": 82,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [
+        "_KeepOpenFile.__enter__->: wrote 'Self' (narrower), expected '_KeepOpenFile'",
+        "_LazyFile.__enter__->: wrote 'Self' (narrower), expected '_LazyFile'",
+        "_LazyFile.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 3,
+      "seconds": 1.051,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          18
+        ],
+        [
+          "tainted",
+          16
+        ],
+        [
+          "None default",
+          7
+        ],
+        [
+          "not judged",
+          6
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "fastapi__fastapi___compat__shared.py",
+      "truth": 31,
+      "correct": 9,
+      "wrong": [],
+      "compatible": [
+        "lenient_issubclass->: wrote 'bool' (looser), expected 'TypeGuard[type[_T]]'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.553,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          9
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "tainted",
+          5
+        ],
+        [
+          "not judged",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "fastapi__fastapi___compat__v2.py",
+      "truth": 85,
+      "correct": 13,
+      "wrong": [],
+      "compatible": [
+        "GenerateJsonSchema.bytes_schema->: wrote 'dict[str, str]' (unresolved), expected 'JsonSchemaValue'"
+      ],
+      "synthesized": 5,
+      "seconds": 1.247,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          21
+        ],
+        [
+          "no candidate",
+          20
+        ],
+        [
+          "None default",
+          8
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "call sites unknown",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "fastapi__fastapi__datastructures.py",
+      "truth": 22,
+      "correct": 1,
+      "wrong": [
+        "UploadFile.__get_pydantic_json_schema__->: wrote 'dict[str, str]', expected 'dict[str, Any]'"
+      ],
+      "compatible": [
+        "Default->: wrote 'DefaultPlaceholder' (unresolved), expected 'DefaultType'",
+        "Default.value: wrote 'None' (unresolved), expected 'DefaultType'",
+        "DefaultPlaceholder.__init__.value: wrote 'None' (narrower), expected 'Any'"
+      ],
+      "synthesized": 1,
+      "seconds": 0.152,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "tainted",
+          6
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "fastapi__fastapi__dependencies__models.py",
+      "truth": 35,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 7,
+      "seconds": 0.697,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          7
+        ],
+        [
+          "contains object",
+          6
+        ],
+        [
+          "return type not provable",
+          6
+        ],
+        [
+          "no candidate",
+          3
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "call sites unknown",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "fastapi__fastapi__dependencies__utils.py",
+      "truth": 128,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 8,
+      "seconds": 6.022,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          41
+        ],
+        [
+          "tainted",
+          22
+        ],
+        [
+          "call sites unknown",
+          17
+        ],
+        [
+          "contains object",
+          16
+        ],
+        [
+          "return type not provable",
+          8
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "fastapi__fastapi__openapi__utils.py",
+      "truth": 49,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 2.548,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "None default",
+          9
+        ],
+        [
+          "return type not provable",
+          9
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "tainted",
+          2
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "fastapi__fastapi__params.py",
+      "truth": 263,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 8,
+      "seconds": 1.206,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          166
+        ],
+        [
+          "None default",
+          81
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "fastapi__fastapi__telemetry___asgi.py",
+      "truth": 35,
+      "correct": 10,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 1.302,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          7
+        ],
+        [
+          "contains object",
+          4
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "call sites unknown",
+          3
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "escapes as a value",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "filelock__filelock___async.py",
+      "truth": 78,
+      "correct": 16,
+      "wrong": [],
+      "compatible": [
+        "_raise_cancelled_error->: wrote 'None' (looser), expected 'NoReturn'"
+      ],
+      "synthesized": 10,
+      "seconds": 1.951,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          16
+        ],
+        [
+          "uncorroborated",
+          15
+        ],
+        [
+          "return type not provable",
+          6
+        ],
+        [
+          "call sites unknown",
+          5
+        ],
+        [
+          "tainted",
+          5
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "needs import or unknown name",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "filelock__filelock___async_read_write.py",
+      "truth": 56,
+      "correct": 16,
+      "wrong": [],
+      "compatible": [
+        "AsyncAcquireReadWriteReturnProxy.__aexit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.853,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          11
+        ],
+        [
+          "tainted",
+          11
+        ],
+        [
+          "None default",
+          10
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "filelock__filelock___soft.py",
+      "truth": 77,
+      "correct": 25,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.991,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "uncorroborated",
+          13
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "return type not provable",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "filelock__filelock___soft_rw___protocol.py",
+      "truth": 112,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 4,
+      "seconds": 3.273,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          54
+        ],
+        [
+          "tainted",
+          22
+        ],
+        [
+          "declaration body",
+          8
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "None default",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "filelock__filelock___soft_rw___sync.py",
+      "truth": 104,
+      "correct": 28,
+      "wrong": [],
+      "compatible": [
+        "SoftReadWriteLock._report_compromise.reason: wrote 'str' (unresolved), expected 'CompromiseReason'",
+        "SoftReadWriteLock.get_lock->: wrote 'Self' (narrower), expected 'SoftReadWriteLock'"
+      ],
+      "synthesized": 4,
+      "seconds": 2.576,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "call sites unknown",
+          21
+        ],
+        [
+          "no candidate",
+          18
+        ],
+        [
+          "None default",
+          12
+        ],
+        [
+          "tainted",
+          12
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "filelock__filelock___strict.py",
+      "truth": 223,
+      "correct": 38,
+      "wrong": [
+        "_describe_soft_marker->: wrote 'tuple[str, str]', expected 'tuple[_OccupantState, str]'"
+      ],
+      "compatible": [
+        "_claim_name.state: wrote 'str' (looser), expected 'StrictSoftFileClaimState'",
+        "_raise_record_finalization_errors->: wrote 'NoReturn' (narrower), expected 'None'",
+        "_raise_recorded_errors->: wrote 'NoReturn' (narrower), expected 'None'"
+      ],
+      "synthesized": 12,
+      "seconds": 7.442,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          48
+        ],
+        [
+          "call sites unknown",
+          47
+        ],
+        [
+          "contains object",
+          30
+        ],
+        [
+          "tainted",
+          29
+        ],
+        [
+          "return type not provable",
+          13
+        ],
+        [
+          "needs import or unknown name",
+          4
+        ],
+        [
+          "escapes as a value",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "filelock__filelock___windows.py",
+      "truth": 0,
+      "correct": 0,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.991,
+      "rounds": 2,
+      "missed_reasons": [],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "filelock__filelock__asyncio.py",
+      "truth": 128,
+      "correct": 37,
+      "wrong": [],
+      "compatible": [
+        "AsyncAcquireReturnProxy.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "BaseAsyncFileLock.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "BaseAsyncFileLock.__enter__->: wrote 'None' (looser), expected 'NoReturn'",
+        "BaseAsyncFileLock.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "BaseAsyncFileLock._raise_acquire_rollback_errors->: wrote 'None' (looser), expected 'NoReturn'",
+        "BaseAsyncFileLock._raise_cancelled_errors->: wrote 'None' (looser), expected 'NoReturn'"
+      ],
+      "synthesized": 0,
+      "seconds": 2.068,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          32
+        ],
+        [
+          "None default",
+          16
+        ],
+        [
+          "tainted",
+          12
+        ],
+        [
+          "uncorroborated",
+          9
+        ],
+        [
+          "not judged",
+          7
+        ],
+        [
+          "needs import or unknown name",
+          4
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "flask__flask__cli.py",
+      "truth": 107,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 5,
+      "seconds": 2.646,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          49
+        ],
+        [
+          "tainted",
+          18
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "flask__flask__ctx.py",
+      "truth": 56,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [
+        "AppContext.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "RequestContext.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.64,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          22
+        ],
+        [
+          "tainted",
+          12
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "flask__flask__helpers.py",
+      "truth": 51,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [
+        "abort->: wrote 'None' (looser), expected 'NoReturn'",
+        "send_file.etag: wrote 'bool' (narrower), expected 'bool | str'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.707,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "None default",
+          9
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "generator",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "flask__flask__json__tag.py",
+      "truth": 69,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [
+        "TagMarkup.to_json->: wrote 'str' (narrower), expected 'Any'",
+        "TagUUID.to_python->: wrote 'UUID' (narrower), expected 'Any'"
+      ],
+      "synthesized": 1,
+      "seconds": 429.225,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          23
+        ],
+        [
+          "tainted",
+          18
+        ],
+        [
+          "contains object",
+          8
+        ],
+        [
+          "declaration body",
+          3
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "escapes as a value",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "flask__flask__sansio__app.py",
+      "truth": 80,
+      "correct": 15,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 1.16,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          26
+        ],
+        [
+          "tainted",
+          18
+        ],
+        [
+          "None default",
+          13
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "declaration body",
+          1
+        ],
+        [
+          "escapes as a value",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "flask__flask__sansio__blueprints.py",
+      "truth": 95,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 6,
+      "seconds": 1.284,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          30
+        ],
+        [
+          "None default",
+          18
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "contains object",
+          6
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "call sites unknown",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "flask__flask__sansio__scaffold.py",
+      "truth": 81,
+      "correct": 5,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.112,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          37
+        ],
+        [
+          "tainted",
+          22
+        ],
+        [
+          "None default",
+          7
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "flask__flask__sessions.py",
+      "truth": 51,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 11,
+      "seconds": 0.753,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "return type not provable",
+          9
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "h11__h11___connection.py",
+      "truth": 39,
+      "correct": 8,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 1.476,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          11
+        ],
+        [
+          "call sites unknown",
+          8
+        ],
+        [
+          "no candidate",
+          8
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "h11__h11___events.py",
+      "truth": 22,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.475,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          9
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "h11__h11___headers.py",
+      "truth": 22,
+      "correct": 8,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 0.455,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "tainted",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "h11__h11___readers.py",
+      "truth": 22,
+      "correct": 5,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 2,
+      "seconds": 0.687,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "h11__h11___receivebuffer.py",
+      "truth": 13,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.244,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          6
+        ],
+        [
+          "no candidate",
+          2
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "h11__h11___state.py",
+      "truth": 15,
+      "correct": 8,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.592,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "h11__h11___util.py",
+      "truth": 18,
+      "correct": 2,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 0.143,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "default disagrees",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "h11__h11___writers.py",
+      "truth": 38,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 4,
+      "seconds": 0.345,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "contains object",
+          11
+        ],
+        [
+          "no candidate",
+          8
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpcore__httpcore___async__http11.py",
+      "truth": 55,
+      "correct": 17,
+      "wrong": [],
+      "compatible": [
+        "AsyncHTTP11Connection.__aenter__->: wrote 'Self' (narrower), expected 'AsyncHTTP11Connection'",
+        "AsyncHTTP11Connection.__aexit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.811,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "None default",
+          10
+        ],
+        [
+          "tainted",
+          7
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpcore__httpcore___async__http2.py",
+      "truth": 65,
+      "correct": 19,
+      "wrong": [],
+      "compatible": [
+        "AsyncHTTP2Connection.__aenter__->: wrote 'Self' (narrower), expected 'AsyncHTTP2Connection'",
+        "AsyncHTTP2Connection.__aexit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 2,
+      "seconds": 1.579,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          27
+        ],
+        [
+          "None default",
+          5
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpcore__httpcore___async__http_proxy.py",
+      "truth": 62,
+      "correct": 13,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.807,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          21
+        ],
+        [
+          "tainted",
+          14
+        ],
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "not judged",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpcore__httpcore___backends__mock.py",
+      "truth": 66,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [
+        "AsyncMockStream.start_tls->: wrote 'Self' (unresolved), expected 'AsyncNetworkStream'",
+        "MockStream.start_tls->: wrote 'Self' (unresolved), expected 'NetworkStream'"
+      ],
+      "synthesized": 1,
+      "seconds": 0.246,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          21
+        ],
+        [
+          "None default",
+          18
+        ],
+        [
+          "tainted",
+          8
+        ],
+        [
+          "declaration body",
+          4
+        ],
+        [
+          "contains object",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpcore__httpcore___models.py",
+      "truth": 63,
+      "correct": 18,
+      "wrong": [],
+      "compatible": [
+        "URL.__init__.host: wrote 'bytes' (narrower), expected 'bytes | str'",
+        "URL.__init__.scheme: wrote 'bytes' (narrower), expected 'bytes | str'",
+        "URL.__init__.target: wrote 'bytes' (narrower), expected 'bytes | str'"
+      ],
+      "synthesized": 2,
+      "seconds": 1.231,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          10
+        ],
+        [
+          "tainted",
+          9
+        ],
+        [
+          "uncorroborated",
+          6
+        ],
+        [
+          "call sites unknown",
+          5
+        ],
+        [
+          "no candidate",
+          5
+        ],
+        [
+          "generator",
+          4
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpcore__httpcore___sync__http11.py",
+      "truth": 55,
+      "correct": 17,
+      "wrong": [],
+      "compatible": [
+        "HTTP11Connection.__enter__->: wrote 'Self' (narrower), expected 'HTTP11Connection'",
+        "HTTP11Connection.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.826,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "None default",
+          10
+        ],
+        [
+          "tainted",
+          7
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpcore__httpcore___sync__http2.py",
+      "truth": 65,
+      "correct": 19,
+      "wrong": [],
+      "compatible": [
+        "HTTP2Connection.__enter__->: wrote 'Self' (narrower), expected 'HTTP2Connection'",
+        "HTTP2Connection.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 2,
+      "seconds": 1.625,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          28
+        ],
+        [
+          "None default",
+          5
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpcore__httpcore___synchronization.py",
+      "truth": 54,
+      "correct": 19,
+      "wrong": [],
+      "compatible": [
+        "AsyncLock.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "AsyncShieldCancellation.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "AsyncThreadLock.__enter__->: wrote 'Self' (narrower), expected 'AsyncThreadLock'",
+        "Lock.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "ShieldCancellation.__enter__->: wrote 'Self' (narrower), expected 'ShieldCancellation'",
+        "ThreadLock.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.656,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          20
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "no candidate",
+          2
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpx__httpx___auth.py",
+      "truth": 47,
+      "correct": 9,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 1.089,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          23
+        ],
+        [
+          "generator",
+          7
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "tainted",
+          2
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpx__httpx___content.py",
+      "truth": 37,
+      "correct": 3,
+      "wrong": [],
+      "compatible": [
+        "UnattachedStream.__iter__->: wrote 'NoReturn' (narrower), expected 'Iterator[bytes]'"
+      ],
+      "synthesized": 4,
+      "seconds": 0.634,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          9
+        ],
+        [
+          "generator",
+          5
+        ],
+        [
+          "tainted",
+          5
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "no candidate",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpx__httpx___decoders.py",
+      "truth": 46,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.957,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          17
+        ],
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpx__httpx___models.py",
+      "truth": 174,
+      "correct": 37,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 2,
+      "seconds": 4.619,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          39
+        ],
+        [
+          "None default",
+          37
+        ],
+        [
+          "uncorroborated",
+          15
+        ],
+        [
+          "no candidate",
+          14
+        ],
+        [
+          "generator",
+          9
+        ],
+        [
+          "call sites unknown",
+          6
+        ],
+        [
+          "return type not provable",
+          6
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpx__httpx___multipart.py",
+      "truth": 35,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 2,
+      "seconds": 1.079,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          8
+        ],
+        [
+          "generator",
+          7
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpx__httpx___transports__default.py",
+      "truth": 52,
+      "correct": 14,
+      "wrong": [],
+      "compatible": [
+        "AsyncHTTPTransport.__aexit__->: wrote 'bool | None' (looser), expected 'None'",
+        "AsyncHTTPTransport.__init__.verify: wrote 'bool' (narrower), expected 'SSLContext | bool | str'",
+        "HTTPTransport.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "HTTPTransport.__init__.verify: wrote 'bool' (narrower), expected 'SSLContext | bool | str'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.755,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          16
+        ],
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "not judged",
+          4
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "generator",
+          3
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpx__httpx___urls.py",
+      "truth": 78,
+      "correct": 13,
+      "wrong": [],
+      "compatible": [
+        "QueryParams.__setitem__->: wrote 'NoReturn' (narrower), expected 'None'",
+        "QueryParams.update->: wrote 'NoReturn' (narrower), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 1.255,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          28
+        ],
+        [
+          "no candidate",
+          16
+        ],
+        [
+          "None default",
+          7
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "httpx__httpx___utils.py",
+      "truth": 30,
+      "correct": 9,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 4,
+      "seconds": 0.658,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          8
+        ],
+        [
+          "tainted",
+          5
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "humanize__humanize__i18n.py",
+      "truth": 22,
+      "correct": 1,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 5,
+      "seconds": 0.223,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          7
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "None default",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "humanize__humanize__number.py",
+      "truth": 29,
+      "correct": 1,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.916,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          8
+        ],
+        [
+          "not judged",
+          7
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "None default",
+          3
+        ],
+        [
+          "no candidate",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "escapes as a value",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "humanize__humanize__time.py",
+      "truth": 47,
+      "correct": 7,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 4.169,
+      "rounds": 3,
+      "missed_reasons": [
+        [
+          "tainted",
+          13
+        ],
+        [
+          "call sites unknown",
+          10
+        ],
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "not judged",
+          4
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "call sites disagree",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "itsdangerous__itsdangerous__serializer.py",
+      "truth": 49,
+      "correct": 1,
+      "wrong": [],
+      "compatible": [
+        "is_text_serializer->: wrote 'bool' (looser), expected 'TypeGuard[_PDataSerializer[str]]'"
+      ],
+      "synthesized": 2,
+      "seconds": 0.628,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          16
+        ],
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "generator",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "itsdangerous__itsdangerous__signer.py",
+      "truth": 38,
+      "correct": 3,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 2,
+      "seconds": 0.491,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "tainted",
+          9
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ],
+        [
+          "default disagrees",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "itsdangerous__itsdangerous__timed.py",
+      "truth": 23,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.475,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          7
+        ],
+        [
+          "tainted",
+          6
+        ],
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "jinja2__jinja2__ext.py",
+      "truth": 119,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 12,
+      "seconds": 3.067,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          42
+        ],
+        [
+          "tainted",
+          18
+        ],
+        [
+          "None default",
+          12
+        ],
+        [
+          "uncorroborated",
+          10
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "contains object",
+          4
+        ],
+        [
+          "call sites unknown",
+          3
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "jinja2__jinja2__idtracking.py",
+      "truth": 107,
+      "correct": 27,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 1.231,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          52
+        ],
+        [
+          "None default",
+          5
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "tainted",
+          5
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "declaration body",
+          4
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "jinja2__jinja2__lexer.py",
+      "truth": 66,
+      "correct": 13,
+      "wrong": [],
+      "compatible": [
+        "TokenStreamIterator.__iter__->: wrote 'Self' (narrower), expected 'TokenStreamIterator'"
+      ],
+      "synthesized": 3,
+      "seconds": 2.961,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          13
+        ],
+        [
+          "tainted",
+          11
+        ],
+        [
+          "None default",
+          7
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "call sites unknown",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "jinja2__jinja2__loaders.py",
+      "truth": 71,
+      "correct": 9,
+      "wrong": [],
+      "compatible": [
+        "BaseLoader.get_source->: wrote 'NoReturn' (narrower), expected 'tuple[str, str | None, Callable[[], bool] | None]'",
+        "BaseLoader.list_templates->: wrote 'NoReturn' (narrower), expected 'list[str]'"
+      ],
+      "synthesized": 0,
+      "seconds": 1.937,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          30
+        ],
+        [
+          "tainted",
+          14
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "default disagrees",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "jinja2__jinja2__nodes.py",
+      "truth": 96,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [
+        "Const.from_untrusted->: wrote 'Self' (narrower), expected 'Const'",
+        "Expr.as_const->: wrote 'NoReturn' (narrower), expected 'Any'",
+        "InternalName.__init__->: wrote 'NoReturn' (narrower), expected 'None'",
+        "Node.dump->: wrote 'str | None' (looser), expected 'str'"
+      ],
+      "synthesized": 2,
+      "seconds": 3.038,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          29
+        ],
+        [
+          "tainted",
+          29
+        ],
+        [
+          "no candidate",
+          14
+        ],
+        [
+          "call sites unknown",
+          3
+        ],
+        [
+          "generator",
+          3
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "jinja2__jinja2__parser.py",
+      "truth": 97,
+      "correct": 19,
+      "wrong": [],
+      "compatible": [
+        "Parser._fail_ut_eof->: wrote 'None' (looser), expected 'te.NoReturn'",
+        "Parser.fail_eof->: wrote 'None' (looser), expected 'te.NoReturn'",
+        "Parser.fail_unknown_tag->: wrote 'None' (looser), expected 'te.NoReturn'"
+      ],
+      "synthesized": 0,
+      "seconds": 10.378,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          43
+        ],
+        [
+          "None default",
+          11
+        ],
+        [
+          "no candidate",
+          9
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "jinja2__jinja2__runtime.py",
+      "truth": 153,
+      "correct": 23,
+      "wrong": [],
+      "compatible": [
+        "AsyncLoopContext.__aiter__->: wrote 'Self' (narrower), expected 'AsyncLoopContext'",
+        "ChainableUndefined.__getattr__->: wrote 'Self' (narrower), expected 'ChainableUndefined'",
+        "ChainableUndefined.__getitem__->: wrote 'Self' (narrower), expected 'ChainableUndefined'",
+        "LoopContext.__iter__->: wrote 'Self' (narrower), expected 'LoopContext'",
+        "make_logging_undefined.LoggingUndefined._fail_with_undefined_error->: wrote 'None' (looser), expected 'te.NoReturn'"
+      ],
+      "synthesized": 5,
+      "seconds": 2.391,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          41
+        ],
+        [
+          "no candidate",
+          40
+        ],
+        [
+          "None default",
+          9
+        ],
+        [
+          "contains object",
+          8
+        ],
+        [
+          "call sites unknown",
+          6
+        ],
+        [
+          "uncorroborated",
+          6
+        ],
+        [
+          "protocol result differs",
+          4
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "not judged",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "jinja2__jinja2__utils.py",
+      "truth": 101,
+      "correct": 26,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 1.567,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          29
+        ],
+        [
+          "tainted",
+          25
+        ],
+        [
+          "None default",
+          7
+        ],
+        [
+          "not judged",
+          6
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "markdown-it-py__markdown_it__common__utils.py",
+      "truth": 43,
+      "correct": 9,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.471,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "uncorroborated",
+          7
+        ],
+        [
+          "call sites unknown",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "markdown-it-py__markdown_it__main.py",
+      "truth": 46,
+      "correct": 5,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 0.877,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          14
+        ],
+        [
+          "no candidate",
+          11
+        ],
+        [
+          "None default",
+          6
+        ],
+        [
+          "contains object",
+          6
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "generator",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "markdown-it-py__markdown_it__renderer.py",
+      "truth": 74,
+      "correct": 2,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 0.682,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          42
+        ],
+        [
+          "tainted",
+          13
+        ],
+        [
+          "uncorroborated",
+          12
+        ],
+        [
+          "call sites unknown",
+          3
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "markdown-it-py__markdown_it__ruler.py",
+      "truth": 41,
+      "correct": 10,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 0.56,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          16
+        ],
+        [
+          "tainted",
+          6
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "markdown-it-py__markdown_it__rules_block__state_block.py",
+      "truth": 40,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.624,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          14
+        ],
+        [
+          "uncorroborated",
+          13
+        ],
+        [
+          "tainted",
+          9
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "markdown-it-py__markdown_it__token.py",
+      "truth": 26,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.27,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          13
+        ],
+        [
+          "tainted",
+          7
+        ],
+        [
+          "None default",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "markdown-it-py__markdown_it__tree.py",
+      "truth": 51,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 0.774,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          18
+        ],
+        [
+          "not judged",
+          10
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "no candidate",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "generator",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "markdown-it-py__markdown_it__utils.py",
+      "truth": 33,
+      "correct": 15,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.409,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "tainted",
+          2
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "packaging__packaging___parser.py",
+      "truth": 49,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 8,
+      "seconds": 1.227,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          14
+        ],
+        [
+          "tainted",
+          11
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "packaging__packaging___ranges.py",
+      "truth": 91,
+      "correct": 17,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 6,
+      "seconds": 2.797,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          21
+        ],
+        [
+          "tainted",
+          16
+        ],
+        [
+          "uncorroborated",
+          11
+        ],
+        [
+          "return type not provable",
+          7
+        ],
+        [
+          "call sites unknown",
+          6
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "generator",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "packaging__packaging__markers.py",
+      "truth": 50,
+      "correct": 5,
+      "wrong": [],
+      "compatible": [
+        "_format_marker.first: wrote 'bool' (narrower), expected 'bool | None'"
+      ],
+      "synthesized": 1,
+      "seconds": 1.213,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          13
+        ],
+        [
+          "no candidate",
+          9
+        ],
+        [
+          "call sites unknown",
+          8
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "contains object",
+          4
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "packaging__packaging__metadata.py",
+      "truth": 65,
+      "correct": 8,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 2.473,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "tainted",
+          16
+        ],
+        [
+          "return type not provable",
+          9
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "contains object",
+          4
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "packaging__packaging__pylock.py",
+      "truth": 151,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 9,
+      "seconds": 3.305,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          45
+        ],
+        [
+          "no candidate",
+          40
+        ],
+        [
+          "tainted",
+          23
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "declaration body",
+          1
+        ],
+        [
+          "generator",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "packaging__packaging__specifiers.py",
+      "truth": 99,
+      "correct": 16,
+      "wrong": [],
+      "compatible": [
+        "_validate_pre->: wrote 'bool' (looser), expected 'TypeGuard[bool | None]'",
+        "_validate_spec->: wrote 'bool' (looser), expected 'TypeGuard[tuple[str, str]]'"
+      ],
+      "synthesized": 1,
+      "seconds": 7.566,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          24
+        ],
+        [
+          "no candidate",
+          16
+        ],
+        [
+          "None default",
+          12
+        ],
+        [
+          "declaration body",
+          6
+        ],
+        [
+          "call sites unknown",
+          5
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "default disagrees",
+          1
+        ],
+        [
+          "generator",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "packaging__packaging__tags.py",
+      "truth": 87,
+      "correct": 19,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 4.286,
+      "rounds": 3,
+      "missed_reasons": [
+        [
+          "call sites unknown",
+          13
+        ],
+        [
+          "generator",
+          12
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "return type not provable",
+          8
+        ],
+        [
+          "None default",
+          7
+        ],
+        [
+          "no candidate",
+          7
+        ],
+        [
+          "contains object",
+          6
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "packaging__packaging__version.py",
+      "truth": 92,
+      "correct": 14,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 3.267,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          35
+        ],
+        [
+          "no candidate",
+          13
+        ],
+        [
+          "call sites unknown",
+          12
+        ],
+        [
+          "uncorroborated",
+          8
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "platformdirs__platformdirs___xdg.py",
+      "truth": 33,
+      "correct": 1,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.659,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          23
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "no candidate",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "platformdirs__platformdirs__android.py",
+      "truth": 33,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.48,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          17
+        ],
+        [
+          "return type not provable",
+          9
+        ],
+        [
+          "call sites unknown",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "platformdirs__platformdirs__api.py",
+      "truth": 161,
+      "correct": 41,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 2.592,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          31
+        ],
+        [
+          "no candidate",
+          30
+        ],
+        [
+          "declaration body",
+          27
+        ],
+        [
+          "generator",
+          20
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "contains object",
+          4
+        ],
+        [
+          "None default",
+          3
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "platformdirs__platformdirs__ios.py",
+      "truth": 27,
+      "correct": 0,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.266,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          15
+        ],
+        [
+          "return type not provable",
+          12
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "platformdirs__platformdirs__macos.py",
+      "truth": 36,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.517,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          16
+        ],
+        [
+          "return type not provable",
+          13
+        ],
+        [
+          "uncorroborated",
+          3
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "platformdirs__platformdirs__unix.py",
+      "truth": 71,
+      "correct": 9,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.336,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          43
+        ],
+        [
+          "no candidate",
+          9
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "platformdirs__platformdirs__windows.py",
+      "truth": 48,
+      "correct": 1,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 1.142,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "return type not provable",
+          19
+        ],
+        [
+          "tainted",
+          19
+        ],
+        [
+          "no candidate",
+          7
+        ],
+        [
+          "None default",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pluggy__pluggy___caller.py",
+      "truth": 38,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.755,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "tainted",
+          7
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pluggy__pluggy___decorators.py",
+      "truth": 29,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.554,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          5
+        ],
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "needs import or unknown name",
+          2
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pluggy__pluggy___manager.py",
+      "truth": 88,
+      "correct": 15,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 5,
+      "seconds": 1.866,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          36
+        ],
+        [
+          "tainted",
+          19
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pluggy__pluggy___result.py",
+      "truth": 12,
+      "correct": 3,
+      "wrong": [
+        "Result.from_call->: wrote 'Self', expected 'Result[ResultType]'"
+      ],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.154,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "contains object",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pluggy__pluggy___tracing.py",
+      "truth": 38,
+      "correct": 9,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.456,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "tainted",
+          7
+        ],
+        [
+          "uncorroborated",
+          6
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "needs import or unknown name",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pytest___pytest__assertion__rewrite.py",
+      "truth": 137,
+      "correct": 20,
+      "wrong": [],
+      "compatible": [
+        "AssertionRewritingHook.create_module->: wrote 'None' (narrower), expected 'ModuleType | None'"
+      ],
+      "synthesized": 5,
+      "seconds": 4.961,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          44
+        ],
+        [
+          "tainted",
+          30
+        ],
+        [
+          "call sites unknown",
+          13
+        ],
+        [
+          "uncorroborated",
+          12
+        ],
+        [
+          "contains object",
+          6
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "generator",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pytest___pytest__capture.py",
+      "truth": 172,
+      "correct": 67,
+      "wrong": [
+        "DontReadFromInput.__iter__->: wrote 'Self', expected 'Iterator[str]'",
+        "DontReadFromInput.buffer->: wrote 'Self', expected 'BinaryIO'"
+      ],
+      "compatible": [
+        "DontReadFromInput.fileno->: wrote 'NoReturn' (narrower), expected 'int'",
+        "DontReadFromInput.flush->: wrote 'NoReturn' (narrower), expected 'None'",
+        "DontReadFromInput.read->: wrote 'NoReturn' (narrower), expected 'str'",
+        "DontReadFromInput.readlines->: wrote 'NoReturn' (narrower), expected 'list[str]'",
+        "DontReadFromInput.seek->: wrote 'NoReturn' (narrower), expected 'int'",
+        "DontReadFromInput.tell->: wrote 'NoReturn' (narrower), expected 'int'",
+        "DontReadFromInput.truncate->: wrote 'NoReturn' (narrower), expected 'int'",
+        "DontReadFromInput.write->: wrote 'NoReturn' (narrower), expected 'int'",
+        "DontReadFromInput.writelines->: wrote 'NoReturn' (narrower), expected 'None'"
+      ],
+      "synthesized": 6,
+      "seconds": 3.186,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          31
+        ],
+        [
+          "declaration body",
+          15
+        ],
+        [
+          "generator",
+          13
+        ],
+        [
+          "tainted",
+          13
+        ],
+        [
+          "uncorroborated",
+          11
+        ],
+        [
+          "None default",
+          3
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "return type not provable",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pytest___pytest__hookspec.py",
+      "truth": 149,
+      "correct": 0,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.495,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          97
+        ],
+        [
+          "declaration body",
+          52
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pytest___pytest__junitxml.py",
+      "truth": 110,
+      "correct": 38,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 16,
+      "seconds": 2.995,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          31
+        ],
+        [
+          "uncorroborated",
+          10
+        ],
+        [
+          "tainted",
+          7
+        ],
+        [
+          "not judged",
+          4
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ],
+        [
+          "escapes as a value",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pytest___pytest__logging.py",
+      "truth": 110,
+      "correct": 30,
+      "wrong": [],
+      "compatible": [
+        "catching_logs.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 10,
+      "seconds": 2.663,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          30
+        ],
+        [
+          "tainted",
+          12
+        ],
+        [
+          "generator",
+          11
+        ],
+        [
+          "declaration body",
+          5
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "None default",
+          4
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pytest___pytest__main.py",
+      "truth": 87,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 12,
+      "seconds": 3.266,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "tainted",
+          15
+        ],
+        [
+          "uncorroborated",
+          9
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "generator",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "None default",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pytest___pytest__pathlib.py",
+      "truth": 130,
+      "correct": 22,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 13,
+      "seconds": 3.566,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          36
+        ],
+        [
+          "call sites unknown",
+          18
+        ],
+        [
+          "contains object",
+          15
+        ],
+        [
+          "tainted",
+          13
+        ],
+        [
+          "return type not provable",
+          6
+        ],
+        [
+          "generator",
+          4
+        ],
+        [
+          "needs import or unknown name",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "pytest___pytest__reports.py",
+      "truth": 81,
+      "correct": 18,
+      "wrong": [],
+      "compatible": [
+        "TestReport.from_item_and_call->: wrote 'Self' (narrower), expected 'TestReport'"
+      ],
+      "synthesized": 5,
+      "seconds": 1.974,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          24
+        ],
+        [
+          "tainted",
+          15
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "generator",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "rich__rich___win32_console.py",
+      "truth": 57,
+      "correct": 30,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.752,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          13
+        ],
+        [
+          "call sites unknown",
+          6
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "tainted",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "rich__rich__layout.py",
+      "truth": 63,
+      "correct": 13,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 6,
+      "seconds": 1.455,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          18
+        ],
+        [
+          "tainted",
+          6
+        ],
+        [
+          "generator",
+          5
+        ],
+        [
+          "not judged",
+          4
+        ],
+        [
+          "None default",
+          3
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "rich__rich__markdown.py",
+      "truth": 153,
+      "correct": 30,
+      "wrong": [],
+      "compatible": [
+        "CodeBlock.create->: wrote 'Self' (narrower), expected 'CodeBlock'",
+        "Heading.create->: wrote 'Self' (narrower), expected 'Heading'",
+        "ImageItem.create->: wrote 'Self' (narrower), expected 'MarkdownElement'",
+        "Link.create->: wrote 'Self' (narrower), expected 'MarkdownElement'",
+        "ListElement.create->: wrote 'Self' (narrower), expected 'ListElement'",
+        "MarkdownElement.create->: wrote 'Self' (narrower), expected 'MarkdownElement'",
+        "Paragraph.create->: wrote 'Self' (narrower), expected 'Paragraph'",
+        "TableDataElement.create->: wrote 'Self' (narrower), expected 'MarkdownElement'"
+      ],
+      "synthesized": 1,
+      "seconds": 2.628,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          80
+        ],
+        [
+          "generator",
+          12
+        ],
+        [
+          "uncorroborated",
+          9
+        ],
+        [
+          "None default",
+          3
+        ],
+        [
+          "declaration body",
+          3
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "rich__rich__pretty.py",
+      "truth": 106,
+      "correct": 31,
+      "wrong": [],
+      "compatible": [
+        "Pretty.__init__.no_wrap: wrote 'bool' (narrower), expected 'bool | None'"
+      ],
+      "synthesized": 3,
+      "seconds": 5.224,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "call sites unknown",
+          18
+        ],
+        [
+          "None default",
+          14
+        ],
+        [
+          "no candidate",
+          12
+        ],
+        [
+          "not judged",
+          9
+        ],
+        [
+          "tainted",
+          8
+        ],
+        [
+          "generator",
+          4
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "rich__rich__segment.py",
+      "truth": 86,
+      "correct": 14,
+      "wrong": [],
+      "compatible": [
+        "Segment.line->: wrote 'Self' (narrower), expected 'Segment'"
+      ],
+      "synthesized": 0,
+      "seconds": 2.249,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "tainted",
+          12
+        ],
+        [
+          "generator",
+          11
+        ],
+        [
+          "uncorroborated",
+          11
+        ],
+        [
+          "contains object",
+          10
+        ],
+        [
+          "None default",
+          6
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "call sites unknown",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "rich__rich__style.py",
+      "truth": 84,
+      "correct": 10,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 2.901,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          23
+        ],
+        [
+          "tainted",
+          22
+        ],
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "return type not provable",
+          7
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "generator",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "rich__rich__syntax.py",
+      "truth": 89,
+      "correct": 16,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 3.247,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          27
+        ],
+        [
+          "tainted",
+          19
+        ],
+        [
+          "None default",
+          8
+        ],
+        [
+          "not judged",
+          7
+        ],
+        [
+          "call sites unknown",
+          5
+        ],
+        [
+          "declaration body",
+          2
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "rich__rich__text.py",
+      "truth": 171,
+      "correct": 31,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 6.37,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          26
+        ],
+        [
+          "not judged",
+          26
+        ],
+        [
+          "tainted",
+          25
+        ],
+        [
+          "no candidate",
+          24
+        ],
+        [
+          "uncorroborated",
+          13
+        ],
+        [
+          "contains object",
+          7
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "protocol result differs",
+          4
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "generator",
+          3
+        ],
+        [
+          "default disagrees",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "starlette__starlette__authentication.py",
+      "truth": 23,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 2,
+      "seconds": 0.47,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "declaration body",
+          4
+        ],
+        [
+          "no candidate",
+          4
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "tainted",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "starlette__starlette__datastructures.py",
+      "truth": 173,
+      "correct": 47,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 3.188,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          45
+        ],
+        [
+          "no candidate",
+          44
+        ],
+        [
+          "uncorroborated",
+          14
+        ],
+        [
+          "None default",
+          10
+        ],
+        [
+          "not judged",
+          6
+        ],
+        [
+          "protocol result differs",
+          4
+        ],
+        [
+          "contains object",
+          3
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "starlette__starlette__formparsers.py",
+      "truth": 45,
+      "correct": 14,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.057,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          11
+        ],
+        [
+          "uncorroborated",
+          9
+        ],
+        [
+          "not judged",
+          5
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "starlette__starlette__requests.py",
+      "truth": 50,
+      "correct": 7,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 1.144,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          20
+        ],
+        [
+          "no candidate",
+          7
+        ],
+        [
+          "not judged",
+          6
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "generator",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "starlette__starlette__responses.py",
+      "truth": 113,
+      "correct": 27,
+      "wrong": [],
+      "compatible": [
+        "Response.set_cookie.expires: wrote 'int | None' (narrower), expected 'datetime | int | str | None'"
+      ],
+      "synthesized": 1,
+      "seconds": 3.222,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          22
+        ],
+        [
+          "None default",
+          18
+        ],
+        [
+          "contains object",
+          14
+        ],
+        [
+          "not judged",
+          9
+        ],
+        [
+          "tainted",
+          6
+        ],
+        [
+          "call sites unknown",
+          5
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "default disagrees",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "generator",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "starlette__starlette__routing.py",
+      "truth": 181,
+      "correct": 35,
+      "wrong": [],
+      "compatible": [
+        "_DefaultLifespan.__call__->: wrote 'Self' (unresolved), expected '_T'"
+      ],
+      "synthesized": 5,
+      "seconds": 3.319,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          75
+        ],
+        [
+          "None default",
+          21
+        ],
+        [
+          "tainted",
+          16
+        ],
+        [
+          "uncorroborated",
+          14
+        ],
+        [
+          "declaration body",
+          5
+        ],
+        [
+          "call sites unknown",
+          3
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "not judged",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "starlette__starlette__testclient.py",
+      "truth": 102,
+      "correct": 27,
+      "wrong": [],
+      "compatible": [
+        "TestClient.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 1,
+      "seconds": 2.417,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          27
+        ],
+        [
+          "escapes as a value",
+          11
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "not judged",
+          7
+        ],
+        [
+          "None default",
+          5
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "starlette__starlette__websockets.py",
+      "truth": 41,
+      "correct": 12,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.6,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "None default",
+          5
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "generator",
+          3
+        ],
+        [
+          "not judged",
+          3
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "structlog__structlog___config.py",
+      "truth": 51,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [
+        "wrap_logger.logger: wrote 'None' (narrower), expected 'WrappedLogger | None'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.622,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "None default",
+          15
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "no candidate",
+          8
+        ],
+        [
+          "call sites unknown",
+          6
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "return type not provable",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "structlog__structlog___native.py",
+      "truth": 51,
+      "correct": 0,
+      "wrong": [],
+      "compatible": [
+        "_anop->: wrote 'None' (narrower), expected 'Any'",
+        "_make_filtering_bound_logger.make_method.ameth->: wrote 'None' (narrower), expected 'Any'",
+        "_nop->: wrote 'None' (narrower), expected 'Any'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.579,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          25
+        ],
+        [
+          "not judged",
+          8
+        ],
+        [
+          "tainted",
+          8
+        ],
+        [
+          "call sites unknown",
+          3
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "structlog__structlog__dev.py",
+      "truth": 78,
+      "correct": 24,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 4,
+      "seconds": 2.11,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          19
+        ],
+        [
+          "escapes as a value",
+          9
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "call sites unknown",
+          4
+        ],
+        [
+          "None default",
+          3
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "structlog__structlog__processors.py",
+      "truth": 136,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 13,
+      "seconds": 1.883,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          52
+        ],
+        [
+          "tainted",
+          15
+        ],
+        [
+          "return type not provable",
+          12
+        ],
+        [
+          "None default",
+          8
+        ],
+        [
+          "uncorroborated",
+          7
+        ],
+        [
+          "not judged",
+          6
+        ],
+        [
+          "call sites unknown",
+          5
+        ],
+        [
+          "escapes as a value",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "structlog__structlog__stdlib.py",
+      "truth": 249,
+      "correct": 37,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 6,
+      "seconds": 2.598,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          133
+        ],
+        [
+          "tainted",
+          43
+        ],
+        [
+          "None default",
+          17
+        ],
+        [
+          "uncorroborated",
+          7
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "escapes as a value",
+          2
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "structlog__structlog__threadlocal.py",
+      "truth": 42,
+      "correct": 10,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.498,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          18
+        ],
+        [
+          "return type not provable",
+          6
+        ],
+        [
+          "tainted",
+          4
+        ],
+        [
+          "generator",
+          2
+        ],
+        [
+          "protocol result differs",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "structlog__structlog__twisted.py",
+      "truth": 34,
+      "correct": 6,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.38,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "tainted",
+          6
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "None default",
+          3
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "structlog__structlog__typing.py",
+      "truth": 108,
+      "correct": 0,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.266,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          75
+        ],
+        [
+          "declaration body",
+          33
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tenacity__tenacity___utils.py",
+      "truth": 19,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.265,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          8
+        ],
+        [
+          "tainted",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tenacity__tenacity__asyncio__retry.py",
+      "truth": 30,
+      "correct": 4,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.194,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tenacity__tenacity__retry.py",
+      "truth": 65,
+      "correct": 19,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.696,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          26
+        ],
+        [
+          "tainted",
+          12
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "uncorroborated",
+          2
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tenacity__tenacity__stop.py",
+      "truth": 32,
+      "correct": 10,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.199,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "tainted",
+          5
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tenacity__tenacity__wait.py",
+      "truth": 52,
+      "correct": 10,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 0.542,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          18
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "not judged",
+          7
+        ],
+        [
+          "uncorroborated",
+          5
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tomli__tomli___parser.py",
+      "truth": 118,
+      "correct": 23,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 5,
+      "seconds": 5.768,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "call sites unknown",
+          39
+        ],
+        [
+          "tainted",
+          23
+        ],
+        [
+          "no candidate",
+          13
+        ],
+        [
+          "uncorroborated",
+          6
+        ],
+        [
+          "contains object",
+          5
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "return type not provable",
+          2
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tomlkit__tomlkit__api.py",
+      "truth": 52,
+      "correct": 8,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 4,
+      "seconds": 0.646,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          15
+        ],
+        [
+          "no candidate",
+          14
+        ],
+        [
+          "return type not provable",
+          8
+        ],
+        [
+          "None default",
+          1
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tomlkit__tomlkit__container.py",
+      "truth": 148,
+      "correct": 26,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 3,
+      "seconds": 160.819,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          34
+        ],
+        [
+          "no candidate",
+          28
+        ],
+        [
+          "uncorroborated",
+          17
+        ],
+        [
+          "contains object",
+          15
+        ],
+        [
+          "None default",
+          10
+        ],
+        [
+          "escapes as a value",
+          4
+        ],
+        [
+          "return type not provable",
+          4
+        ],
+        [
+          "protocol result differs",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "default disagrees",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tomlkit__tomlkit__exceptions.py",
+      "truth": 60,
+      "correct": 17,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 0.398,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          38
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "tainted",
+          2
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tomlkit__tomlkit__parser.py",
+      "truth": 68,
+      "correct": 9,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 2,
+      "seconds": 9.402,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "tainted",
+          31
+        ],
+        [
+          "no candidate",
+          10
+        ],
+        [
+          "call sites unknown",
+          6
+        ],
+        [
+          "return type not provable",
+          5
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "tomlkit__tomlkit__source.py",
+      "truth": 47,
+      "correct": 11,
+      "wrong": [],
+      "compatible": [
+        "_State.__exit__->: wrote 'bool | None' (looser), expected 'None'",
+        "_State.__init__.restore: wrote 'bool' (narrower), expected 'bool | None'",
+        "_State.__init__.save_marker: wrote 'bool' (narrower), expected 'bool | None'",
+        "_StateHandler.__call__.restore: wrote 'bool' (narrower), expected 'bool | None'",
+        "_StateHandler.__call__.save_marker: wrote 'bool' (narrower), expected 'bool | None'",
+        "_StateHandler.__exit__->: wrote 'bool | None' (looser), expected 'None'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.519,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          14
+        ],
+        [
+          "tainted",
+          10
+        ],
+        [
+          "None default",
+          2
+        ],
+        [
+          "not judged",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "werkzeug__werkzeug__datastructures__headers.py",
+      "truth": 96,
+      "correct": 21,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 1.332,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          25
+        ],
+        [
+          "tainted",
+          22
+        ],
+        [
+          "uncorroborated",
+          10
+        ],
+        [
+          "None default",
+          7
+        ],
+        [
+          "generator",
+          4
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "protocol result differs",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "werkzeug__werkzeug__datastructures__mixins.py",
+      "truth": 140,
+      "correct": 44,
+      "wrong": [],
+      "compatible": [
+        "ImmutableListMixin.sort.reverse: wrote 'bool' (narrower), expected 'Any'"
+      ],
+      "synthesized": 0,
+      "seconds": 0.785,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          66
+        ],
+        [
+          "tainted",
+          11
+        ],
+        [
+          "None default",
+          8
+        ],
+        [
+          "not judged",
+          6
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "return type not provable",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "werkzeug__werkzeug__datastructures__structures.py",
+      "truth": 195,
+      "correct": 48,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 2.978,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          45
+        ],
+        [
+          "tainted",
+          42
+        ],
+        [
+          "None default",
+          19
+        ],
+        [
+          "uncorroborated",
+          12
+        ],
+        [
+          "return type not provable",
+          10
+        ],
+        [
+          "generator",
+          9
+        ],
+        [
+          "not judged",
+          5
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "protocol result differs",
+          2
+        ],
+        [
+          "contains object",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "werkzeug__werkzeug__local.py",
+      "truth": 73,
+      "correct": 16,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 4,
+      "seconds": 1.31,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          15
+        ],
+        [
+          "None default",
+          14
+        ],
+        [
+          "tainted",
+          13
+        ],
+        [
+          "uncorroborated",
+          4
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "contains object",
+          2
+        ],
+        [
+          "call sites unknown",
+          1
+        ],
+        [
+          "not judged",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "werkzeug__werkzeug__sansio__response.py",
+      "truth": 74,
+      "correct": 29,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 0,
+      "seconds": 1.292,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          17
+        ],
+        [
+          "None default",
+          10
+        ],
+        [
+          "tainted",
+          7
+        ],
+        [
+          "not judged",
+          5
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "uncorroborated",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "werkzeug__werkzeug__serving.py",
+      "truth": 114,
+      "correct": 31,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 1,
+      "seconds": 5.814,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          28
+        ],
+        [
+          "None default",
+          14
+        ],
+        [
+          "tainted",
+          11
+        ],
+        [
+          "call sites unknown",
+          10
+        ],
+        [
+          "not judged",
+          7
+        ],
+        [
+          "uncorroborated",
+          6
+        ],
+        [
+          "return type not provable",
+          3
+        ],
+        [
+          "contains object",
+          1
+        ],
+        [
+          "declaration body",
+          1
+        ],
+        [
+          "escapes as a value",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "werkzeug__werkzeug__test.py",
+      "truth": 162,
+      "correct": 38,
+      "wrong": [],
+      "compatible": [],
+      "synthesized": 5,
+      "seconds": 4.225,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          51
+        ],
+        [
+          "tainted",
+          25
+        ],
+        [
+          "None default",
+          16
+        ],
+        [
+          "uncorroborated",
+          11
+        ],
+        [
+          "not judged",
+          9
+        ],
+        [
+          "escapes as a value",
+          3
+        ],
+        [
+          "call sites unknown",
+          2
+        ],
+        [
+          "return type not provable",
+          2
+        ],
+        [
+          "generator",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    },
+    {
+      "name": "werkzeug__werkzeug__wrappers__response.py",
+      "truth": 73,
+      "correct": 27,
+      "wrong": [],
+      "compatible": [
+        "Response.__enter__->: wrote 'Self' (narrower), expected 'Response'",
+        "Response.from_app->: wrote 'Self' (narrower), expected 'Response'",
+        "Response.make_conditional.accept_ranges: wrote 'bool' (narrower), expected 'bool | str'"
+      ],
+      "synthesized": 2,
+      "seconds": 1.46,
+      "rounds": 2,
+      "missed_reasons": [
+        [
+          "no candidate",
+          14
+        ],
+        [
+          "tainted",
+          14
+        ],
+        [
+          "None default",
+          7
+        ],
+        [
+          "contains object",
+          3
+        ],
+        [
+          "uncorroborated",
+          3
+        ],
+        [
+          "escapes as a value",
+          1
+        ],
+        [
+          "generator",
+          1
+        ]
+      ],
+      "new_errors": null,
+      "crash": null
+    }
+  ]
+}

@@ -1,12 +1,15 @@
-"""Audit docs/TODO.md: structure, task format, references and generated blocks.
+"""Audit docs/planning/TODO.md for consistency.
+
+Checks structure, task format, references and generated blocks.
 
 Usage (from the repository root)::
 
-    python scripts/todo_lint.py [--todo docs/TODO.md] \
-        [--archive docs/TODO-archive.md]
+    python -m scripts.todo_update lint [--todo docs/planning/TODO.md]
+        [--archive docs/planning/TODO-archive.md]
 
 Prints a summary of problems by kind with the first examples. Exit code 0 when
 there are no errors (warnings never fail the run), 1 otherwise.
+
 """
 
 from __future__ import annotations
@@ -24,19 +27,21 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        root: Repository root.
-        priorities: Allowed priority values.
-        statuses: Allowed status values.
-        readiness: Allowed readiness values.
-        meta_labels: Metadata labels in their required order.
-        blocks: Names of generated blocks (marker names).
-        placeholders: Text that must never remain.
-        examples: Examples printed per problem kind.
-        areas: Allowed Area values.
+        root (Final[Path]): Repository root.
+        priorities (Final[frozenset[str]]): Allowed priority values.
+        statuses (Final[frozenset[str]]): Allowed status values.
+        readiness (Final[frozenset[str]]): Allowed readiness values.
+        meta_labels (Final[tuple[str, ...]]): Metadata labels in their required
+            order.
+        blocks (Final[tuple[str, ...]]): Names of generated blocks (marker
+            names).
+        placeholders (Final[tuple[str, ...]]): Text that must never remain.
+        examples (Final[int]): Examples printed per problem kind.
+        areas (Final[frozenset[str]]): Allowed Area values.
 
     """
 
-    root: Final[Path] = Path(__file__).resolve().parent.parent
+    root: Final[Path] = Path(__file__).resolve().parent.parent.parent
     priorities: Final[frozenset[str]] = frozenset(
         {"P0", "P1", "P2", "P3", "Untriaged"},
     )
@@ -89,10 +94,10 @@ class Task:
     """One task block.
 
     Attributes:
-        identifier: Task ID.
-        title: Heading title.
-        line: Line number of the heading (1-based).
-        body: Lines after the heading until the next heading.
+        identifier (str): Task ID.
+        title (str): Heading title.
+        line (int): Line number of the heading (1-based).
+        body (list[str]): Lines after the heading until the next heading.
 
     """
 
@@ -108,8 +113,8 @@ class Report:
     """Collected problems.
 
     Attributes:
-        errors: Error messages by kind.
-        warnings: Warning messages by kind.
+        errors (dict[str, list[str]]): Error messages by kind.
+        warnings (dict[str, list[str]]): Warning messages by kind.
 
     """
 
@@ -120,8 +125,8 @@ class Report:
         """Record an error.
 
         Args:
-            kind: Problem kind.
-            text: Message with the location.
+            kind (str): Problem kind.
+            text (str): Message with the location.
 
         """
         self.errors.setdefault(kind, []).append(text)
@@ -130,8 +135,8 @@ class Report:
         """Record a warning.
 
         Args:
-            kind: Problem kind.
-            text: Message with the location.
+            kind (str): Problem kind.
+            text (str): Message with the location.
 
         """
         self.warnings.setdefault(kind, []).append(text)
@@ -141,10 +146,10 @@ def parse_id(*, token: str) -> str | None:
     """Recognise a task ID such as ``M4-06``, ``F-07a`` or ``CC-08-01``.
 
     Args:
-        token: A word.
+        token (str): A word.
 
     Returns:
-        The ID, or ``None`` when the word is not shaped like one.
+        str | None: The ID, or ``None`` when the word is not shaped like one.
 
     """
     head, dash, tail = token.partition("-")
@@ -154,12 +159,13 @@ def parse_id(*, token: str) -> str | None:
     digits: str = head[len(letters) :]
     if not letters or not letters.isalpha() or not letters.isupper():
         return None
-    max_letters: int = 2
-    if len(letters) >= max_letters or len(digits) > 1:
+    max_prefix_letters: int = 3
+    if len(letters) > max_prefix_letters or len(digits) > 1:
         return None
     number, dash2, suffix = tail.partition("-")
     core: str = number[:-1] if number[-1:].islower() else number
-    if len(core) < max_letters or not core.isdigit():
+    min_digits: int = 2
+    if len(core) < min_digits or not core.isdigit():
         return None
     if dash2 and not suffix.isdigit():
         return None
@@ -170,10 +176,10 @@ def words(*, text: str) -> list[str]:
     """Split text into words made of letters, digits and hyphens.
 
     Args:
-        text: Any text.
+        text (str): Any text.
 
     Returns:
-        The words, with leading and trailing hyphens removed.
+        list[str]: The words, with leading and trailing hyphens removed.
 
     """
     found: list[str] = []
@@ -191,10 +197,10 @@ def slug(*, heading: str) -> str:
     """Compute the GitHub anchor of a heading.
 
     Args:
-        heading: Heading text without the leading ``#``.
+        heading (str): Heading text without the leading ``#``.
 
     Returns:
-        Lower-case text with punctuation removed and spaces as hyphens.
+        str: Lower-case text with punctuation removed and spaces as hyphens.
 
     """
     kept: list[str] = [
@@ -207,10 +213,11 @@ def split_tasks(*, lines: list[str]) -> tuple[list[Task], list[str]]:
     """Cut the document into task blocks and list all headings.
 
     Args:
-        lines: Document lines.
+        lines (list[str]): Document lines.
 
     Returns:
-        The task blocks and every heading line outside code fences.
+        tuple[list[Task], list[str]]: The task blocks and every heading line
+            outside code fences.
 
     """
     tasks: list[Task] = []
@@ -240,8 +247,8 @@ def check_markers(*, text: str, report: Report) -> None:
     """Check each generated block has exactly one start and one end marker.
 
     Args:
-        text: Document text.
-        report: Where problems go.
+        text (str): Document text.
+        report (Report): Where problems go.
 
     """
     for name in Constants.blocks:
@@ -265,10 +272,11 @@ def _meta_of(*, task: Task) -> dict[str, str]:
     """Read the ``- **Label:** value`` lines at the top of a task body.
 
     Args:
-        task: The task block.
+        task (Task): The task block.
 
     Returns:
-        Metadata label to value for the first lines that carry one.
+        dict[str, str]: Metadata label to value for the first lines that carry
+            one.
 
     """
     meta: dict[str, str] = {}
@@ -283,12 +291,12 @@ def _check_values(*, meta: dict[str, str], where: str, report: Report) -> bool:
     """Check the status, priority, readiness and effort values.
 
     Args:
-        meta: Metadata label to value.
-        where: Location text for messages.
-        report: Where problems go.
+        meta (dict[str, str]): Metadata label to value.
+        where (str): Location text for messages.
+        report (Report): Where problems go.
 
     Returns:
-        Whether the task is marked done.
+        bool: Whether the task is marked done.
 
     """
     for label, allowed, kind in (
@@ -325,11 +333,11 @@ def _check_open(
     """Check the steps and done-when requirements of an open task.
 
     Args:
-        task: The task block.
-        body: The task body joined into one string.
-        size: The effort size token.
-        where: Location text for messages.
-        report: Where problems go.
+        task (Task): The task block.
+        body (str): The task body joined into one string.
+        size (str): The effort size token.
+        where (str): Location text for messages.
+        report (Report): Where problems go.
 
     """
     if size == "unsized":
@@ -349,9 +357,9 @@ def _check_done(*, body: str, where: str, report: Report) -> None:
     """Check the evidence requirement of a done task.
 
     Args:
-        body: The task body joined into one string.
-        where: Location text for messages.
-        report: Where problems go.
+        body (str): The task body joined into one string.
+        where (str): Location text for messages.
+        report (Report): Where problems go.
 
     """
     if "Evidence" not in body:
@@ -362,10 +370,10 @@ def _check_text(*, body: str, title: str, where: str, report: Report) -> None:
     """Check the body for placeholders and the title for truncation.
 
     Args:
-        body: The task body joined into one string.
-        title: The task heading title.
-        where: Location text for messages.
-        report: Where problems go.
+        body (str): The task body joined into one string.
+        title (str): The task heading title.
+        where (str): Location text for messages.
+        report (Report): Where problems go.
 
     """
     for marker in Constants.placeholders:
@@ -385,8 +393,8 @@ def check_task(*, task: Task, report: Report) -> None:
     """Check one task block.
 
     Args:
-        task: The task.
-        report: Where problems go.
+        task (Task): The task.
+        report (Report): Where problems go.
 
     """
     where: str = f"{task.identifier} (line {task.line})"
@@ -418,10 +426,10 @@ def _line_id(*, line: str) -> str | None:
     """Pull the task ID a table row or ``###`` heading defines, if any.
 
     Args:
-        line: One document line.
+        line (str): One document line.
 
     Returns:
-        The ID when the line defines one, else ``None``.
+        str | None: The ID when the line defines one, else ``None``.
 
     """
     if line.startswith("| ") and " | " in line:
@@ -439,11 +447,11 @@ def _cited_ids(*, text: str, defined: set[str]) -> Counter[str]:
     """Count in-text ID citations that no definition covers.
 
     Args:
-        text: Document text.
-        defined: Every defined task ID.
+        text (str): Document text.
+        defined (set[str]): Every defined task ID.
 
     Returns:
-        Citation counts by undefined ID.
+        Counter[str]: Citation counts by undefined ID.
 
     """
     prefixes: set[str] = {i.partition("-")[0] for i in defined}
@@ -469,10 +477,10 @@ def check_references(
     """Check duplicate IDs and cited IDs that are defined nowhere.
 
     Args:
-        text: Document text.
-        archive: Archive text (may be empty).
-        tasks: Task blocks of the document.
-        report: Where problems go.
+        text (str): Document text.
+        archive (str): Archive text (may be empty).
+        tasks (list[Task]): Task blocks of the document.
+        report (Report): Where problems go.
 
     """
     counts: Counter[str] = Counter(task.identifier for task in tasks)
@@ -481,7 +489,9 @@ def check_references(
             report.error(kind="duplicate task id", text=f"{ident} x{count}")
     defined: set[str] = set(counts)
     for source in (text, archive):
-        for line in source.split(sep="\n"):
+        for line in source.split(
+            sep="\n",
+        ):
             found_id: str | None = _line_id(line=line)
             if found_id is not None:
                 defined.add(found_id)
@@ -498,8 +508,8 @@ def check_chapters(*, headings: list[str], report: Report) -> None:
     """Check numbered chapters run 1..N once each and in order.
 
     Args:
-        headings: All heading lines.
-        report: Where problems go.
+        headings (list[str]): All heading lines.
+        report (Report): Where problems go.
 
     """
     numbers: list[int] = []
@@ -523,9 +533,9 @@ def check_anchors(*, text: str, headings: list[str], report: Report) -> None:
     """Check that every link in the task index resolves to a heading.
 
     Args:
-        text: Document text.
-        headings: All heading lines.
-        report: Where problems go.
+        text (str): Document text.
+        headings (list[str]): All heading lines.
+        report (Report): Where problems go.
 
     """
     seen: Counter[str] = Counter()
@@ -537,7 +547,9 @@ def check_anchors(*, text: str, headings: list[str], report: Report) -> None:
     start: int = text.find("<!-- index:start -->")
     end: int = text.find("<!-- index:end -->")
     bad: int = 0
-    for line in text[start:end].split(sep="\n"):
+    for line in text[start:end].split(
+        sep="\n",
+    ):
         if line.startswith("| [") and "](#" in line:
             anchor: str = line.partition("](#")[2].partition(")")[0]
             if anchor not in anchors:
@@ -558,15 +570,19 @@ def lint(*, text: str, archive: str) -> Report:
     """Run every check.
 
     Args:
-        text: Document text.
-        archive: Archive text (may be empty).
+        text (str): Document text.
+        archive (str): Archive text (may be empty).
 
     Returns:
-        The collected problems.
+        Report: The collected problems.
 
     """
     report: Report = Report()
-    tasks, headings = split_tasks(lines=text.split(sep="\n"))
+    tasks, headings = split_tasks(
+        lines=text.split(
+            sep="\n",
+        ),
+    )
     check_markers(text=text, report=report)
     for task in tasks:
         check_task(task=task, report=report)
@@ -595,19 +611,19 @@ def main() -> int:
     """Lint the TODO file and print the report.
 
     Returns:
-        1 when there are errors, otherwise 0.
+        int: 1 when there are errors, otherwise 0.
 
     """
-    parser: ArgumentParser = ArgumentParser(prog="todo_lint")
+    parser: ArgumentParser = ArgumentParser(prog="todo_update lint")
     parser.add_argument(
         "--todo",
         type=Path,
-        default=Constants.root / "docs" / "TODO.md",
+        default=Constants.root / "docs" / "planning" / "TODO.md",
     )
     parser.add_argument(
         "--archive",
         type=Path,
-        default=Constants.root / "docs" / "TODO-archive.md",
+        default=Constants.root / "docs" / "planning" / "TODO-archive.md",
     )
     args: Namespace = parser.parse_args()
     text: str = args.todo.read_text(encoding="utf-8")

@@ -1,10 +1,11 @@
 """Annotations from the inference engine, for conversion mode.
 
-The engine (``astart._graph``, descended from the author's earlier converter)
+The engine (``astart.graph``, descended from the author's earlier converter)
 annotates far more than the evidence-based pipeline will accept: it needs no
 second signal. Conversion mode (``--engine``) takes its result for the nodes
 nothing else decided, at the lowest confidence tier, and leaves it to the
 type checker's gate to veto the ones that cause new errors.
+
 """
 
 from __future__ import annotations
@@ -15,7 +16,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Final, final
 
-from astart import parse
 from astart.rules.hints import (
     Hint,
     HintBasis,
@@ -27,9 +27,11 @@ from astart.rules.negotiation.builders import walk_functions
 from astart.rules.negotiation.run import function_nodes
 from astart.rules.negotiation.supplement import (
     bound_when_evaluated,
+    class_boundaries,
     parents_of,
 )
 from astart.rules.provable import own_nodes
+from astart.source.api import parse
 
 if TYPE_CHECKING:
     from ast import AST, expr
@@ -43,8 +45,9 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        failures: Exceptions the engine may raise on odd input; the module is
-            then left to the evidence-based pipeline.
+        failures (Final[tuple[type[Exception], ...]]): Exceptions the engine
+            may raise on odd input; the
+            module is then left to the evidence-based pipeline.
 
     """
 
@@ -67,7 +70,7 @@ class LazyConversion:
         """Remember the module.
 
         Args:
-            module: The original, unannotated module.
+            module (CommentedModule): The original, unannotated module.
 
         """
         self._module: CommentedModule = module
@@ -79,8 +82,8 @@ class LazyConversion:
         """Give the engine's output.
 
         Returns:
-            The converted source, or ``None`` when the engine fails on the
-            module.
+            str | None: The converted source, or ``None``
+                when the engine fails on the module.
 
         """
         if not self._done:
@@ -100,10 +103,11 @@ def engine_variables(*, converted: str) -> dict[str, str]:
     """List the annotated locals of the engine's output by variable path.
 
     Args:
-        converted: The engine's output text.
+        converted (str): The engine's output text.
 
     Returns:
-        Annotation text by ``function.variable`` (the path negotiation uses).
+        dict[str, str]: Annotation text by ``function.variable``
+            (the path negotiation uses).
 
     """
     tree: AST = ast_parse(source=converted)
@@ -130,12 +134,13 @@ def engine_hints(
     """Turn the engine's parameter and return annotations into hints.
 
     Args:
-        module: The original, unannotated module.
-        conversion: The engine's lazily computed output.
+        module (CommentedModule): The original, unannotated module.
+        conversion (LazyConversion): The engine's lazily computed output.
 
     Returns:
-        A hint per parameter or function the engine annotated and whose
-        annotation is allowed in this module and valid when evaluated.
+        dict[Key, Hint]: A hint per parameter or function the engine annotated
+            and whose
+            annotation is allowed in this module and valid when evaluated.
 
     """
     text: str | None = conversion.text
@@ -145,6 +150,7 @@ def engine_hints(
     ours: dict[str, AST] = function_nodes(module=module)
     known: frozenset[str] = allowed_names(module=module)
     parents: dict[int, AST] = parents_of(module=module)
+    classes: dict[str, int] = class_boundaries(module=module)
     found: dict[Key, Hint] = {}
     for path, node in sorted(ours.items()):
         source: str | None = _annotation(node=theirs.get(path))
@@ -156,6 +162,7 @@ def engine_hints(
                 source=source,
                 module=module,
                 parents=parents,
+                classes=classes,
             )
         ):
             found[node_key(node=node)] = Hint(
@@ -169,10 +176,11 @@ def _annotation(*, node: AST | None) -> str | None:
     """Read the annotation written on a parameter or a function's return.
 
     Args:
-        node: An ``arg`` or function definition of the converted module.
+        node (AST | None): An ``arg`` or function definition of the converted
+            module.
 
     Returns:
-        The annotation text, or ``None``.
+        str | None: The annotation text, or ``None``.
 
     """
     annotation: expr | None = getattr(node, "annotation", None)

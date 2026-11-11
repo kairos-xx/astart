@@ -54,7 +54,7 @@ def _no_aliases() -> dict[str, str]:
     """Create an empty alias mapping.
 
     Returns:
-        A new empty dictionary.
+        dict[str, str]: A new empty dictionary.
 
     """
     return {}
@@ -64,7 +64,7 @@ def _no_params() -> dict[str, FactValue]:
     """Create an empty parameter mapping.
 
     Returns:
-        A new empty dictionary.
+        dict[str, FactValue]: A new empty dictionary.
 
     """
     return {}
@@ -76,8 +76,8 @@ class EvidenceSlot:
     """Typed value a finding must provide.
 
     Attributes:
-        name: Slot name used in the message template.
-        type: Value type name.
+        name (str): Slot name used in the message template.
+        type (str): Value type name.
 
     """
 
@@ -91,9 +91,9 @@ class Example:
     """Snippet that does or does not trigger a rule.
 
     Attributes:
-        source: Python source of the snippet.
-        triggers: Whether the rule must report it.
-        note: Optional explanation.
+        source (str): Python source of the snippet.
+        triggers (bool): Whether the rule must report it.
+        note (str): Optional explanation.
 
     """
 
@@ -108,24 +108,27 @@ class Rule:
     """Describe one check.
 
     Attributes:
-        key: Stable slug, never reused.
-        code: Short unique display id.
-        title: One-line name.
-        rationale: Why the rule exists.
-        domain: Subject area.
-        severity: Default severity.
-        maturity: Lifecycle stage.
-        owner: Tool responsible for the rule.
-        subject: Node kinds the rule inspects.
-        message: Template with named evidence slots.
-        when: Declarative trigger.
-        procedure: Registered procedure key for a procedural trigger.
-        requires: Facts needed to evaluate the rule.
-        evidence: Values every finding provides.
-        fixes: Fix keys offered for this rule.
-        examples: Snippets that double as the rule's tests.
-        aliases: External ids by system name.
-        params: Typed parameters a profile may override.
+        key (str): Stable slug, never reused.
+        code (str): Short unique display id.
+        title (str): One-line name.
+        rationale (str): Why the rule exists.
+        domain (Domain): Subject area.
+        severity (Severity): Default severity.
+        maturity (Maturity): Lifecycle stage.
+        owner (Owner): Tool responsible for the rule.
+        subject (tuple[str, ...]): Node kinds the rule inspects.
+        message (str): Template with named evidence slots.
+        when (Predicate | None): Declarative trigger.
+        procedure (str | None): Registered procedure key for a procedural
+            trigger.
+        requires (tuple[str, ...]): Facts needed to evaluate the rule.
+        evidence (tuple[EvidenceSlot, ...]): Values every finding provides.
+        fixes (tuple[str, ...]): Fix keys offered for this rule.
+        examples (tuple[Example, ...]): Snippets that double as the rule's
+            tests.
+        aliases (Mapping[str, str]): External ids by system name.
+        params (Mapping[str, FactValue]): Typed parameters a profile may
+            override.
 
     """
 
@@ -153,7 +156,8 @@ class Rule:
         """How the trigger is expressed.
 
         Returns:
-            Procedural when a procedure is named, else declarative.
+            Expressible:
+                Procedural when a procedure is named, else declarative.
 
         """
         if self.procedure is not None:
@@ -181,15 +185,16 @@ class Fix:
     """Describe one automatic edit plan.
 
     Attributes:
-        key: Stable slug.
-        rules: Rules the fix resolves.
-        safety: How far it may be applied unreviewed.
-        min_confidence: Inference confidence required when guarded.
-        edits: Applier keys, in order.
-        preconditions: Predicate that must hold when applied.
-        idempotent: Whether applying twice equals applying once.
-        before: Fix keys this fix must run before.
-        after: Fix keys this fix must run after.
+        key (str): Stable slug.
+        rules (tuple[str, ...]): Rules the fix resolves.
+        safety (FixSafety): How far it may be applied unreviewed.
+        min_confidence (float): Inference confidence required when guarded.
+        edits (tuple[str, ...]): Applier keys, in order.
+        preconditions (Predicate | None): Predicate that must hold when
+            applied.
+        idempotent (bool): Whether applying twice equals applying once.
+        before (tuple[str, ...]): Fix keys this fix must run before.
+        after (tuple[str, ...]): Fix keys this fix must run after.
 
     """
 
@@ -210,11 +215,11 @@ class Profile:
     """Named selection and parameterisation of rules.
 
     Attributes:
-        key: Stable slug.
-        rules: Enabled rule keys.
-        severities: Severity overrides by rule key.
-        params: Parameter overrides.
-        safety_ceiling: Highest fix safety applied automatically.
+        key (str): Stable slug.
+        rules (tuple[str, ...]): Enabled rule keys.
+        severities (Mapping[str, Severity]): Severity overrides by rule key.
+        params (Mapping[str, FactValue]): Parameter overrides.
+        safety_ceiling (FixSafety): Highest fix safety applied automatically.
 
     """
 
@@ -231,9 +236,9 @@ class Relation:
     """Typed edge between two ontology entities.
 
     Attributes:
-        kind: Edge type.
-        source: Source entity key.
-        target: Target entity key.
+        kind (RelationKind): Edge type.
+        source (str): Source entity key.
+        target (str): Target entity key.
 
     """
 
@@ -248,11 +253,11 @@ class Span:
     """Source range of a finding.
 
     Attributes:
-        file: File name.
-        start_line: First line, one-based.
-        start_column: First column, zero-based.
-        end_line: Last line, one-based.
-        end_column: Last column, zero-based.
+        file (str): File name.
+        start_line (int): First line, one-based.
+        start_column (int): First column, zero-based.
+        end_line (int): Last line, one-based.
+        end_column (int): Last column, zero-based.
 
     """
 
@@ -269,9 +274,9 @@ class FixOffer:
     """Fix proposed for a finding.
 
     Attributes:
-        fix_key: Offered fix.
-        safety: Its safety class.
-        confidence: Inference confidence for this finding.
+        fix_key (str): Offered fix.
+        safety (FixSafety): Its safety class.
+        confidence (float): Inference confidence for this finding.
 
     """
 
@@ -286,13 +291,14 @@ class Finding:
     """One reported violation.
 
     Attributes:
-        rule_key: Rule that fired.
-        severity: Severity after profile overrides.
-        span: Source range.
-        subject_path: Dotted qualified path of the subject.
-        evidence: Values for the rule's evidence slots.
-        fix_offers: Fixes that apply.
-        fingerprint: Stable identity that ignores line numbers.
+        rule_key (str): Rule that fired.
+        severity (Severity): Severity after profile overrides.
+        span (Span): Source range.
+        subject_path (str): Dotted qualified path of the subject.
+        evidence (Mapping[str, JsonValue]): Values for the rule's evidence
+            slots.
+        fix_offers (tuple[FixOffer, ...]): Fixes that apply.
+        fingerprint (str): Stable identity that ignores line numbers.
 
     """
 
@@ -311,10 +317,10 @@ class Catalog:
     """All rules, fixes, profiles and relations.
 
     Attributes:
-        rules: Rules.
-        fixes: Fixes.
-        profiles: Profiles.
-        relations: Relations.
+        rules (tuple[Rule, ...]): Rules.
+        fixes (tuple[Fix, ...]): Fixes.
+        profiles (tuple[Profile, ...]): Profiles.
+        relations (tuple[Relation, ...]): Relations.
 
     """
 
@@ -327,10 +333,10 @@ class Catalog:
         """Look up a rule.
 
         Args:
-            key: Rule key.
+            key (str): Rule key.
 
         Returns:
-            The rule.
+            Rule: The rule.
 
         Raises:
             KeyError: If no rule has the key.
@@ -346,10 +352,10 @@ class Catalog:
         """Look up a fix.
 
         Args:
-            key: Fix key.
+            key (str): Fix key.
 
         Returns:
-            The fix.
+            Fix: The fix.
 
         Raises:
             KeyError: If no fix has the key.
@@ -371,12 +377,12 @@ def make_fingerprint(
     """Hash a finding's identity without line numbers.
 
     Args:
-        rule_key: Rule that fired.
-        subject_path: Dotted qualified path of the subject.
-        evidence: Evidence values.
+        rule_key (str): Rule that fired.
+        subject_path (str): Dotted qualified path of the subject.
+        evidence (Mapping[str, JsonValue]): Evidence values.
 
     Returns:
-        The first 16 hexadecimal characters of a SHA-256 digest.
+        str: The first 16 hexadecimal characters of a SHA-256 digest.
 
     """
     payload: str = canonical_dumps(
@@ -393,10 +399,10 @@ def to_json(*, item: Rule | Fix | Profile | Relation | Catalog) -> JsonValue:
     """Convert an entity to its JSON form.
 
     Args:
-        item: Entity to convert.
+        item (Rule | Fix | Profile | Relation | Catalog): Entity to convert.
 
     Returns:
-        JSON-compatible value.
+        JsonValue: JSON-compatible value.
 
     """
     match item:
@@ -433,10 +439,10 @@ def _rule_to_json(*, rule: Rule) -> JsonValue:
     """Convert a rule to JSON.
 
     Args:
-        rule: Rule to convert.
+        rule (Rule): Rule to convert.
 
     Returns:
-        JSON-compatible value.
+        JsonValue: JSON-compatible value.
 
     """
     return {
@@ -478,10 +484,10 @@ def _fix_to_json(*, fix: Fix) -> JsonValue:
     """Convert a fix to JSON.
 
     Args:
-        fix: Fix to convert.
+        fix (Fix): Fix to convert.
 
     Returns:
-        JSON-compatible value.
+        JsonValue: JSON-compatible value.
 
     """
     return {
@@ -509,8 +515,8 @@ class _Reader:
         """Wrap a JSON object.
 
         Args:
-            value: Value expected to be an object.
-            what: Entity name used in error messages.
+            value (JsonValue): Value expected to be an object.
+            what (str): Entity name used in error messages.
 
         Raises:
             ValueError: If the value is not an object.
@@ -528,10 +534,10 @@ class _Reader:
         """Return a mandatory value.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The stored value.
+            JsonValue: The stored value.
 
         Raises:
             ValueError: If the key is absent.
@@ -546,10 +552,10 @@ class _Reader:
         """Return a mandatory string.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The string.
+            str: The string.
 
         Raises:
             ValueError: If the value is not a string.
@@ -568,10 +574,10 @@ class _Reader:
         """Return a string that may be null or absent.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The string or ``None``.
+            str | None: The string or ``None``.
 
         Raises:
             ValueError: If the value is neither a string nor null.
@@ -592,10 +598,10 @@ class _Reader:
         """Return a mandatory number.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The number.
+            float: The number.
 
         Raises:
             ValueError: If the value is not a number.
@@ -615,10 +621,10 @@ class _Reader:
         """Return a mandatory boolean.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The boolean.
+            bool: The boolean.
 
         Raises:
             ValueError: If the value is not a boolean.
@@ -637,10 +643,10 @@ class _Reader:
         """Return a list that may be absent.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The list, empty when absent.
+            list[JsonValue]: The list, empty when absent.
 
         Raises:
             ValueError: If the value is not a list.
@@ -657,10 +663,10 @@ class _Reader:
         """Return a list of strings that may be absent.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The strings.
+            tuple[str, ...]: The strings.
 
         Raises:
             ValueError: If any item is not a string.
@@ -680,10 +686,10 @@ class _Reader:
         """Return an object that may be absent.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The object, empty when absent.
+            dict[str, JsonValue]: The object, empty when absent.
 
         Raises:
             ValueError: If the value is not an object.
@@ -702,10 +708,10 @@ class _Reader:
         """Return a predicate that may be null or absent.
 
         Args:
-            key: Object key.
+            key (str): Object key.
 
         Returns:
-            The predicate or ``None``.
+            Predicate | None: The predicate or ``None``.
 
         """
         match self._data.get(key):
@@ -723,11 +729,11 @@ def _scalars(
     """Check that every value of an object is a scalar.
 
     Args:
-        values: Object to check.
-        what: Entity name used in error messages.
+        values (dict[str, JsonValue]): Object to check.
+        what (str): Entity name used in error messages.
 
     Returns:
-        The same entries typed as fact values.
+        dict[str, FactValue]: The same entries typed as fact values.
 
     Raises:
         ValueError: If a value is a list or an object.
@@ -748,10 +754,10 @@ def rule_from_json(*, value: JsonValue) -> Rule:
     """Restore a rule from JSON.
 
     Args:
-        value: JSON-compatible value.
+        value (JsonValue): JSON-compatible value.
 
     Returns:
-        The rule.
+        Rule: The rule.
 
     Raises:
         ValueError: If the value does not describe a valid rule.
@@ -814,10 +820,10 @@ def fix_from_json(*, value: JsonValue) -> Fix:
     """Restore a fix from JSON.
 
     Args:
-        value: JSON-compatible value.
+        value (JsonValue): JSON-compatible value.
 
     Returns:
-        The fix.
+        Fix: The fix.
 
     """
     reader: _Reader = _Reader(value=value, what="fix")
@@ -838,10 +844,10 @@ def profile_from_json(*, value: JsonValue) -> Profile:
     """Restore a profile from JSON.
 
     Args:
-        value: JSON-compatible value.
+        value (JsonValue): JSON-compatible value.
 
     Returns:
-        The profile.
+        Profile: The profile.
 
     Raises:
         ValueError: If a severity override is not a string.
@@ -874,10 +880,10 @@ def relation_from_json(*, value: JsonValue) -> Relation:
     """Restore a relation from JSON.
 
     Args:
-        value: JSON-compatible value.
+        value (JsonValue): JSON-compatible value.
 
     Returns:
-        The relation.
+        Relation: The relation.
 
     """
     reader: _Reader = _Reader(value=value, what="relation")
@@ -892,10 +898,10 @@ def catalog_from_json(*, value: JsonValue) -> Catalog:
     """Restore a catalog from JSON.
 
     Args:
-        value: JSON-compatible value.
+        value (JsonValue): JSON-compatible value.
 
     Returns:
-        The catalog.
+        Catalog: The catalog.
 
     """
     reader: _Reader = _Reader(value=value, what="catalog")

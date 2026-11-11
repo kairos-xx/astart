@@ -1,0 +1,138 @@
+import ssl
+import sys
+from collections.abc import Awaitable, Callable, Iterable, Sequence, Sized
+from types import ModuleType
+from typing import Any, Protocol, Self, SupportsIndex, type_check_only
+
+from _typeshed import ReadableBuffer, StrPath
+
+from . import events, protocols, transports
+from .base_events import Server
+
+if sys.platform == "win32":
+    __all__ = (
+        "StreamReader",
+        "StreamReaderProtocol",
+        "StreamWriter",
+        "open_connection",
+        "start_server",
+    )
+else:
+    __all__ = (
+        "StreamReader",
+        "StreamReaderProtocol",
+        "StreamWriter",
+        "open_connection",
+        "open_unix_connection",
+        "start_server",
+        "start_unix_server",
+    )
+type _ClientConnectedCallback = Callable[
+    [StreamReader, StreamWriter],
+    Awaitable[None] | None,
+]
+
+@type_check_only
+class _ReaduntilBuffer(ReadableBuffer, Sized, Protocol): ...
+
+async def open_connection(
+    host: str | None = None,
+    port: int | str | None = None,
+    *,
+    limit: int = 65536,
+    ssl_handshake_timeout: float | None = None,
+    **kwds: Any,
+) -> tuple[StreamReader, StreamWriter]: ...
+async def start_server(
+    client_connected_cb: _ClientConnectedCallback,
+    host: str | Sequence[str] | None = None,
+    port: int | str | None = None,
+    *,
+    limit: int = 65536,
+    ssl_handshake_timeout: float | None = None,
+    **kwds: Any,
+) -> Server: ...
+
+if sys.platform != "win32":
+    async def open_unix_connection(
+        path: StrPath | None = None,
+        *,
+        limit: int = 65536,
+        **kwds: Any,
+    ) -> tuple[StreamReader, StreamWriter]: ...
+    async def start_unix_server(
+        client_connected_cb: _ClientConnectedCallback,
+        path: StrPath | None = None,
+        *,
+        limit: int = 65536,
+        **kwds: Any,
+    ) -> Server: ...
+
+class FlowControlMixin(protocols.Protocol):
+    def __init__(
+        self,
+        loop: events.AbstractEventLoop | None = None,
+    ) -> None: ...
+
+class StreamReaderProtocol(FlowControlMixin, protocols.Protocol):
+    def __init__(
+        self,
+        stream_reader: StreamReader,
+        client_connected_cb: _ClientConnectedCallback | None = None,
+        loop: events.AbstractEventLoop | None = None,
+    ) -> None: ...
+    def __del__(self) -> None: ...
+
+class StreamWriter:
+    def __init__(
+        self,
+        transport: transports.WriteTransport,
+        protocol: protocols.BaseProtocol,
+        reader: StreamReader | None,
+        loop: events.AbstractEventLoop,
+    ) -> None: ...
+    @property
+    def transport(self) -> transports.WriteTransport: ...
+    def write(self, data: bytes | bytearray | memoryview) -> None: ...
+    def writelines(
+        self,
+        data: Iterable[bytes | bytearray | memoryview],
+    ) -> None: ...
+    def write_eof(self) -> None: ...
+    def can_write_eof(self) -> bool: ...
+    def close(self) -> None: ...
+    def is_closing(self) -> bool: ...
+    async def wait_closed(self) -> None: ...
+    def get_extra_info(self, name: str, default: Any = None) -> Any: ...
+    async def drain(self) -> None: ...
+    async def start_tls(
+        self,
+        sslcontext: ssl.SSLContext,
+        *,
+        server_hostname: str | None = None,
+        ssl_handshake_timeout: float | None = None,
+        ssl_shutdown_timeout: float | None = None,
+    ) -> None: ...
+    def __del__(self, warnings: ModuleType = ...) -> None: ...
+
+class StreamReader:
+    def __init__(
+        self,
+        limit: int = 65536,
+        loop: events.AbstractEventLoop | None = None,
+    ) -> None: ...
+    def exception(self) -> Exception | None: ...
+    def set_exception(self, exc: Exception) -> None: ...
+    def set_transport(self, transport: transports.BaseTransport) -> None: ...
+    def feed_eof(self) -> None: ...
+    def at_eof(self) -> bool: ...
+    def feed_data(self, data: Iterable[SupportsIndex]) -> None: ...
+    async def readline(self) -> bytes: ...
+    async def readuntil(
+        self,
+        separator: _ReaduntilBuffer | tuple[_ReaduntilBuffer, ...] = b"\n",
+    ) -> bytes: ...
+    async def read(self, n: int = -1) -> bytes: ...
+    async def readexactly(self, n: int) -> bytes: ...
+    def __aiter__(self) -> Self: ...
+    async def __anext__(self) -> bytes: ...

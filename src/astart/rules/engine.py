@@ -6,7 +6,6 @@ from ast import parse as ast_parse
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
 
-from astart import FormatPreservationError, parse, unparse
 from astart.rules.appliers import Appliers
 from astart.rules.catalog import CatalogError, validate_catalog
 from astart.rules.confidence import offer_confidence
@@ -20,6 +19,8 @@ from astart.rules.facts import (
 from astart.rules.model import Finding, FixOffer, Span, make_fingerprint
 from astart.rules.predicate import FactValue, evaluate, predicate_facts
 from astart.rules.vocabulary import FixSafety
+from astart.source.api import parse, unparse
+from astart.source.formatting import FormatPreservationError
 
 if TYPE_CHECKING:
     from ast import AST
@@ -49,9 +50,10 @@ class CheckResult:
     """Outcome of checking one source file.
 
     Attributes:
-        findings: Findings in source order.
-        parse_error: Why the source could not be analysed (a syntax error
-            or a parser limit), or ``None`` when it was.
+        findings (tuple[Finding, ...]): Findings in source order.
+        parse_error (str | None): Why the source could not be analysed (a
+            syntax
+            error or a parser limit), or ``None`` when it was.
 
     """
 
@@ -65,26 +67,31 @@ class CheckOptions:
     """Optional seams of :func:`check`.
 
     Attributes:
-        providers: Fact providers; ``None`` selects the built-in ones.
-        stubs_path: Stub directory for type hints, or ``None`` for an empty
-            temporary one.
-        hint_cache: Cache shared between runs on the same text, or ``None``.
-        create_constants: Whether a missing ``Constants`` class may be
+        providers (Mapping[str, FactProvider] | None): Fact providers; ``None``
+            selects the built-in ones.
+        stubs_path (Path | None): Stub directory for type hints, or
+            ``None`` for an empty temporary one.
+        hint_cache (HintCache | None): Cache shared between runs on the same
+            text, or ``None``.
+        create_constants (bool): Whether a missing ``Constants`` class may be
             created to hold ``Final`` module constants.
-        stub_docstrings: Whether undocumented public definitions get a stub
-            docstring.
-        annotate_variables: Whether function-local variables get a type
+        docstring_types (bool): Include annotation types in generated
+            documentation.
+        stub_docstrings (bool): Whether undocumented public definitions get a
+            stub docstring.
+        annotate_variables (bool): Whether function-local variables get a type
             annotation.
-        negotiate: Whether negotiated annotations supplement the hint
+        negotiate (bool): Whether negotiated annotations supplement the hint
             index.
-        engine: Conversion mode: the inference engine's annotations fill
+        engine (bool): Conversion mode: the inference engine's annotations fill
             what nothing else decided.
-        project: Cross-module view of the project, or ``None`` for
-            single-module analysis.
-        libraries: External signature index for callees outside the
-            project, or ``None``.
-        target: Oldest Python version emitted code must run on, or
-            ``None`` for the running interpreter.
+        project (ProjectView | None): Cross-module view of the project, or
+            ``None`` for single-module analysis.
+        libraries (LibraryIndex | None): External signature index for callees
+            outside the project, or ``None``.
+        target (PythonTarget | None): Oldest Python version emitted code must
+            run
+            on, or ``None`` for the running interpreter.
 
     """
 
@@ -93,6 +100,7 @@ class CheckOptions:
     hint_cache: HintCache | None = None
     create_constants: bool = False
     stub_docstrings: bool = False
+    docstring_types: bool = True
     annotate_variables: bool = False
     negotiate: bool = False
     engine: bool = False
@@ -107,10 +115,10 @@ class _Context:
     """Everything shared by the evaluation of one source file.
 
     Attributes:
-        filename: Name used in finding spans.
-        catalog: Catalog holding rules and fixes.
-        table: Fact providers.
-        facts: Resolved imports.
+        filename (str): Name used in finding spans.
+        catalog (Catalog): Catalog holding rules and fixes.
+        table (Mapping[str, FactProvider]): Fact providers.
+        facts (ModuleFacts): Resolved imports.
 
     """
 
@@ -134,15 +142,16 @@ def check(
     read are computed.
 
     Args:
-        source: Python source text.
-        filename: Name used in finding spans.
-        catalog: Rules to apply.
-        registries: Declared vocabulary; every fact a rule reads must be
-            declared in it.
-        options: Optional fact providers and stub directory.
+        source (str): Python source text.
+        filename (str): Name used in finding spans.
+        catalog (Catalog): Rules to apply.
+        registries (Registries): Declared vocabulary; every fact a
+            rule reads must be declared in it.
+        options (CheckOptions | None): Optional fact providers and stub
+            directory.
 
     Returns:
-        Findings, or the parse error when the source is invalid.
+        CheckResult: Findings, or the parse error when the source is invalid.
 
     """
     for rule in catalog.rules:
@@ -168,6 +177,7 @@ def check(
                     cache=chosen.hint_cache,
                     create_constants=chosen.create_constants,
                     stub_docstrings=chosen.stub_docstrings,
+                    docstring_types=chosen.docstring_types,
                     annotate_variables=chosen.annotate_variables,
                     negotiate=chosen.negotiate,
                     engine=chosen.engine,
@@ -196,12 +206,12 @@ def _evaluate(
     """Evaluate every rule against a parsed module.
 
     Args:
-        module: Parsed module.
-        catalog: Rules to apply.
-        context: Shared evaluation context.
+        module (Module): Parsed module.
+        catalog (Catalog): Rules to apply.
+        context (_Context): Shared evaluation context.
 
     Returns:
-        Findings in source order.
+        tuple[Finding, ...]: Findings in source order.
 
     """
     findings: list[Finding] = []
@@ -239,10 +249,10 @@ def _compute(
     """Compute the named facts that are not cached yet.
 
     Args:
-        names: Fact names needed.
-        subject: Subject under test.
-        values: Cache of fact values, filled in place.
-        context: Shared evaluation context.
+        names (frozenset[str]): Fact names needed.
+        subject (Subject): Subject under test.
+        values (dict[str, FactValue]): Cache of fact values, filled in place.
+        context (_Context): Shared evaluation context.
 
     """
     for name in sorted(names):
@@ -261,13 +271,14 @@ def _holds(
     """Evaluate a rule's trigger for one subject.
 
     Args:
-        rule: Rule under test.
-        subject: Subject under test.
-        values: Cache of computed fact values, filled in place.
-        context: Shared evaluation context.
+        rule (Rule): Rule under test.
+        subject (Subject): Subject under test.
+        values (dict[str, FactValue]): Cache of computed fact values, filled in
+            place.
+        context (_Context): Shared evaluation context.
 
     Returns:
-        Whether the declarative trigger holds.
+        bool: Whether the declarative trigger holds.
 
     """
     if rule.when is None:
@@ -285,11 +296,11 @@ def _span(*, subject: Subject, filename: str) -> Span:
     """Locate a subject in the source.
 
     Args:
-        subject: Subject being reported.
-        filename: Name used in the span.
+        subject (Subject): Subject being reported.
+        filename (str): Name used in the span.
 
     Returns:
-        The span of the subject's node.
+        Span: The span of the subject's node.
 
     """
     node: AST = subject.node
@@ -313,13 +324,14 @@ def _finding(
     """Build the finding for a firing rule.
 
     Args:
-        rule: Rule that fired.
-        subject: Subject it fired on.
-        values: Fact values already computed for the subject.
-        context: Shared evaluation context.
+        rule (Rule): Rule that fired.
+        subject (Subject): Subject it fired on.
+        values (dict[str, FactValue]): Fact values already computed for the
+            subject.
+        context (_Context): Shared evaluation context.
 
     Returns:
-        The finding.
+        Finding: The finding.
 
     """
     evidence: dict[str, JsonValue] = {}
@@ -369,13 +381,14 @@ def _applicable(
     """Decide whether a fix's preconditions hold for a subject.
 
     Args:
-        fix: Candidate fix.
-        subject: Subject of the finding.
-        values: Fact values already computed, extended in place.
-        context: Shared evaluation context.
+        fix (Fix): Candidate fix.
+        subject (Subject): Subject of the finding.
+        values (dict[str, FactValue]): Fact values already computed, extended
+            in place.
+        context (_Context): Shared evaluation context.
 
     Returns:
-        Whether the fix can be offered.
+        bool: Whether the fix can be offered.
 
     """
     if fix.safety is FixSafety.none:
@@ -395,10 +408,11 @@ def subject_index(*, module: Module) -> dict[tuple[str, int, int], Subject]:
     """Index every subject of a module by path and start position.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Subjects keyed by (path, start line, start column).
+        dict[tuple[str, int, int], Subject]: Subjects keyed by (path, start
+            line, start column).
 
     """
     index: dict[tuple[str, int, int], Subject] = {}
@@ -415,11 +429,12 @@ def locate_subject(*, module: Module, finding: Finding) -> Subject | None:
     """Find the subject a finding was reported on.
 
     Args:
-        module: Parsed module.
-        finding: Finding to locate.
+        module (Module): Parsed module.
+        finding (Finding): Finding to locate.
 
     Returns:
-        The subject, or ``None`` when the source no longer matches.
+        Subject | None:
+            The subject, or ``None`` when the source no longer matches.
 
     """
     return subject_index(module=module).get(
@@ -440,12 +455,12 @@ def preconditions_hold(
     """Evaluate a fix's preconditions on the current tree.
 
     Args:
-        fix: Candidate fix.
-        subject: Subject of the finding.
-        facts: Resolved imports and lazily computed hints.
+        fix (Fix): Candidate fix.
+        subject (Subject): Subject of the finding.
+        facts (ModuleFacts): Resolved imports and lazily computed hints.
 
     Returns:
-        Whether the fix may be applied.
+        bool: Whether the fix may be applied.
 
     """
     if fix.preconditions is None:
@@ -468,16 +483,17 @@ def apply_fix(
     """Apply a fix to the subject of a finding.
 
     Args:
-        source: Python source the finding was reported on.
-        finding: Finding to fix; its span names the file.
-        fix: Fix to apply.
-        registries: Declared appliers.
-        appliers: Applier functions; defaults to the built-in ones.
+        source (str): Python source the finding was reported on.
+        finding (Finding): Finding to fix; its span names the file.
+        fix (Fix): Fix to apply.
+        registries (Registries): Declared appliers.
+        appliers (Mapping[str, Applier] | None): Applier functions; defaults to
+            the built-in ones.
 
     Returns:
-        The new source, or the original when the subject is gone, the
-        fix's preconditions no longer hold, or the edit cannot be written
-        back without changing the surrounding formatting or comments.
+        str: The new source, or the original when the subject is gone, the
+            fix's preconditions no longer hold, or the edit cannot be written
+            back without changing the surrounding formatting or comments.
 
     Raises:
         KeyError: If an applier of the fix is not registered.
@@ -523,9 +539,10 @@ def validate_behavior(
     rule; and every fix offered on a triggering example must be idempotent.
 
     Args:
-        catalog: Catalog to check.
-        registries: Declared vocabulary.
-        appliers: Applier functions; defaults to the built-in ones.
+        catalog (Catalog): Catalog to check.
+        registries (Registries): Declared vocabulary.
+        appliers (Mapping[str, Applier] | None): Applier functions; defaults to
+            the built-in ones.
 
     Raises:
         CatalogError: With every problem found.
@@ -581,9 +598,10 @@ class _Env:
     """Catalog and registries shared by the behavioural checks.
 
     Attributes:
-        catalog: Catalog holding rules and fixes.
-        registries: Declared vocabulary.
-        appliers: Applier functions, or ``None`` for the built-in ones.
+        catalog (Catalog): Catalog holding rules and fixes.
+        registries (Registries): Declared vocabulary.
+        appliers (Mapping[str, Applier] | None): Applier functions, or ``None``
+            for the built-in ones.
 
     """
 
@@ -602,13 +620,13 @@ def _idempotence_problems(
     """Check that every offered fix converges after one application.
 
     Args:
-        label: Description of the example, used in messages.
-        source: Example source.
-        finding: The example's finding.
-        env: Catalog, registries and appliers.
+        label (str): Description of the example, used in messages.
+        source (str): Example source.
+        finding (Finding): The example's finding.
+        env (_Env): Catalog, registries and appliers.
 
     Returns:
-        Problems found.
+        list[str]: Problems found.
 
     """
     problems: list[str] = []
@@ -647,9 +665,10 @@ def verify_catalog(
     the engine, so this is the single entry point that enforces all eight.
 
     Args:
-        catalog: Catalog to verify.
-        registries: Declared vocabulary.
-        appliers: Applier functions; defaults to the built-in ones.
+        catalog (Catalog): Catalog to verify.
+        registries (Registries): Declared vocabulary.
+        appliers (Mapping[str, Applier] | None): Applier functions; defaults to
+            the built-in ones.
 
     Raises:
         CatalogError: With every problem found.

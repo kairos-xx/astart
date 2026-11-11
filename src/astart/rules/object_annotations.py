@@ -1,9 +1,10 @@
 """TYP002 ``typing.no-object-annotation``: annotations spelled ``object``.
 
 ``x: object`` says nothing — any value fits — so astart treats it as a
-missing annotation.  The detector flags ``object`` (and
+missing annotation. The detector flags ``object`` (and
 ``builtins.object``) wherever it appears as a parameter, return or
 variable annotation, including inside string annotations.
+
 """
 
 from __future__ import annotations
@@ -31,8 +32,8 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        evidence_subject: Evidence key for the annotated subject.
-        evidence_annotation: Evidence key for the annotation text.
+        evidence_subject (str): Evidence key for the annotated subject.
+        evidence_annotation (str): Evidence key for the annotation text.
 
     """
 
@@ -48,11 +49,11 @@ def find_object_annotations(
     """Flag annotations whose meaning is exactly ``object``.
 
     Args:
-        module: Parsed module.
-        filename: Name used in spans.
+        module (Module): Parsed module.
+        filename (str): Name used in spans.
 
     Returns:
-        Candidates in source order.
+        tuple[Candidate, ...]: Candidates in source order.
 
     """
     candidates: list[Candidate] = []
@@ -100,11 +101,11 @@ def _is_object(*, annotation: expr | None) -> bool:
     """Answer whether an annotation expression spells ``object``.
 
     Args:
-        annotation: Annotation expression, or ``None``.
+        annotation (expr | None): Annotation expression, or ``None``.
 
     Returns:
-        ``True`` for ``object``, ``builtins.object`` or the string
-        ``"object"``.
+        bool: ``True`` for ``object``, ``builtins.object`` or the string
+            ``"object"``.
 
     """
     match annotation:
@@ -122,10 +123,10 @@ def _subject_name(*, target: expr) -> str:
     """Spell an annotated assignment's target for evidence.
 
     Args:
-        target: The ``AnnAssign`` target.
+        target (expr): The ``AnnAssign`` target.
 
     Returns:
-        A readable subject name.
+        str: A readable subject name.
 
     """
     match target:
@@ -139,12 +140,12 @@ def _candidate(*, node: AST, filename: str, subject: str) -> Candidate:
     """Build the candidate for one flagged annotation.
 
     Args:
-        node: Annotation node to span.
-        filename: Name used in the span.
-        subject: Annotated subject for evidence.
+        node (AST): Annotation node to span.
+        filename (str): Name used in the span.
+        subject (str): Annotated subject for evidence.
 
     Returns:
-        The candidate.
+        Candidate: The candidate.
 
     """
     return Candidate(

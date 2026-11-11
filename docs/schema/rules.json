@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astart.dev/schema/rules.json",
+  "title": "astart rules listing",
+  "description": "Document emitted by `astart rules --json`: one summary object per catalog rule, sorted by code.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "code",
+      "key",
+      "title",
+      "maturity",
+      "severity",
+      "fixes"
+    ],
+    "properties": {
+      "code": {
+        "type": "string",
+        "description": "Short unique display id, e.g. `TYP001`."
+      },
+      "key": {
+        "type": "string",
+        "description": "Stable rule slug, e.g. `typing.no-any`."
+      },
+      "title": {
+        "type": "string",
+        "description": "One-line rule name."
+      },
+      "maturity": {
+        "type": "string",
+        "enum": ["experimental", "stable", "deprecated"]
+      },
+      "severity": {
+        "type": "string",
+        "enum": ["error", "warning", "info"]
+      },
+      "fixes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["key", "safety"],
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "Fix slug offered for this rule."
+            },
+            "safety": {
+              "type": ["string", "null"],
+              "enum": ["proven", "guarded", "suggest", "none", null],
+              "description": "How far the fix may be applied unreviewed; null when the fix key is not in the catalog."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "Fixes offered for the rule."
+      }
+    },
+    "additionalProperties": false
+  }
+}

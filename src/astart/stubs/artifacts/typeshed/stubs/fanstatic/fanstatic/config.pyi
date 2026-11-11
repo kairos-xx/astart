@@ -1,0 +1,12 @@
+from typing import TypeVar
+
+from _typeshed import SupportsItems
+
+_KT = TypeVar("_KT")
+_VT = TypeVar("_VT")
+BOOL_CONFIG: set[str]
+
+def asbool(obj: object) -> bool: ...
+def convert_config[KT, VT](
+    config: SupportsItems[_KT, _VT],
+) -> dict[_KT, _VT | bool]: ...

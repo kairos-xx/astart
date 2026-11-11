@@ -1,0 +1,6 @@
+from _typeshed import FileDescriptorOrPath
+
+def what(
+    file: FileDescriptorOrPath | None = None,
+    h: bytes | None = None,
+) -> str | None: ...

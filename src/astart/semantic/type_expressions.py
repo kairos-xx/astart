@@ -3,6 +3,7 @@
 The representation models structured annotations as immutable type shapes
 shared by the integrated source and semantic inference subsystems.
 No annotation is evaluated as Python code.
+
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from ast import (
     Constant,
     List,
     Name,
+    Starred,
     Subscript,
     Tuple,
     expr,
@@ -34,9 +36,9 @@ class TypeExpression:
     """A loss-aware structured Python annotation expression.
 
     Attributes:
-        arguments: Arguments retained as tuple[TypeExpression, ...] by this
-            instance.
-        name: Identifier used to refer to the name.
+        arguments (tuple[TypeExpression, ...]): Arguments retained as
+            tuple[TypeExpression, ...] by this instance.
+        name (str): Identifier used to refer to the name.
 
     """
 
@@ -44,7 +46,12 @@ class TypeExpression:
     arguments: tuple[TypeExpression, ...] = ()
 
     def __str__(self) -> str:
-        """Render a normalized annotation without executing it."""
+        """Render a normalized annotation without executing it.
+
+        Returns:
+            str: TODO.
+
+        """
         if self.name == "union":
             return " | ".join(str(object=item) for item in self.arguments)
         if self.name == "parameters":
@@ -69,20 +76,77 @@ class TypeExpressionCodec:
     """Parse annotation ASTs into deterministic structural representations."""
 
     @classmethod
+    def name_nodes(cls, *, node: expr) -> tuple[Name, ...]:
+        """Select native type-name references without entering value payloads.
+
+        Args:
+            node (expr): Existing annotation expression; never parsed or cloned
+                here.
+
+        Returns:
+            tuple[Name, ...]: Original Name objects in type slots. Literal
+                strings, Annotated
+                metadata and attribute labels retain their exact identities.
+
+        """
+        if isinstance(node, Name):
+            return (node,)
+        if isinstance(node, Attribute):
+            return cls.name_nodes(node=node.value)
+        if isinstance(node, Subscript):
+            name: str = (
+                node.value.id
+                if isinstance(node.value, Name)
+                else node.value.attr
+                if isinstance(node.value, Attribute)
+                else ""
+            )
+            arguments: list[expr] = (
+                node.slice.elts
+                if isinstance(node.slice, Tuple)
+                else [node.slice]
+            )
+            parts: list[expr] = (
+                []
+                if name == "Literal"
+                else arguments[:1]
+                if name == "Annotated"
+                else arguments
+            )
+            return cls.name_nodes(node=node.value) + tuple(
+                reference
+                for part in parts
+                for reference in cls.name_nodes(node=part)
+            )
+        if isinstance(node, (List, Tuple)):
+            return tuple(
+                reference
+                for item in node.elts
+                for reference in cls.name_nodes(node=item)
+            )
+        if isinstance(node, BinOp) and isinstance(node.op, BitOr):
+            return cls.name_nodes(node=node.left) + cls.name_nodes(
+                node=node.right,
+            )
+        return (
+            cls.name_nodes(node=node.value)
+            if isinstance(node, Starred)
+            else ()
+        )
+
+    @classmethod
     def from_source(cls, *, source: str) -> TypeExpression:
         """Parse source as an expression without evaluating its contents.
 
         Raises:
             SyntaxError: The annotation is syntactically invalid.
 
-
-
         Args:
-            source: The source examined while parse source as an expression
-                without evaluating its contents.
+            source (str): The source examined while parse source as an
+                expression without evaluating its contents.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         return cls.from_ast(
@@ -96,13 +160,12 @@ class TypeExpressionCodec:
         Dispatches on the lowercase node class name to the matching
         ``convert_<kind>`` function; unsupported kinds keep their source text.
 
-
         Args:
-            node: The node examined while convert supported annotation syntax
-                to a structural expression.
+            node (AST): The node examined while convert supported
+                annotation syntax to a structural expression.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         handler: Callable[..., TypeExpression] = getattr(
@@ -117,11 +180,11 @@ class TypeExpressionCodec:
         """Convert ``None``, ``...``, forward references and literals.
 
         Args:
-            node: The node examined while convert ``None``, ``...``, forward
-                references and literals.
+            node (Constant): The node examined while convert ``None`` ,
+                ``...``, forward references and literals.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         if node.value is None:
@@ -142,11 +205,11 @@ class TypeExpressionCodec:
         """Convert ``A | B`` unions; other operators stay opaque.
 
         Args:
-            node: The node examined while convert ``A | B`` unions; other
-                operators stay opaque.
+            node (BinOp): The node examined while convert ``A | B``
+                unions; other operators stay opaque.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         if not isinstance(node.op, BitOr):
@@ -163,10 +226,11 @@ class TypeExpressionCodec:
         """Convert list or tuple elements into a parameter list.
 
         Args:
-            items: Collection of items supplied for this operation.
+            items (list[expr]): Collection of items supplied for this
+                operation.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         return TypeExpression(
@@ -179,10 +243,10 @@ class TypeExpressionCodec:
         """Convert a list of parameters.
 
         Args:
-            node: The node examined while convert a list of parameters.
+            node (List): The node examined while convert a list of parameters.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         return cls.convert_sequence(items=node.elts)
@@ -192,10 +256,11 @@ class TypeExpressionCodec:
         """Convert a tuple of parameters.
 
         Args:
-            node: The node examined while convert a tuple of parameters.
+            node (Tuple): The node examined while convert a tuple of
+                parameters.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         return cls.convert_sequence(items=node.elts)
@@ -205,11 +270,11 @@ class TypeExpressionCodec:
         """Convert a subscripted generic, ``Optional`` or ``Union``.
 
         Args:
-            node: The node examined while convert a subscripted generic,
-                ``Optional`` or ``Union``.
+            node (Subscript): The node examined while convert a subscripted
+                generic, ``Optional`` or ``Union``.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         base: TypeExpression = cls.from_ast(node=node.value)
@@ -248,11 +313,11 @@ class TypeExpressionCodec:
         """Keep unsupported syntax, including calls, as opaque source.
 
         Args:
-            node: The node examined while keep unsupported syntax, including
-                calls, as opaque source.
+            node (AST): The node examined while keep unsupported
+                syntax, including calls, as opaque source.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         return TypeExpression(name=unparse(ast_obj=node))
@@ -262,10 +327,10 @@ class TypeExpressionCodec:
         """Convert a bare name.
 
         Args:
-            node: The node examined while convert a bare name.
+            node (Name): The node examined while convert a bare name.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         return TypeExpression(name=node.id)
@@ -275,10 +340,10 @@ class TypeExpressionCodec:
         """Convert a dotted name.
 
         Args:
-            node: The node examined while convert a dotted name.
+            node (Attribute): The node examined while convert a dotted name.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         return TypeExpression(name=unparse(ast_obj=node))
@@ -288,11 +353,12 @@ class TypeExpressionCodec:
         """Flatten and canonicalize union members without numeric promotion.
 
         Args:
-            members: Members supplied as tuple[TypeExpression, ...] for this
-                operation.
+            members (tuple[TypeExpression, ...]): Members supplied as
+                tuple[TypeExpression,
+                ...] for this operation.
 
         Returns:
-            TypeExpression produced by this operation.
+            TypeExpression: TypeExpression produced by this operation.
 
         """
         all_members: dict[str, TypeExpression] = {}
@@ -319,11 +385,12 @@ class TypeExpressionCodec:
         """Return standard typing names needed to render an expression.
 
         Args:
-            expression: The expression examined while return standard typing
-                names needed to render an expression.
+            expression (TypeExpression): The expression examined while return
+                standard
+                typing names needed to render an expression.
 
         Returns:
-            frozenset[str] produced by this operation.
+            frozenset[str]: frozenset[str] produced by this operation.
 
         """
         known: frozenset[str] = frozenset(

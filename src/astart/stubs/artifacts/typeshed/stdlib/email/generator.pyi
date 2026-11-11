@@ -1,0 +1,80 @@
+from email.message import Message
+from email.policy import Policy
+from typing import Any, Generic, Self, TypeVar, overload
+
+from _typeshed import SupportsWrite
+
+__all__ = ["BytesGenerator", "DecodedGenerator", "Generator"]
+_MessageT = TypeVar("_MessageT", bound=Message[Any, Any], default=Any)
+
+class Generator(Generic[_MessageT]):
+    maxheaderlen: int | None
+    policy: Policy[_MessageT] | None
+    @overload
+    def __init__(
+        self: Generator[Any],
+        outfp: SupportsWrite[str],
+        mangle_from_: bool | None = None,
+        maxheaderlen: int | None = None,
+        *,
+        policy: None = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        outfp: SupportsWrite[str],
+        mangle_from_: bool | None = None,
+        maxheaderlen: int | None = None,
+        *,
+        policy: Policy[_MessageT],
+    ) -> None: ...
+    def write(self, s: str) -> None: ...
+    def flatten(
+        self,
+        msg: _MessageT,
+        unixfrom: bool = False,
+        linesep: str | None = None,
+    ) -> None: ...
+    def clone(self, fp: SupportsWrite[str]) -> Self: ...
+
+class BytesGenerator(Generator[_MessageT]):
+    @overload
+    def __init__(
+        self: BytesGenerator[Any],
+        outfp: SupportsWrite[bytes],
+        mangle_from_: bool | None = None,
+        maxheaderlen: int | None = None,
+        *,
+        policy: None = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        outfp: SupportsWrite[bytes],
+        mangle_from_: bool | None = None,
+        maxheaderlen: int | None = None,
+        *,
+        policy: Policy[_MessageT],
+    ) -> None: ...
+
+class DecodedGenerator(Generator[_MessageT]):
+    @overload
+    def __init__(
+        self: DecodedGenerator[Any],
+        outfp: SupportsWrite[str],
+        mangle_from_: bool | None = None,
+        maxheaderlen: int | None = None,
+        fmt: str | None = None,
+        *,
+        policy: None = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        outfp: SupportsWrite[str],
+        mangle_from_: bool | None = None,
+        maxheaderlen: int | None = None,
+        fmt: str | None = None,
+        *,
+        policy: Policy[_MessageT],
+    ) -> None: ...

@@ -29,21 +29,27 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        executables: Pyright-compatible executables, preferred first.
-        mypy_executable: Fallback executable.
-        mypy_flags: Flags that make mypy print one JSON object per error.
-        timeout_seconds: Seconds a checker run may take.
-        error: Severity that counts as a regression.
-        scratch_prefix: Prefix of the transient file written beside a source.
-        scratch_alias: Stable stand-in for the scratch module's name in
+        executables (Final[tuple[str, ...]]): Pyright-compatible executables,
+            preferred first.
+        mypy_executable (Final[str]): Fallback executable.
+        mypy_flags (Final[tuple[str, ...]]): Flags that make mypy print one
+            JSON object per error.
+        timeout_seconds (Final[float]): Seconds a checker run may take.
+        error (Final[str]): Severity that counts as a regression.
+        scratch_prefix (Final[str]): Prefix of the transient file written
+            beside a source.
+        scratch_alias (Final[str]): Stable stand-in for the scratch module's
+            name in
             messages, so identical errors compare equal across texts.
-        pyright_config: Pyright's own configuration file name.
-        pyproject: File that may hold ``[tool.pyright]``.
-        path_keys: Pyright settings whose relative paths are re-based onto
+        pyright_config (Final[str]): Pyright's own configuration file name.
+        pyproject (Final[str]): File that may hold ``[tool.pyright]``.
+        path_keys (Final[frozenset[str]]): Pyright settings whose relative
+            paths are re-based onto
             the project root when the configuration is copied.
-        incomplete_prefix: Rule prefix of strict-mode "partially unknown"
-            reports; they name missing information, not a wrong type, and
-            their text quotes signatures that fixes legitimately change.
+        incomplete_prefix (Final[str]): Rule prefix of strict-mode "partially
+            unknown" reports;
+            they name missing information, not a wrong type, and their
+            text quotes signatures that fixes legitimately change.
 
     """
 
@@ -75,13 +81,13 @@ class Checker(Protocol):
         """Tell whether ``after`` is worse than ``before`` for the checker.
 
         Args:
-            filename: Path of the file the texts belong to.
-            before: Original source text.
-            after: Changed source text.
+            filename (str): Path of the file the texts belong to.
+            before (str): Original source text.
+            after (str): Changed source text.
 
         Returns:
             ``True`` when the change introduces a new error, or when the
-            checker could not give an answer.
+                checker could not give an answer.
 
         """
         ...
@@ -93,8 +99,8 @@ class Diagnostic:
     """One checker error, without its position.
 
     Attributes:
-        rule: Checker rule name, empty when the checker gives none.
-        message: Error message.
+        rule (str): Checker rule name, empty when the checker gives none.
+        message (str): Error message.
 
     """
 
@@ -106,7 +112,8 @@ def detect_checker() -> tuple[str, ...] | None:
     """Find an installed pyright-compatible checker.
 
     Returns:
-        The argument vector prefix, or ``None`` when none is installed.
+        tuple[str, ...] | None:
+            The argument vector prefix, or ``None`` when none is installed.
 
     """
     for name in Constants.executables:
@@ -129,9 +136,10 @@ class _CommandChecker:
         """Remember how to run the checker.
 
         Args:
-            command: Argument vector prefix of the checker.
-            root: Directory the checker runs in, for its configuration.
-            source_roots: Extra directories absolute imports resolve from.
+            command (tuple[str, ...]): Argument vector prefix of the checker.
+            root (Path): Directory the checker runs in, for its configuration.
+            source_roots (tuple[Path, ...]): Extra directories absolute imports
+                resolve from.
 
         """
         self._command: tuple[str, ...] = command
@@ -143,12 +151,13 @@ class _CommandChecker:
         """Tell whether a change adds an error the original did not have.
 
         Args:
-            filename: Path of the file the texts belong to.
-            before: Original source text.
-            after: Changed source text.
+            filename (str): Path of the file the texts belong to.
+            before (str): Original source text.
+            after (str): Changed source text.
 
         Returns:
-            ``True`` for a new error, or when either run produced no answer.
+            bool: ``True`` for a new error, or when
+                either run produced no answer.
 
         """
         old: Counter[Diagnostic] | None = self._diagnostics(
@@ -172,11 +181,12 @@ class _CommandChecker:
         """Run the checker on a text, with a cache by content.
 
         Args:
-            filename: Path of the file the text belongs to.
-            text: Source text.
+            filename (str): Path of the file the text belongs to.
+            text (str): Source text.
 
         Returns:
-            The errors found, or ``None`` when the checker failed.
+            Counter[Diagnostic] | None:
+                The errors found, or ``None`` when the checker failed.
 
         """
         key: tuple[str, str] = (
@@ -196,11 +206,12 @@ class _CommandChecker:
         """Write the text beside the file, check it, and clean up.
 
         Args:
-            filename: Path of the file the text belongs to.
-            text: Source text.
+            filename (str): Path of the file the text belongs to.
+            text (str): Source text.
 
         Returns:
-            The errors found, or ``None`` when the checker failed.
+            Counter[Diagnostic] | None:
+                The errors found, or ``None`` when the checker failed.
 
         """
         environment: Environment = detect_environment(
@@ -260,14 +271,15 @@ class _CommandChecker:
         """Prepare the scratch directory so imports resolve as for the file.
 
         Args:
-            staging: Temporary directory holding the scratch file.
-            roots: Directories absolute imports are resolved from.
+            staging (Path): Temporary directory holding the scratch file.
+            roots (tuple[Path, ...]): Directories absolute imports are resolved
+                from.
 
         Returns:
-            Extra flags placed before the scratch file's name.
+            tuple[str, ...]: Extra flags placed before the scratch file's name.
 
         """
-        _ = (staging, roots)
+        _: tuple[Path, tuple[Path, ...]] = (staging, roots)
         return ()
 
     def _environment(
@@ -278,13 +290,14 @@ class _CommandChecker:
         """Give the variables the checker needs to find the project's modules.
 
         Args:
-            roots: Directories absolute imports are resolved from.
+            roots (tuple[Path, ...]): Directories absolute imports are resolved
+                from.
 
         Returns:
             Variables added to the inherited environment, or ``None``.
 
         """
-        _ = roots
+        _: tuple[Path, ...] = roots
         return None
 
     def _flags(self) -> tuple[str, ...]:
@@ -303,7 +316,7 @@ class _CommandChecker:
         """Read the errors out of a finished run.
 
         Args:
-            completed: The checker's exit status and output.
+            completed (Completed): The checker's exit status and output.
 
         Returns:
             The errors, or ``None`` when the output is unusable.
@@ -324,13 +337,13 @@ class _CommandChecker:
         """Count the errors a change adds.
 
         Args:
-            filename: Path of the file the texts belong to.
-            before: Original source text.
-            after: Changed source text.
+            filename (str): Path of the file the texts belong to.
+            before (str): Original source text.
+            after (str): Changed source text.
 
         Returns:
-            How many errors ``after`` has that ``before`` lacks, or ``None``
-            when either run produced no answer.
+            int | None: How many errors ``after`` has that ``before`` lacks,
+                or ``None`` when either run produced no answer.
 
         """
         old: Counter[Diagnostic] | None = self._diagnostics(
@@ -362,11 +375,13 @@ class PyrightChecker(_CommandChecker):
         what the user's checker would say about the real file.
 
         Args:
-            staging: Temporary directory holding the scratch file.
-            roots: Directories absolute imports are resolved from.
+            staging (Path): Temporary directory holding the scratch file.
+            roots (tuple[Path, ...]): Directories absolute imports are resolved
+                from.
 
         Returns:
-            ``--project`` pointing at the generated configuration.
+            tuple[str, ...]: ``--project`` pointing at the generated
+                configuration.
 
         """
         settings: dict[str, Json] = _project_settings(root=self._root)
@@ -383,7 +398,7 @@ class PyrightChecker(_CommandChecker):
         """Ask pyright for JSON and errors only.
 
         Returns:
-            The flags placed before the file name.
+            tuple[str, ...]: The flags placed before the file name.
 
         """
         return ("--outputjson", "--level", Constants.error)
@@ -392,10 +407,11 @@ class PyrightChecker(_CommandChecker):
         """Read pyright's JSON report from stdout, or stderr.
 
         Args:
-            completed: The checker's exit status and output.
+            completed (Completed): The checker's exit status and output.
 
         Returns:
-            The errors, or ``None`` when the output is unusable.
+            Counter[Diagnostic] | None:
+                The errors, or ``None`` when the output is unusable.
 
         """
         parsed: Counter[Diagnostic] | None = _parse(output=completed.stdout)
@@ -416,10 +432,11 @@ class MypyChecker(_CommandChecker):
         """Let mypy find the project's modules.
 
         Args:
-            roots: Directories absolute imports are resolved from.
+            roots (tuple[Path, ...]): Directories absolute imports are resolved
+                from.
 
         Returns:
-            ``MYPYPATH`` naming those directories.
+            dict[str, str] | None: ``MYPYPATH`` naming those directories.
 
         """
         return {"MYPYPATH": pathsep.join(str(object=root) for root in roots)}
@@ -428,7 +445,7 @@ class MypyChecker(_CommandChecker):
         """Ask mypy for one JSON object per error.
 
         Returns:
-            The flags placed before the file name.
+            tuple[str, ...]: The flags placed before the file name.
 
         """
         return Constants.mypy_flags
@@ -437,10 +454,11 @@ class MypyChecker(_CommandChecker):
         """Read mypy's JSON lines.
 
         Args:
-            completed: The checker's exit status and output.
+            completed (Completed): The checker's exit status and output.
 
         Returns:
-            The errors, or ``None`` when a line is not JSON.
+            Counter[Diagnostic] | None:
+                The errors, or ``None`` when a line is not JSON.
 
         """
         return parse_mypy(output=completed.stdout)
@@ -450,11 +468,11 @@ def parse_mypy(*, output: str) -> Counter[Diagnostic] | None:
     """Read the error diagnostics from ``mypy --output json``.
 
     Args:
-        output: Standard output, one JSON object per line.
+        output (str): Standard output, one JSON object per line.
 
     Returns:
-        The errors counted by code and message, or ``None`` for a line that
-        is not JSON.
+        Counter[Diagnostic] | None: The errors counted by code and message,
+            or ``None`` for a line that is not JSON.
 
     """
     found: Counter[Diagnostic] = Counter()
@@ -478,11 +496,12 @@ def _project_settings(*, root: Path) -> dict[str, Json]:
     """Read the project's pyright settings, re-basing relative paths.
 
     Args:
-        root: Directory the checker runs in.
+        root (Path): Directory the checker runs in.
 
     Returns:
-        The settings of ``pyrightconfig.json`` or ``[tool.pyright]``; empty
-        when there are none or they cannot be read.
+        dict[str, Json]: The settings of ``pyrightconfig.json`` or
+            ``[tool.pyright]``
+            ; empty when there are none or they cannot be read.
 
     """
     settings: dict[str, Json] = {}
@@ -521,12 +540,14 @@ def build_checker(
     """Create the best installed checker.
 
     Args:
-        root: Directory the checker runs in, for its configuration.
-        source_roots: Extra directories absolute imports resolve from.
+        root (Path): Directory the checker runs in, for its configuration.
+        source_roots (tuple[Path, ...]): Extra directories absolute imports
+            resolve from.
 
     Returns:
-        A pyright-compatible checker when one is installed, otherwise mypy,
-        otherwise ``None``.
+        PyrightChecker | MypyChecker | None:
+            A pyright-compatible checker when one is
+            installed, otherwise mypy, otherwise ``None``.
 
     """
     command: tuple[str, ...] | None = detect_checker()
@@ -552,10 +573,11 @@ def _parse(*, output: str) -> Counter[Diagnostic] | None:
     """Read the error diagnostics from pyright's JSON output.
 
     Args:
-        output: Standard output of ``pyright --outputjson``.
+        output (str): Standard output of ``pyright --outputjson``.
 
     Returns:
-        The errors counted by rule and message, or ``None`` for bad output.
+        Counter[Diagnostic] | None:
+            The errors counted by rule and message, or ``None`` for bad output.
 
     """
     try:

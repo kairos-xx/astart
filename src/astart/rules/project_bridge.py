@@ -6,6 +6,7 @@ local call machinery produces. Only what the argument's syntax proves in
 the *caller's* scope counts — the inference engine's own types are not
 independent evidence. Unresolvable expansions and ambiguous callees
 produce unknown evidence, never evidence of absence.
+
 """
 
 from __future__ import annotations
@@ -42,6 +43,9 @@ from astart.semantic.typing_contracts import (
     function_contract,
 )
 
+type DictInt = dict[str, int]
+type DictStr = dict[str, str]
+
 if TYPE_CHECKING:
     from ast import AST
 
@@ -61,15 +65,15 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        variadic_origins: Origins of arguments bound to ``*args`` and
-            ``**kwargs``.
-        shape_specific: Prefix of literal exact-shape types that say
-            nothing about other callers.
-        instance_kinds: Method kinds whose leading parameter is an implicit
-            receiver.
-        unknown: Shape handed to the binder for every call argument; the
-            evidence layer only reads argument syntax, so the abstract
-            shape is never consulted.
+        variadic_origins (Final[frozenset[ArgumentOrigin]]): Origins of
+            arguments bound to ``*args`` and ``**kwargs``.
+        shape_specific (Final[str]): Prefix of literal exact-shape types
+            that say nothing about other callers.
+        instance_kinds (Final[frozenset[str]]): Method kinds whose leading
+            parameter is an implicit receiver.
+        unknown (Final[TypeShape]): Shape handed to the binder for every call
+            argument; the evidence layer only reads argument
+            syntax, so the abstract shape is never consulted.
 
     """
 
@@ -91,10 +95,10 @@ class CrossSite:
     Mirrors the local call-site record the hint layer uses.
 
     Attributes:
-        definite: Whether the argument type is trustworthy.
-        types: Rendered type spellings.
-        proven: Whether the argument expression's syntax alone proves the
-            type.
+        definite (bool): Whether the argument type is trustworthy.
+        types (tuple[str, ...]): Rendered type spellings.
+        proven (bool): Whether the argument expression's syntax alone proves
+            the type.
 
     """
 
@@ -111,12 +115,12 @@ def qualified_names(
     """Map each definition in a module to its project-qualified name.
 
     Args:
-        module: Parsed module.
-        name: The module's dotted name inside the project.
+        module (Module): Parsed module.
+        name (str): The module's dotted name inside the project.
 
     Returns:
-        ``id`` to ``"pkg.mod.outer.inner"`` for every function and class
-        definition, nested ones included.
+        dict[int, str]: ``id`` to ``"pkg.mod.outer.inner"`` for every
+            function and class definition, nested ones included.
 
     """
     found: dict[int, str] = {}
@@ -125,8 +129,8 @@ def qualified_names(
         """Record nested definitions under their qualified path.
 
         Args:
-            node: Node to walk.
-            prefix: Qualified name of the enclosing scope.
+            node (AST): Node to walk.
+            prefix (str): Qualified name of the enclosing scope.
 
         """
         for child in iter_child_nodes(node=node):
@@ -147,12 +151,12 @@ class _Callable:
     """How one resolved callee binds its arguments.
 
     Attributes:
-        contract: The callee's signature.
-        receiver: Qualified name of the receiver class for method calls
-            whose object is constructed at the call (``C().m(...)``) and
-            for constructor calls (``C(...)``), or ``None`` when no
-            implicit receiver exists.
-        constructor: Whether the callee is a class — constructor calls
+        contract (CallableContract): The callee's signature.
+        receiver (str | None): Qualified name of the receiver class for method
+            calls whose object
+            is constructed at the call (``C().m(...)``) and for constructor
+            calls (``C(...)``), or ``None`` when no implicit receiver exists.
+        constructor (bool): Whether the callee is a class — constructor calls
             always bind the receiver implicitly, unlike ``C.m(...)``
             method references.
 
@@ -169,20 +173,22 @@ class _EnvCache:
     """Caller-scope types computed once per calling module.
 
     Attributes:
-        counts: ``binding_counts`` of each calling module.
-        constants: ``module_constants`` of each calling module.
-        envs: ``scope_types`` of each calling scope, or module constants
-            for top-level and class-body calls.
+        counts (dict[str, DictInt]): ``binding_counts`` of each calling module.
+        constants (dict[str, DictStr]): ``module_constants`` of each calling
+            module.
+        envs (dict[str, DictStr]): ``scope_types`` of each calling scope, or
+            module
+            constants for top-level and class-body calls.
 
     """
 
-    counts: dict[str, dict[str, int]] = field(
+    counts: dict[str, DictInt] = field(
         default_factory=dict[str, dict[str, int]],
     )
-    constants: dict[str, dict[str, str]] = field(
+    constants: dict[str, DictStr] = field(
         default_factory=dict[str, dict[str, str]],
     )
-    envs: dict[str, dict[str, str]] = field(
+    envs: dict[str, DictStr] = field(
         default_factory=dict[str, dict[str, str]],
     )
 
@@ -197,6 +203,7 @@ class ProjectView:
     stay with the local binding machinery. Caller-scope types are
     memoized per view because they cannot change while a module is being
     judged.
+
     """
 
     def __init__(
@@ -209,10 +216,11 @@ class ProjectView:
         """Bind the view to one module of the project.
 
         Args:
-            index: Whole-project index.
-            module: Dotted name of the module being analysed.
-            libraries: External signature index for callees outside the
-                project, or ``None``.
+            index (ProjectIndex): Whole-project index.
+            module (str): Dotted name of the module being analysed.
+            libraries (LibraryIndex | None): External signature index for
+                callees
+                outside the project, or ``None``.
 
         """
         self.index: ProjectIndex = index
@@ -226,10 +234,10 @@ class ProjectView:
         """Whether a definition's callers may be incomplete.
 
         Args:
-            qualified: Qualified name in this module.
+            qualified (str): Qualified name in this module.
 
         Returns:
-            Whether outside callers could exist.
+            bool: Whether outside callers could exist.
 
         """
         return self.index.open_world(qualified=qualified)
@@ -238,10 +246,10 @@ class ProjectView:
         """Resolve a name as this module sees it.
 
         Args:
-            name: Local name in the analysed module.
+            name (str): Local name in the analysed module.
 
         Returns:
-            The resolution, or ``None``.
+            ResolvedSymbol | None: The resolution, or ``None``.
 
         """
         return self.index.table.resolve(module=self.module, name=name)
@@ -254,12 +262,13 @@ class ProjectView:
         """Cross-module call-site evidence for one project definition.
 
         Args:
-            qualified: Qualified name of a function or class defined in
+            qualified (str): Qualified name of a function or class defined in
                 the analysed module.
 
         Returns:
-            Per-parameter evidence from calls in *other* modules, or
-                ``None`` when the callee cannot be bound at all (a
+            dict[str, tuple[CrossSite, ...]] | None:
+                Per-parameter evidence from calls in *other* modules,
+                or ``None`` when the callee cannot be bound at all (a
                 decorated signature, an inherited constructor), which
                 counts as no evidence rather than unknown evidence.
 
@@ -277,11 +286,11 @@ class ProjectView:
         library index declares.
 
         Args:
-            call: The call node, owned by this module.
+            call (Call): The call node, owned by this module.
 
         Returns:
-            The bound call, or ``None`` when the callee cannot be
-            resolved to a trusted contract.
+            BoundCall | None: The bound call, or ``None`` when the callee
+                cannot be resolved to a trusted contract.
 
         """
         resolved: ResolvedSymbol | None = self.index.resolve_callee(
@@ -332,10 +341,11 @@ class ProjectView:
         """Produce cross-module sites for one callee.
 
         Args:
-            qualified: Qualified callee name.
+            qualified (str): Qualified callee name.
 
         Returns:
-            Per-parameter evidence, or ``None`` when unbindable.
+            dict[str, tuple[CrossSite, ...]] | None:
+                Per-parameter evidence, or ``None`` when unbindable.
 
         """
         callable_: _Callable | None = self._callable(qualified=qualified)
@@ -363,8 +373,8 @@ class ProjectView:
                     else None
                 ),
             )
-            counts: dict[str, int] = self._counts(module=record.module)
-            env: dict[str, str] = self._env(record=record, counts=counts)
+            counts: DictInt = self._counts(module=record.module)
+            env: DictStr = self._env(record=record, counts=counts)
             for argument in bound.arguments:
                 site: CrossSite | None = _bound(
                     argument=argument,
@@ -379,13 +389,13 @@ class ProjectView:
         """Return the binding contract for a resolved callee.
 
         Args:
-            qualified: Qualified callee name.
+            qualified (str): Qualified callee name.
 
         Returns:
-            The contract plus implicit receiver, or ``None`` when the
-                callee cannot be trusted to keep its declared signature
-                (decorated) or has no statically known parameters
-                (inherited constructor).
+            _Callable | None: The contract plus implicit receiver, or ``None``
+                when the callee cannot be trusted to keep its
+                declared signature (decorated) or has no statically
+                known parameters (inherited constructor).
 
         """
         if qualified in self._contracts:
@@ -397,10 +407,10 @@ class ProjectView:
         """Compute the contract for one callee.
 
         Args:
-            qualified: Qualified callee name.
+            qualified (str): Qualified callee name.
 
         Returns:
-            The contract plus implicit receiver, or ``None``.
+            _Callable | None: The contract plus implicit receiver, or ``None``.
 
         """
         definition: Definition | None = self.index.definition(
@@ -434,14 +444,14 @@ class ProjectView:
             return _constructor(definition=definition, qualified=qualified)
         return None
 
-    def _counts(self, *, module: str) -> dict[str, int]:
+    def _counts(self, *, module: str) -> DictInt:
         """Binding counts of a calling module, computed once.
 
         Args:
-            module: Calling module name.
+            module (str): Calling module name.
 
         Returns:
-            The counts.
+            DictInt: The counts.
 
         """
         if module not in self._envs.counts:
@@ -455,21 +465,21 @@ class ProjectView:
         self,
         *,
         record: CallRecord,
-        counts: dict[str, int],
-    ) -> dict[str, str]:
+        counts: DictInt,
+    ) -> DictStr:
         """Types of names visible where one call executes.
 
         Args:
-            record: The call's record.
-            counts: Binding counts of the calling module.
+            record (CallRecord): The call's record.
+            counts (DictInt): Binding counts of the calling module.
 
         Returns:
-            Types by name.
+            DictStr: Types by name.
 
         """
         if record.caller in self._envs.envs:
             return self._envs.envs[record.caller]
-        constants: dict[str, str] | None = self._envs.constants.get(
+        constants: DictStr | None = self._envs.constants.get(
             record.module,
         )
         if constants is None:
@@ -485,7 +495,7 @@ class ProjectView:
         scope: Definition | None = self.index.definition(
             qualified=record.caller,
         )
-        env: dict[str, str] = (
+        env: DictStr = (
             scope_types(
                 function=scope,
                 counts=counts,
@@ -506,11 +516,11 @@ def _implicit_receiver(*, func: expr, callee: _Callable) -> bool:
     explicitly.
 
     Args:
-        func: The call's ``func`` expression.
-        callee: The resolved callee's binding contract.
+        func (expr): The call's ``func`` expression.
+        callee (_Callable): The resolved callee's binding contract.
 
     Returns:
-        Whether the binding supplies the receiver itself.
+        bool: Whether the binding supplies the receiver itself.
 
     """
     if callee.constructor:
@@ -522,10 +532,11 @@ def _method_kind(*, definition: FunctionDef | AsyncFunctionDef) -> str:
     """Classify a method by its decorators.
 
     Args:
-        definition: Method definition inside a class.
+        definition (FunctionDef | AsyncFunctionDef): Method definition inside a
+            class.
 
     Returns:
-        ``"staticmethod"``, ``"classmethod"`` or ``"instance"``.
+        str: ``"staticmethod"``, ``"classmethod"`` or ``"instance"``.
 
     """
     names: set[str] = set()
@@ -556,11 +567,11 @@ def _constructor(
     the class's bases are not chased.
 
     Args:
-        definition: Class definition.
-        qualified: Qualified class name.
+        definition (ClassDef): Class definition.
+        qualified (str): Qualified class name.
 
     Returns:
-        The contract, or ``None``.
+        _Callable | None: The contract, or ``None``.
 
     """
     for statement in definition.body:
@@ -608,8 +619,8 @@ def _constructor(
 def _bound(
     *,
     argument: BoundArgument,
-    counts: dict[str, int],
-    env: dict[str, str],
+    counts: DictInt,
+    env: DictStr,
 ) -> CrossSite | None:
     """Turn one bound cross-module argument into evidence, if any.
 
@@ -618,12 +629,12 @@ def _bound(
     what the argument's own syntax proves counts.
 
     Args:
-        argument: Bound argument of a direct call.
-        counts: Binding counts of the calling module.
-        env: Types of names visible where the call executes.
+        argument (BoundArgument): Bound argument of a direct call.
+        counts (DictInt): Binding counts of the calling module.
+        env (DictStr): Types of names visible where the call executes.
 
     Returns:
-        The site, or ``None`` when the argument says nothing.
+        CrossSite | None: The site, or ``None`` when the argument says nothing.
 
     """
     origin: ArgumentOrigin = argument.origin

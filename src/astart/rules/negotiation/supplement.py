@@ -40,10 +40,10 @@ def parents_of(*, module: AST) -> dict[int, AST]:
     """Map each node of the module to its parent.
 
     Args:
-        module: Parsed module.
+        module (AST): Parsed module.
 
     Returns:
-        Parent node by child identity.
+        dict[int, AST]: Parent node by child identity.
 
     """
     found: dict[int, AST] = {}
@@ -53,12 +53,38 @@ def parents_of(*, module: AST) -> dict[int, AST]:
     return found
 
 
+def class_boundaries(*, module: AST) -> dict[str, int]:
+    """Index the latest definition end for each class name in one walk.
+
+    Keep the existing conservative treatment of duplicate and nested class
+    names. The index belongs to this module snapshot and must be rebuilt
+    after structural edits; no module-global cache is retained.
+
+    Args:
+        module (AST): Parsed module to index.
+
+    Returns:
+        dict[str, int]: Last definition end line per class name, across all
+            scopes.
+
+    """
+    found: dict[str, int] = {}
+    for node in walk(node=module):
+        if isinstance(node, ClassDef):
+            found[node.name] = max(
+                found.get(node.name, 0),
+                node.end_lineno or 0,
+            )
+    return found
+
+
 def bound_when_evaluated(
     *,
     node: AST,
     source: str,
     module: AST,
     parents: dict[int, AST],
+    classes: Mapping[str, int] | None = None,
 ) -> bool:
     """Tell whether an annotation's class names exist when it is evaluated.
 
@@ -68,13 +94,16 @@ def bound_when_evaluated(
     not contain it. Functions nested in function bodies run later.
 
     Args:
-        node: The parameter or function the annotation belongs to.
-        source: The annotation text.
-        module: Parsed module.
-        parents: Parent map of the module.
+        node (AST): The parameter or function the annotation belongs to.
+        source (str): The annotation text.
+        module (AST): Parsed module.
+        parents (dict[int, AST]): Parent map of the module.
+        classes (Mapping[str, int] | None): Class-definition ends for this
+            module
+            snapshot; ``None`` builds a private index.
 
     Returns:
-        ``True`` when every module class named is already bound.
+        bool: ``True`` when every module class named is already bound.
 
     """
     function: AST | None = node
@@ -95,14 +124,10 @@ def bound_when_evaluated(
         for part in walk(node=parse(source=source, mode="eval"))
         if isinstance(part, Name)
     }
-    return all(
-        not (
-            isinstance(cls, ClassDef)
-            and cls.name in named
-            and (cls.end_lineno or 0) >= function.lineno
-        )
-        for cls in walk(node=module)
+    boundaries: Mapping[str, int] = (
+        class_boundaries(module=module) if classes is None else classes
     )
+    return all(boundaries.get(name, 0) < function.lineno for name in named)
 
 
 def negotiated_hints(
@@ -113,12 +138,13 @@ def negotiated_hints(
     """Find the parameter and return annotations negotiation justifies.
 
     Args:
-        module: Parsed module.
-        proposals: The inference engine's proposals by node identity, used
+        module (CommentedModule): Parsed module.
+        proposals (Mapping[Key, str]): The inference engine's proposals by node
+            identity, used
             only to corroborate types other evidence supports.
 
     Returns:
-        A hint per parameter or function, by node identity.
+        dict[Key, Hint]: A hint per parameter or function, by node identity.
 
     """
     paths: dict[Key, str] = function_paths(module=module)
@@ -132,6 +158,7 @@ def negotiated_hints(
     nodes: dict[str, AST] = function_nodes(module=module)
     known: frozenset[str] = allowed_names(module=module)
     parents: dict[int, AST] = parents_of(module=module)
+    classes: dict[str, int] = class_boundaries(module=module)
     found: dict[Key, Hint] = {}
     for path, source in sorted(verdicts.accepted.items()):
         node: AST | None = nodes.get(path)
@@ -143,6 +170,7 @@ def negotiated_hints(
                 source=source,
                 module=module,
                 parents=parents,
+                classes=classes,
             )
         ):
             found[node_key(node=node)] = Hint(

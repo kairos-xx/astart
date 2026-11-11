@@ -1,0 +1,13 @@
+from typing import NoReturn
+
+from _typeshed import Incomplete
+
+class _HTTPException:
+    code: Incomplete
+    body: Incomplete
+    headers: Incomplete
+    def __init__(self, code, body, headers, response=None) -> None: ...
+    def get_body(self, environ=None, scope=None): ...
+    def get_headers(self, environ=None, scope=None): ...
+
+def raise_http_exception(status, body, headers) -> NoReturn: ...

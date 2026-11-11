@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astart.dev/schema/report.json",
+  "title": "astart report",
+  "description": "Top-level document emitted by `astart check --format json`: an array with one entry per analysed file.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["path", "error", "findings"],
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "File name as given on the command line."
+      },
+      "error": {
+        "type": ["string", "null"],
+        "description": "Why the file could not be analysed, or null."
+      },
+      "findings": {
+        "type": "array",
+        "items": {"$ref": "finding.json"},
+        "description": "Findings in source order."
+      }
+    },
+    "additionalProperties": false
+  }
+}

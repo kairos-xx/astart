@@ -1,10 +1,11 @@
 """M8-09 ``structure.constants-grouping``: loose module constants.
 
 The house convention groups module constants in a ``@final class
-Constants`` with ``Final`` annotations.  The detector flags top-level
+Constants`` with ``Final`` annotations. The detector flags top-level
 ``UPPER_SNAKE`` assignments and annotated constants that sit outside
 such a class; dunder names, ``TYPE_CHECKING`` aliases and ``__all__``
 are exempt.
+
 """
 
 from __future__ import annotations
@@ -23,10 +24,34 @@ from ast import (
     expr,
     stmt,
 )
-from re import compile as compile_pattern
 from typing import Final, final
 
 from astart.rules.procedural import Candidate, span_of
+
+
+def is_constant_name(*, name: str) -> bool:
+    """Tell whether ``name`` is an ``UPPER_SNAKE`` constant identifier.
+
+    Equivalent to ``^[A-Z][A-Z0-9_]*$`` without a regular expression:
+    ASCII-only, leading letter, every cased character uppercase, and a
+    valid identifier so digits/underscores after the first char behave
+    exactly like the pattern's ``[A-Z0-9_]*`` tail.
+
+    Args:
+        name (str): Candidate identifier text.
+
+    Returns:
+        bool: ``True`` for ``MAX_VALUE``, ``A1`` and ``A_B``; ``False`` for
+            ``_X`` (leading underscore fails ``isalpha``), ``x``, ``A_b``,
+            ``É`` and non-identifiers.
+
+    """
+    return (
+        name.isidentifier()
+        and name.isascii()
+        and name[0].isalpha()
+        and name.isupper()
+    )
 
 
 @final
@@ -34,15 +59,13 @@ class Constants:
     """Group module-level constants (Group module-level constants.).
 
     Attributes:
-        class_name: The conventional grouping class name.
-        constant_name: ``UPPER_SNAKE`` pattern for constant names.
-        exempt: Names never flagged.
-        evidence_subject: Evidence key for the constant name.
+        class_name (Final[str]): The conventional grouping class name.
+        exempt (Final[frozenset[str]]): Names never flagged.
+        evidence_subject (str): Evidence key for the constant name.
 
     """
 
     class_name: Final[str] = "Constants"
-    constant_name: Final = compile_pattern(pattern=r"^[A-Z][A-Z0-9_]*$")
     exempt: Final[frozenset[str]] = frozenset({"__all__", "TYPE_CHECKING"})
     evidence_subject: str = "constant"
 
@@ -55,11 +78,11 @@ def find_loose_constants(
     """Flag top-level constants outside a ``Constants`` class.
 
     Args:
-        module: Parsed module.
-        filename: Name used in spans.
+        module (Module): Parsed module.
+        filename (str): Name used in spans.
 
     Returns:
-        Candidates in source order.
+        tuple[Candidate, ...]: Candidates in source order.
 
     """
     grouped: set[int] = _grouped_ids(module=module)
@@ -83,10 +106,10 @@ def _grouped_ids(*, module: Module) -> set[int]:
     """Collect statement ids already inside a ``Constants`` class.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        ``id``s of statements nested in the grouping class.
+        set[int]: ``id``s of statements nested in the grouping class.
 
     """
     inside: set[int] = set()
@@ -107,11 +130,11 @@ def _constant_targets(
     """Read constant names a top-level statement binds.
 
     Args:
-        statement: Module-body statement.
-        grouped: Statement ids exempt as already grouped.
+        statement (stmt): Module-body statement.
+        grouped (set[int]): Statement ids exempt as already grouped.
 
     Returns:
-        ``UPPER_SNAKE`` names the statement binds.
+        tuple[str, ...]: ``UPPER_SNAKE`` names the statement binds.
 
     """
     if id(statement) in grouped:
@@ -124,14 +147,11 @@ def _constant_targets(
                 target.id
                 for target in targets
                 if isinstance(target, Name)
-                and Constants.constant_name.match(string=target.id)
+                and is_constant_name(name=target.id)
                 and target.id not in Constants.exempt
             )
         case AnnAssign(target=Name(id=name)):
-            if (
-                Constants.constant_name.match(string=name)
-                and name not in Constants.exempt
-            ):
+            if is_constant_name(name=name) and name not in Constants.exempt:
                 return (name,)
             return ()
         case _:
@@ -142,10 +162,10 @@ def _plain_value(*, node: expr) -> bool:
     """Answer whether a value is a plain literal worth grouping.
 
     Args:
-        node: Right-hand side expression.
+        node (expr): Right-hand side expression.
 
     Returns:
-        ``True`` for constants and empty/simple containers.
+        bool: ``True`` for constants and empty/simple containers.
 
     """
     return isinstance(node, (Constant, List, Set, Tuple, Dict))

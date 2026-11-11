@@ -1,0 +1,467 @@
+{
+ "fixes": [
+  {
+   "after": [],
+   "before": [],
+   "edits": [
+    "docs.add-parameter-entries"
+   ],
+   "idempotent": true,
+   "key": "docs.add-parameter-entries",
+   "min_confidence": 1.0,
+   "preconditions": {
+    "cmp": "eq",
+    "fact": "docstring.is_editable",
+    "op": "compare",
+    "value": true
+   },
+   "rules": [
+    "docs.missing-parameter"
+   ],
+   "safety": "proven"
+  },
+  {
+   "after": [],
+   "before": [],
+   "edits": [
+    "docs.remove-stale-entries"
+   ],
+   "idempotent": true,
+   "key": "docs.remove-stale-entries",
+   "min_confidence": 1.0,
+   "preconditions": {
+    "cmp": "eq",
+    "fact": "docstring.is_editable",
+    "op": "compare",
+    "value": true
+   },
+   "rules": [
+    "docs.stale-parameter"
+   ],
+   "safety": "proven"
+  },
+  {
+   "after": [],
+   "before": [],
+   "edits": [
+    "docs.tidy-docstring"
+   ],
+   "idempotent": true,
+   "key": "docs.tidy-docstring",
+   "min_confidence": 1.0,
+   "preconditions": {
+    "cmp": "eq",
+    "fact": "docstring.is_untidy",
+    "op": "compare",
+    "value": true
+   },
+   "rules": [
+    "docs.untidy-docstring"
+   ],
+   "safety": "proven"
+  },
+  {
+   "after": [],
+   "before": [
+    "docs.add-parameter-entries",
+    "docs.remove-stale-entries"
+   ],
+   "edits": [
+    "docs.heal-parameter-rename"
+   ],
+   "idempotent": true,
+   "key": "docs.heal-parameter-rename",
+   "min_confidence": 1.0,
+   "preconditions": {
+    "cmp": "eq",
+    "fact": "docstring.is_editable",
+    "op": "compare",
+    "value": true
+   },
+   "rules": [
+    "docs.stale-parameter"
+   ],
+   "safety": "proven"
+  },
+  {
+   "after": [],
+   "before": [],
+   "edits": [
+    "docs.add-generator-results"
+   ],
+   "idempotent": true,
+   "key": "docs.add-generator-results",
+   "min_confidence": 1.0,
+   "preconditions": {
+    "cmp": "eq",
+    "fact": "docstring.generator_needs_results",
+    "op": "compare",
+    "value": true
+   },
+   "rules": [
+    "docs.missing-generator-results"
+   ],
+   "safety": "proven"
+  },
+  {
+   "after": [
+    "docs.add-parameter-entries",
+    "docs.remove-stale-entries",
+    "docs.tidy-docstring",
+    "docs.heal-parameter-rename",
+    "docs.add-generator-results"
+   ],
+   "before": [],
+   "edits": [
+    "docs.add-types"
+   ],
+   "idempotent": true,
+   "key": "docs.add-types",
+   "min_confidence": 1.0,
+   "preconditions": {
+    "cmp": "eq",
+    "fact": "docstring.needs_types",
+    "op": "compare",
+    "value": true
+   },
+   "rules": [
+    "docs.annotation-types"
+   ],
+   "safety": "proven"
+  }
+ ],
+ "profiles": [],
+ "relations": [],
+ "rules": [
+  {
+   "aliases": {},
+   "code": "DOC001",
+   "domain": "docs",
+   "evidence": [
+    {
+     "name": "name",
+     "type": "str"
+    }
+   ],
+   "examples": [
+    {
+     "note": "",
+     "source": "\"\"\"Module.\"\"\"\n\n\ndef run() -> None:\n    pass\n",
+     "triggers": true
+    },
+    {
+     "note": "",
+     "source": "\"\"\"Module.\"\"\"\n\n\ndef run() -> None:\n    \"\"\"Run.\"\"\"\n",
+     "triggers": false
+    }
+   ],
+   "fixes": [],
+   "key": "docs.missing-docstring",
+   "maturity": "stable",
+   "message": "`{name}` has no docstring.",
+   "owner": "astart",
+   "params": {},
+   "procedure": null,
+   "rationale": "Public functions and classes owe their callers a sentence of prose.",
+   "requires": [
+    "docs.stubs_wanted",
+    "docstring.is_missing_public"
+   ],
+   "severity": "info",
+   "subject": [
+    "FunctionDef",
+    "AsyncFunctionDef",
+    "ClassDef"
+   ],
+   "title": "Public definition without a docstring",
+   "when": {
+    "of": [
+     {
+      "cmp": "eq",
+      "fact": "docs.stubs_wanted",
+      "op": "compare",
+      "value": true
+     },
+     {
+      "cmp": "eq",
+      "fact": "docstring.is_missing_public",
+      "op": "compare",
+      "value": true
+     }
+    ],
+    "op": "all"
+   }
+  },
+  {
+   "aliases": {
+    "exactus": "DOC002"
+   },
+   "code": "DOC002",
+   "domain": "docs",
+   "evidence": [
+    {
+     "name": "function",
+     "type": "str"
+    },
+    {
+     "name": "parameters",
+     "type": "list[str]"
+    }
+   ],
+   "examples": [
+    {
+     "note": "",
+     "source": "def run(a: int, b: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        a: First value.\n\n    \"\"\"\n",
+     "triggers": true
+    },
+    {
+     "note": "",
+     "source": "def run(a: int, b: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        a: First value.\n        b: Second value.\n\n    \"\"\"\n",
+     "triggers": false
+    }
+   ],
+   "fixes": [
+    "docs.add-parameter-entries"
+   ],
+   "key": "docs.missing-parameter",
+   "maturity": "stable",
+   "message": "`{function}` does not document {parameters}.",
+   "owner": "astart",
+   "params": {},
+   "procedure": null,
+   "rationale": "Every parameter of a documented function belongs in its Args section.",
+   "requires": [
+    "function.has_docstring",
+    "function.undocumented_parameter_count"
+   ],
+   "severity": "error",
+   "subject": [
+    "FunctionDef",
+    "AsyncFunctionDef"
+   ],
+   "title": "Parameter missing from docstring",
+   "when": {
+    "of": [
+     {
+      "cmp": "eq",
+      "fact": "function.has_docstring",
+      "op": "compare",
+      "value": true
+     },
+     {
+      "cmp": "gt",
+      "fact": "function.undocumented_parameter_count",
+      "op": "compare",
+      "value": 0
+     }
+    ],
+    "op": "all"
+   }
+  },
+  {
+   "aliases": {},
+   "code": "DOC003",
+   "domain": "docs",
+   "evidence": [
+    {
+     "name": "function",
+     "type": "str"
+    },
+    {
+     "name": "stale",
+     "type": "list[str]"
+    }
+   ],
+   "examples": [
+    {
+     "note": "",
+     "source": "def run(a: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        a: First.\n        b: Gone.\n\n    \"\"\"\n",
+     "triggers": true
+    },
+    {
+     "note": "",
+     "source": "def run(a: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        a: First.\n\n    \"\"\"\n",
+     "triggers": false
+    }
+   ],
+   "fixes": [
+    "docs.heal-parameter-rename",
+    "docs.remove-stale-entries"
+   ],
+   "key": "docs.stale-parameter",
+   "maturity": "stable",
+   "message": "`{function}` documents {stale}, which it does not take.",
+   "owner": "astart",
+   "params": {},
+   "procedure": null,
+   "rationale": "A docstring entry for a parameter the function no longer takes misleads readers.",
+   "requires": [
+    "function.stale_documented_count"
+   ],
+   "severity": "error",
+   "subject": [
+    "FunctionDef",
+    "AsyncFunctionDef"
+   ],
+   "title": "Docstring documents a missing parameter",
+   "when": {
+    "cmp": "gt",
+    "fact": "function.stale_documented_count",
+    "op": "compare",
+    "value": 0
+   }
+  },
+  {
+   "aliases": {},
+   "code": "DOC004",
+   "domain": "docs",
+   "evidence": [
+    {
+     "name": "function",
+     "type": "str"
+    }
+   ],
+   "examples": [
+    {
+     "note": "",
+     "source": "from collections.abc import Iterator\n\n\ndef values() -> Iterator[int]:\n    \"\"\"Produce values.\"\"\"\n    yield 1\n",
+     "triggers": true
+    },
+    {
+     "note": "",
+     "source": "from collections.abc import Iterator\n\n\ndef values() -> Iterator[int]:\n    \"\"\"Produce values.\n\n    Yields:\n        TODO.\n    \"\"\"\n    yield 1\n",
+     "triggers": false
+    }
+   ],
+   "fixes": [
+    "docs.add-generator-results"
+   ],
+   "key": "docs.missing-generator-results",
+   "maturity": "stable",
+   "message": "`{function}` does not document all yielded and terminal results.",
+   "owner": "astart",
+   "params": {},
+   "procedure": null,
+   "rationale": "Generators document yielded values separately from a non-None terminal return value.",
+   "requires": [
+    "docstring.generator_needs_results"
+   ],
+   "severity": "error",
+   "subject": [
+    "FunctionDef",
+    "AsyncFunctionDef"
+   ],
+   "title": "Generator yield or terminal result documentation missing",
+   "when": {
+    "cmp": "eq",
+    "fact": "docstring.generator_needs_results",
+    "op": "compare",
+    "value": true
+   }
+  },
+  {
+   "aliases": {},
+   "code": "DOC007",
+   "domain": "docs",
+   "evidence": [
+    {
+     "name": "name",
+     "type": "str"
+    }
+   ],
+   "examples": [
+    {
+     "note": "",
+     "source": "\"\"\"Module doc.   \n\n\nMore.\n\"\"\"\n\nx = 1\n",
+     "triggers": true
+    },
+    {
+     "note": "",
+     "source": "def run() -> None:\n    \"\"\"Run.   \n\n\n\n    More.\n    \"\"\"\n",
+     "triggers": true
+    },
+    {
+     "note": "",
+     "source": "def run() -> None:\n    \"\"\"Run.\n\n    More.\n\n    \"\"\"\n",
+     "triggers": false
+    }
+   ],
+   "fixes": [
+    "docs.tidy-docstring"
+   ],
+   "key": "docs.untidy-docstring",
+   "maturity": "stable",
+   "message": "`{name}` has a docstring with stray whitespace or misaligned lines.",
+   "owner": "astart",
+   "params": {},
+   "procedure": null,
+   "rationale": "Trailing spaces, blank-line runs and misaligned lines inside a docstring add noise.",
+   "requires": [
+    "docstring.is_untidy"
+   ],
+   "severity": "info",
+   "subject": [
+    "Module",
+    "FunctionDef",
+    "AsyncFunctionDef",
+    "ClassDef"
+   ],
+   "title": "Docstring has stray whitespace",
+   "when": {
+    "cmp": "eq",
+    "fact": "docstring.is_untidy",
+    "op": "compare",
+    "value": true
+   }
+  },
+  {
+   "aliases": {},
+   "code": "DOC014",
+   "domain": "docs",
+   "evidence": [
+    {
+     "name": "name",
+     "type": "str"
+    }
+   ],
+   "examples": [
+    {
+     "note": "",
+     "source": "def run(x: int) -> None:\n    \"\"\"Run.\n\n    Args:\n        x: TODO.\n\n    \"\"\"\n",
+     "triggers": true
+    },
+    {
+     "note": "",
+     "source": "def run() -> None:\n    \"\"\"Run.\"\"\"\n",
+     "triggers": false
+    }
+   ],
+   "fixes": [
+    "docs.add-types"
+   ],
+   "key": "docs.annotation-types",
+   "maturity": "stable",
+   "message": "`{name}` needs typed documentation entries.",
+   "owner": "astart",
+   "params": {},
+   "procedure": null,
+   "rationale": "Native annotation and body evidence populate documentation without inventing descriptions.",
+   "requires": [
+    "docstring.needs_types"
+   ],
+   "severity": "info",
+   "subject": [
+    "FunctionDef",
+    "AsyncFunctionDef",
+    "ClassDef"
+   ],
+   "title": "Docstring annotation types missing or stale",
+   "when": {
+    "cmp": "eq",
+    "fact": "docstring.needs_types",
+    "op": "compare",
+    "value": true
+   }
+  }
+ ]
+}

@@ -14,13 +14,18 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        identity: Relations whose type passes through unchanged.
-        element_origins: Containers with one element type argument.
-        mapping_origins: Containers with a key and a value argument.
-        union_limit: Most members of a transferred union.
-        pair: Number of arguments of a mapping type.
-        scalar_items: Type of one item of a string or bytes value.
-        wrappers: Container built around an element type, by relation.
+        identity (Final[frozenset[Relation]]): Relations whose type passes
+            through unchanged.
+        element_origins (Final[frozenset[str]]): Containers with one element
+            type argument.
+        mapping_origins (Final[frozenset[str]]): Containers with a key and a
+            value argument.
+        union_limit (Final[int]): Most members of a transferred union.
+        pair (Final[int]): Number of arguments of a mapping type.
+        scalar_items (Final[dict[str, str]]): Type of one item of a string or
+            bytes value.
+        wrappers (Final[dict[Relation, str]]): Container built around an
+            element type, by relation.
 
     """
 
@@ -66,11 +71,12 @@ def _arguments(*, member: str) -> tuple[str, tuple[str, ...]] | None:
     """Split one non-union type into origin and argument texts.
 
     Args:
-        member: A single type.
+        member (str): A single type.
 
     Returns:
-        The origin and arguments, or ``None`` when it does not parse or is
-        not subscripted.
+        tuple[str, tuple[str, ...]] | None:
+            The origin and arguments, or ``None`` when
+            it does not parse or is not subscripted.
 
     """
     try:
@@ -94,12 +100,12 @@ def _member_component(*, member: str, relation: Relation) -> str | None:
     Iterating a mapping yields its keys; subscripting it yields its values.
 
     Args:
-        member: A single container type.
-        relation: ``element``, ``key``, ``value`` or ``item``.
+        member (str): A single container type.
+        relation (Relation): ``element``, ``key``, ``value`` or ``item``.
 
     Returns:
-        The component type, or ``None`` when the container is not
-        recognised for the relation.
+        str | None: The component type, or ``None`` when the container is not
+            recognised for the relation.
 
     """
     if member in Constants.scalar_items:
@@ -135,12 +141,12 @@ def _component(*, type_text: str, relation: Relation) -> str | None:
     """Take the element, key, value or item type out of a container type.
 
     Args:
-        type_text: The container type, possibly a union of containers.
-        relation: ``element``, ``key``, ``value`` or ``item``.
+        type_text (str): The container type, possibly a union of containers.
+        relation (Relation): ``element``, ``key``, ``value`` or ``item``.
 
     Returns:
-        The joined component type, or ``None`` when any member is not a
-        recognised container.
+        str | None: The joined component type, or ``None`` when
+            any member is not a recognised container.
 
     """
     algebra: TypeAlgebra = TypeAlgebra()
@@ -157,11 +163,12 @@ def forward(*, candidate: Candidate, relation: Relation) -> Candidate | None:
     """Carry a candidate from a contract's source to its target.
 
     Args:
-        candidate: The type at the source.
-        relation: The contract's relation.
+        candidate (Candidate): The type at the source.
+        relation (Relation): The contract's relation.
 
     Returns:
-        The candidate at the target, or ``None`` when nothing sound follows.
+        Candidate | None: The candidate at the target, or
+            ``None`` when nothing sound follows.
 
     """
     if relation in Constants.identity:
@@ -195,11 +202,11 @@ def backward(*, candidate: Candidate, relation: Relation) -> Candidate | None:
     container cannot be guessed from its element.
 
     Args:
-        candidate: The type at the target.
-        relation: The contract's relation.
+        candidate (Candidate): The type at the target.
+        relation (Relation): The contract's relation.
 
     Returns:
-        The constraint at the source, or ``None``.
+        Candidate | None: The constraint at the source, or ``None``.
 
     """
     return candidate if relation in Constants.identity else None

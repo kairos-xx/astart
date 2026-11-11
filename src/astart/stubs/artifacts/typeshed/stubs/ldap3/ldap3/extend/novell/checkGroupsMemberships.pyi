@@ -1,0 +1,7 @@
+def edir_check_groups_memberships(
+    connection,
+    members_dn,
+    groups_dn,
+    fix,
+    transaction,
+): ...

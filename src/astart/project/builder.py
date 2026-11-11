@@ -5,6 +5,7 @@ fail to parse or resolve to no module name are skipped rather than
 aborting the build — their callers simply see them as external. Module
 name collisions (the same dotted name from two files) keep the file that
 sorts first, so results are deterministic.
+
 """
 
 from __future__ import annotations
@@ -43,9 +44,10 @@ class BuildResult:
         """Record the build outcome.
 
         Args:
-            index: The built index.
-            skipped: Unscanned files with reasons.
-            collisions: Duplicate dotted names.
+            index (ProjectIndex): The built index.
+            skipped (tuple[tuple[Path, str], ...]): Unscanned files with
+                reasons.
+            collisions (tuple[str, ...]): Duplicate dotted names.
 
         """
         self.index: ProjectIndex = index
@@ -62,14 +64,15 @@ def build_index(
     """Scan a set of files and index them as one project.
 
     Args:
-        files: Source files making up the project.
-        source_roots: Import roots for dotted naming; defaults to the
-            package-chain and directory fallback of
+        files (Iterable[Path]): Source files making up the project.
+        source_roots (Sequence[Path] | None): Import roots for dotted naming;
+            defaults to
+            the package-chain and directory fallback of
             :func:`module_name`.
-        config: Open-world policy for the index.
+        config (ProjectConfig | None): Open-world policy for the index.
 
     Returns:
-        The index plus what could not be scanned.
+        BuildResult: The index plus what could not be scanned.
 
     """
     scans: dict[str, ModuleScan] = {}

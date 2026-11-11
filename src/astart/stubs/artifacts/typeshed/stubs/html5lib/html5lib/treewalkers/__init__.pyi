@@ -1,0 +1,11 @@
+from types import ModuleType
+
+__all__ = ["getTreeWalker", "pprint"]
+
+def getTreeWalker(
+    treeType: str,
+    implementation: ModuleType | None = None,
+    **kwargs,
+): ...
+def concatenateCharacterTokens(tokens): ...
+def pprint(walker) -> str: ...

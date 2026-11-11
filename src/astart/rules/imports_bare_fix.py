@@ -2,10 +2,11 @@
 
 ``rewrite_bare_imports`` converts module-level ``import a[.b...]``
 statements whose attribute uses are all safe loads into per-attribute
-``from`` imports plus rewritten use sites.  Each attribute is decided
+``from`` imports plus rewritten use sites. Each attribute is decided
 independently: unsafe sites keep ``import a`` alive for them.
 
 Standalone module — catalog/applier wiring is deferred (M8-22).
+
 """
 
 from __future__ import annotations
@@ -41,10 +42,11 @@ class ImportRewrite:
     """One import statement's conversion outcome.
 
     Attributes:
-        module: Dotted module the ``from`` import targets.
-        converted: Attributes rewritten to ``from``-imported names.
-        kept: Attributes left untouched.
-        complete: Whether the ``import`` statement was fully removed.
+        module (str): Dotted module the ``from`` import targets.
+        converted (tuple[str, ...]): Attributes rewritten to ``from`` -imported
+            names.
+        kept (tuple[str, ...]): Attributes left untouched.
+        complete (bool): Whether the ``import`` statement was fully removed.
 
     """
 
@@ -64,9 +66,9 @@ class _Parent:
         """Record the parent position of one child node.
 
         Args:
-            node: Parent node.
-            field: Attribute or list field holding the child.
-            index: Position inside a list field, or ``None``.
+            node (AST): Parent node.
+            field (str): Attribute or list field holding the child.
+            index (int | None): Position inside a list field, or ``None``.
 
         """
         self.node: AST = node
@@ -78,10 +80,10 @@ def _parents(*, module: Module) -> dict[int, _Parent]:
     """Map every child node id to its parent field position.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Node id to parent record.
+        dict[int, _Parent]: Node id to parent record.
 
     """
     result: dict[int, _Parent] = {}
@@ -106,10 +108,10 @@ def _bindings(*, module: Module) -> set[str]:
     """Collect every name bound anywhere in the module.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Bound names.
+        set[str]: Bound names.
 
     """
     names: set[str] = set()
@@ -141,10 +143,11 @@ def _existing_from(*, module: Module) -> dict[tuple[str, str], str]:
     """Map ``(module, imported)`` to the already-bound local name.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Existing ``from`` import bindings at module top level.
+        dict[tuple[str, str], str]: Existing ``from`` import bindings at module
+            top level.
 
     """
     result: dict[tuple[str, str], str] = {}
@@ -177,11 +180,12 @@ def _chains(
     """Longest attribute chain per ``root`` Name node.
 
     Args:
-        module: Parsed module.
-        root: Bound name to collect chains for.
+        module (Module): Parsed module.
+        root (str): Bound name to collect chains for.
 
     Returns:
-        Base node id to chain, plus ids of attribute-less uses.
+        tuple[dict[int, _Chain], set[int]]: Base node id to chain, plus ids of
+            attribute-less uses.
 
     """
     chains: dict[int, _Chain] = {}
@@ -222,9 +226,9 @@ def _replace_node(
     """Swap ``old`` for ``new`` inside its parent.
 
     Args:
-        new: Replacement node.
-        old: Node to replace.
-        parents: Parent map from :func:`_parents`.
+        new (AST): Replacement node.
+        old (AST): Node to replace.
+        parents (dict[int, _Parent]): Parent map from :func:`_parents`.
 
     """
     record: _Parent | None = parents.get(id(old))
@@ -250,13 +254,14 @@ def _local_name(
     """Bound name for ``attr``, or ``None`` when it would collide.
 
     Args:
-        attr: Attribute name to import.
-        bindings: Every name already bound in the module.
-        existing: Existing ``from`` import bindings.
-        module_name: Dotted module being imported from.
+        attr (str): Attribute name to import.
+        bindings (set[str]): Every name already bound in the module.
+        existing (dict[tuple[str, str], str]): Existing ``from`` import
+            bindings.
+        module_name (str): Dotted module being imported from.
 
     Returns:
-        Local name to use, or ``None`` to skip this attribute.
+        str | None: Local name to use, or ``None`` to skip this attribute.
 
     """
     bound: str | None = existing.get((module_name, attr))
@@ -271,11 +276,13 @@ class _AttrPlan:
     """Per-attribute conversion plan for one import statement.
 
     Attributes:
-        converted: Attributes that will be imported by name.
-        rewrites: ``(attribute node, local name)`` use-site swaps.
-        imports_needed: ``attr -> local name`` for the ``from`` import.
-        unsafe_attrs: Attributes that keep ``import a`` alive.
-        kept: Dotted names that must stay imported.
+        converted (list[str]): Attributes that will be imported by name.
+        rewrites (list[tuple[Attribute,str]]): ``(attribute node, local name)``
+            use-site swaps.
+        imports_needed (dict[str, str]): ``attr -> local name`` for the
+            ``from`` import.
+        unsafe_attrs (set[str]): Attributes that keep ``import a`` alive.
+        kept (list[str]): Dotted names that must stay imported.
 
     """
 
@@ -297,14 +304,16 @@ def _attribute_plan(
     """Decide which attributes convert and which keep the import.
 
     Args:
-        chains: Attribute chains below the imported root name.
-        prefix: Dotted path already covered by the import.
-        entry_name: Full dotted module name of the import.
-        existing: Existing ``from`` bindings, ``(module, name) -> local``.
-        bindings: Names bound in the module.
+        chains (dict[int, _Chain]): Attribute chains below the imported root
+            name.
+        prefix (tuple[str, ...]): Dotted path already covered by the import.
+        entry_name (str): Full dotted module name of the import.
+        existing (dict[tuple[str, str], str]): Existing ``from`` bindings,
+            ``(module, name) -> local``.
+        bindings (set[str]): Names bound in the module.
 
     Returns:
-        The conversion plan.
+        _AttrPlan: The conversion plan.
 
     """
     uses_by_attr: dict[str, list[tuple[_Chain, Attribute]]] = {}
@@ -353,11 +362,11 @@ class _Context:
     """Shared rewrite context for one module pass.
 
     Attributes:
-        module: Parsed module.
-        body: Module body list, mutated in place.
-        parents: Parent map from :func:`_parents`.
-        bindings: Names bound in the module.
-        existing: Existing ``from`` bindings.
+        module (Module): Parsed module.
+        body (list[stmt]): Module body list, mutated in place.
+        parents (dict[int, _Parent]): Parent map from :func:`_parents`.
+        bindings (set[str]): Names bound in the module.
+        existing (dict[tuple[str, str], str]): Existing ``from`` bindings.
 
     """
 
@@ -377,12 +386,13 @@ def _rewrite_import(
     """Rewrite one candidate ``import`` statement in place.
 
     Args:
-        statement: ``import a[.b...]`` statement to process.
-        position: Index just past ``statement`` in the module body.
-        context: Shared module rewrite context.
+        statement (stmt): ``import a[.b...]`` statement to process.
+        position (int): Index just past ``statement`` in the module body.
+        context (_Context): Shared module rewrite context.
 
     Returns:
-        The conversion report, or ``None`` when the import is unsafe.
+        ImportRewrite | None:
+            The conversion report, or ``None`` when the import is unsafe.
 
     """
     if not (
@@ -471,15 +481,16 @@ def rewrite_bare_imports(*, module: Module) -> tuple[ImportRewrite, ...]:
 
     Only direct module-level single-name ``import`` statements are
     considered; aliases, multi-name imports, conditional and
-    function-level imports are left alone.  Unsafe attribute sites
+    function-level imports are left alone. Unsafe attribute sites
     (stores, deletes, aug-assign targets, name collisions) keep
     ``import a`` alive for them.
 
     Args:
-        module: Parsed module, mutated in place.
+        module (Module): Parsed module, mutated in place.
 
     Returns:
-        One report per processed import statement, in source order.
+        tuple[ImportRewrite, ...]: One report per processed import statement,
+            in source order.
 
     """
     parents: dict[int, _Parent] = _parents(module=module)

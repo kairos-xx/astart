@@ -1,0 +1,59 @@
+import builtins
+import typing
+
+import google.protobuf.descriptor
+import google.protobuf.message
+import tensorflow.core.framework.allocation_description_pb2
+import tensorflow.core.framework.tensor_shape_pb2
+import tensorflow.core.framework.types_pb2
+
+DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+@typing.final
+class TensorDescription(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    DTYPE_FIELD_NUMBER: builtins.int
+    SHAPE_FIELD_NUMBER: builtins.int
+    ALLOCATION_DESCRIPTION_FIELD_NUMBER: builtins.int
+    dtype: tensorflow.core.framework.types_pb2.DataType.ValueType
+    """Data type of tensor elements"""
+    @property
+    def shape(
+        self,
+    ) -> tensorflow.core.framework.tensor_shape_pb2.TensorShapeProto: ...
+    @property
+    def allocation_description(
+        self,
+    ) -> tensorflow.core.framework.allocation_description_pb2.AllocationDescription: ...
+    def __init__(
+        self,
+        *,
+        dtype: tensorflow.core.framework.types_pb2.DataType.ValueType
+        | None = ...,
+        shape: tensorflow.core.framework.tensor_shape_pb2.TensorShapeProto
+        | None = ...,
+        allocation_description: tensorflow.core.framework.allocation_description_pb2.AllocationDescription
+        | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing.Literal[
+            "allocation_description",
+            b"allocation_description",
+            "shape",
+            b"shape",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing.Literal[
+            "allocation_description",
+            b"allocation_description",
+            "dtype",
+            b"dtype",
+            "shape",
+            b"shape",
+        ],
+    ) -> None: ...
+
+global___TensorDescription = TensorDescription

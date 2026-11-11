@@ -15,9 +15,9 @@ class TypeShape:
     """Immutable normalized type shape with generic type arguments.
 
     Attributes:
-        arguments: Arguments retained as tuple[TypeShape, ...] by this
-            instance.
-        name: Identifier used to refer to the name.
+        arguments (tuple[TypeShape, ...]): Arguments retained as
+            tuple[TypeShape, ...] by this instance.
+        name (str): Identifier used to refer to the name.
 
     """
 
@@ -25,7 +25,12 @@ class TypeShape:
     arguments: tuple[TypeShape, ...] = ()
 
     def __str__(self) -> str:
-        """Return deterministic Python-like type spelling."""
+        """Return deterministic Python-like type spelling.
+
+        Returns:
+            str: TODO.
+
+        """
         if self.name == "union":
             return " | ".join(str(object=item) for item in self.arguments)
         if self.name == "parameters":
@@ -49,8 +54,9 @@ class ShapeConstants:
     """Deterministic abstract-type stabilization budgets.
 
     Attributes:
-        MAX_TYPE_DEPTH: Max type depth retained as int by this instance.
-        MAX_UNION_MEMBERS: Max union members retained as int by this instance.
+        MAX_TYPE_DEPTH (int): Max type depth retained as int by this instance.
+        MAX_UNION_MEMBERS (int): Max union members retained as int by this
+            instance.
 
     """
 
@@ -62,11 +68,11 @@ def shape_depth(*, shape: TypeShape, limit: int) -> int:
     """Measure nesting with an explicit stack and bounded traversal.
 
     Args:
-        limit: Limit supplied as int for this operation.
-        shape: Shape supplied as TypeShape for this operation.
+        limit (int): Limit supplied as int for this operation.
+        shape (TypeShape): Shape supplied as TypeShape for this operation.
 
     Returns:
-        int produced by this operation.
+        int: int produced by this operation.
 
     """
     deepest: int = 0
@@ -84,10 +90,10 @@ def atomic(*, name: str) -> TypeShape:
     """Create a simple type name.
 
     Args:
-        name: Identifier of the name being resolved.
+        name (str): Identifier of the name being resolved.
 
     Returns:
-        TypeShape produced by this operation.
+        TypeShape: TypeShape produced by this operation.
 
     """
     return TypeShape(name=name)
@@ -97,7 +103,8 @@ def _promote_numeric(*, flattened: set[TypeShape]) -> None:
     """Drop numeric members already covered by a wider numeric member.
 
     Args:
-        flattened: Flattened supplied as set[TypeShape] for this operation.
+        flattened (set[TypeShape]): Flattened supplied as set[TypeShape] for
+            this operation.
 
     """
     numeric: set[str] = {item.name for item in flattened if not item.arguments}
@@ -119,11 +126,12 @@ def union_shapes(
     """Canonicalize unions, optionally promoting numeric containers.
 
     Args:
-        promote: Promote supplied as bool for this operation.
-        shapes: Shapes supplied as tuple[TypeShape, ...] for this operation.
+        promote (bool): Promote supplied as bool for this operation.
+        shapes (tuple[TypeShape, ...]): Shapes supplied as tuple[TypeShape,
+            ...] for this operation.
 
     Returns:
-        TypeShape produced by this operation.
+        TypeShape: TypeShape produced by this operation.
 
     """
     flattened: set[TypeShape] = set()
@@ -161,12 +169,12 @@ def join_types(
     """Join two inferred types with structural container-aware widening.
 
     Args:
-        left: Left supplied as TypeShape for this operation.
-        promote: Promote supplied as bool for this operation.
-        right: Right supplied as TypeShape for this operation.
+        left (TypeShape): Left supplied as TypeShape for this operation.
+        promote (bool): Promote supplied as bool for this operation.
+        right (TypeShape): Right supplied as TypeShape for this operation.
 
     Returns:
-        TypeShape produced by this operation.
+        TypeShape: TypeShape produced by this operation.
 
     """
     limit: int = ShapeConstants.MAX_TYPE_DEPTH
@@ -202,11 +210,12 @@ def type_shape(*, expression: TypeExpression) -> TypeShape:
     """Project structured annotation syntax into the type lattice.
 
     Args:
-        expression: The expression examined while project structured annotation
-            syntax into the type lattice.
+        expression (TypeExpression): The expression examined while project
+            structured
+            annotation syntax into the type lattice.
 
     Returns:
-        TypeShape produced by this operation.
+        TypeShape: TypeShape produced by this operation.
 
     """
     if expression.name == "union":

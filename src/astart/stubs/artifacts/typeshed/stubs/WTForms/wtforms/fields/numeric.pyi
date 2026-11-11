@@ -1,0 +1,145 @@
+from collections.abc import Callable, Sequence
+from decimal import Decimal
+from typing import Any, Literal, Self, overload
+
+from wtforms.fields.core import Field, _Filter, _FormT, _Validator, _Widget
+from wtforms.form import BaseForm
+from wtforms.meta import DefaultMeta, _SupportsGettextAndNgettext
+from wtforms.utils import UnsetValue
+
+__all__ = (
+    "DecimalField",
+    "DecimalRangeField",
+    "FloatField",
+    "IntegerField",
+    "IntegerRangeField",
+)
+
+class LocaleAwareNumberField(Field):
+    use_locale: bool
+    number_format: Any | None
+    locale: str
+    def __init__(
+        self,
+        label: str | None = None,
+        validators: tuple[_Validator[_FormT, Self], ...]
+        | list[Any]
+        | None = None,
+        use_locale: bool = False,
+        number_format: str | Any | None = None,
+        *,
+        filters: Sequence[_Filter] = (),
+        description: str = "",
+        id: str | None = None,
+        default: object | None = None,
+        widget: _Widget[Self] | None = None,
+        render_kw: dict[str, Any] | None = None,
+        name: str | None = None,
+        _form: BaseForm | None = None,
+        _prefix: str = "",
+        _translations: _SupportsGettextAndNgettext | None = None,
+        _meta: DefaultMeta | None = None,
+    ) -> None: ...
+
+class IntegerField(Field):
+    data: int | None
+    default: int | Callable[[], int] | None
+    def __init__(
+        self,
+        label: str | None = None,
+        validators: tuple[_Validator[_FormT, Self], ...]
+        | list[Any]
+        | None = None,
+        *,
+        filters: Sequence[_Filter] = (),
+        description: str = "",
+        id: str | None = None,
+        default: int | Callable[[], int] | None = None,
+        widget: _Widget[Self] | None = None,
+        render_kw: dict[str, Any] | None = None,
+        name: str | None = None,
+        _form: BaseForm | None = None,
+        _prefix: str = "",
+        _translations: _SupportsGettextAndNgettext | None = None,
+        _meta: DefaultMeta | None = None,
+    ) -> None: ...
+
+class DecimalField(LocaleAwareNumberField):
+    data: Decimal | None
+    default: Decimal | Callable[[], Decimal] | None
+    places: int | None
+    rounding: str | None
+    @overload
+    def __init__(
+        self,
+        label: str | None = None,
+        validators: tuple[_Validator[_FormT, Self], ...]
+        | list[Any]
+        | None = None,
+        *,
+        places: UnsetValue = ...,
+        rounding: None = None,
+        use_locale: Literal[True],
+        number_format: str | Any | None = None,
+        filters: Sequence[_Filter] = (),
+        description: str = "",
+        id: str | None = None,
+        default: Decimal | Callable[[], Decimal] | None = None,
+        widget: _Widget[Self] | None = None,
+        render_kw: dict[str, Any] | None = None,
+        name: str | None = None,
+        _form: BaseForm | None = None,
+        _prefix: str = "",
+        _translations: _SupportsGettextAndNgettext | None = None,
+        _meta: DefaultMeta | None = None,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self,
+        label: str | None = None,
+        validators: tuple[_Validator[_FormT, Self], ...]
+        | list[Any]
+        | None = None,
+        places: int | UnsetValue | None = ...,
+        rounding: str | None = None,
+        *,
+        use_locale: Literal[False] = False,
+        number_format: str | Any | None = None,
+        filters: Sequence[_Filter] = (),
+        description: str = "",
+        id: str | None = None,
+        default: Decimal | Callable[[], Decimal] | None = None,
+        widget: _Widget[Self] | None = None,
+        render_kw: dict[str, Any] | None = None,
+        name: str | None = None,
+        _form: BaseForm | None = None,
+        _prefix: str = "",
+        _translations: _SupportsGettextAndNgettext | None = None,
+        _meta: DefaultMeta | None = None,
+    ) -> None: ...
+
+class FloatField(Field):
+    data: float | None
+    default: float | Callable[[], float] | None
+    def __init__(
+        self,
+        label: str | None = None,
+        validators: tuple[_Validator[_FormT, Self], ...]
+        | list[Any]
+        | None = None,
+        *,
+        filters: Sequence[_Filter] = (),
+        description: str = "",
+        id: str | None = None,
+        default: float | Callable[[], float] | None = None,
+        widget: _Widget[Self] | None = None,
+        render_kw: dict[str, Any] | None = None,
+        name: str | None = None,
+        _form: BaseForm | None = None,
+        _prefix: str = "",
+        _translations: _SupportsGettextAndNgettext | None = None,
+        _meta: DefaultMeta | None = None,
+    ) -> None: ...
+
+class IntegerRangeField(IntegerField): ...
+class DecimalRangeField(DecimalField): ...

@@ -1,0 +1,9 @@
+from collections.abc import Generator
+
+from _typeshed import Incomplete
+
+class PaginatedCollection:
+    def __init__(self, method) -> None: ...
+    @property
+    def items(self) -> Generator[Incomplete]: ...
+    def __iter__(self): ...

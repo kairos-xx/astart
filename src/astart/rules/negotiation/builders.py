@@ -4,11 +4,11 @@ Every parameter, return value and singly-bound local of a function is a
 node. Facts the syntax proves become seeds; flows between nodes become
 contracts. Anything the builder cannot account for marks the node *opaque*,
 so no type is ever settled from partial knowledge.
+
 """
 
 from __future__ import annotations
 
-import builtins
 from ast import (
     AST,
     AnnAssign,
@@ -39,7 +39,12 @@ from ast import (
     List,
     ListComp,
     Load,
+    Match,
+    MatchAs,
+    MatchMapping,
+    MatchStar,
     Name,
+    NamedExpr,
     Nonlocal,
     Return,
     Set,
@@ -60,12 +65,14 @@ from ast import (
     expr_context,
     iter_child_nodes,
     iter_fields,
+    keyword,
     operator,
     stmt,
     unaryop,
     unparse,
     walk,
 )
+from builtins import __dict__
 from collections import Counter
 from copy import copy
 from dataclasses import dataclass, field
@@ -78,8 +85,10 @@ from astart.rules.hints import (
     is_declaration,
     protocol_result_for,
 )
-from astart.rules.library_calls import callee_name
+from astart.rules.imports import Constants as ImportConstants
+from astart.rules.library_calls import callee_name, import_aliases
 from astart.rules.methods import MethodIndex
+from astart.rules.negotiation.algebra import TypeAlgebra
 from astart.rules.negotiation.containers import (
     attribute_risky,
     empty_kind,
@@ -94,7 +103,13 @@ from astart.rules.negotiation.model import (
     Polarity,
     Relation,
 )
-from astart.rules.negotiation.narrowing import Arms, read_test
+from astart.rules.negotiation.narrowing import (
+    CaseArms,
+    exception_types,
+    read_case,
+    read_test,
+)
+from astart.rules.negotiation.narrowing import Constants as Narrowing
 from astart.rules.negotiation.transfer import forward
 from astart.rules.provable import (
     can_fall_off,
@@ -108,7 +123,18 @@ from astart.rules.provable import (
 from astart.rules.resolve import CallBindings, binding_counts
 from astart.rules.scopes import names_bound_by
 from astart.semantic import ArgumentOrigin
-from astart.stubs import function_return
+from astart.stubs import (
+    CallArguments,
+    function_return,
+    method_return,
+    receiver_parts,
+    select_overload,
+    variable_type,
+)
+
+type StrOrNone = str | None
+type SetStr = set[str]
+type DictStr = dict[str, str]
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -130,16 +156,27 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        receivers: Names of the implicit first parameter of a method.
-        passed: Argument origins that carry an explicit value.
-        variadic: Argument origins of ``*args`` and ``**kwargs``.
-        constructors: Methods whose call evaluates to the class instead.
-        scopes: Nodes that open a scope the narrowing must not enter.
-        derivable: Expression kinds a derived node may be built from.
-        comprehensions: Comprehensions, which build fresh containers.
-        leaves: Expressions that need no operand.
-        markers: Syntax nodes that are copied as they are.
-        type_variables: Callees that declare a type variable.
+        receivers (Final[frozenset[str]]): Names of the implicit first
+            parameter of a method.
+        passed (Final[frozenset[ArgumentOrigin]]): Argument origins that carry
+            an explicit value.
+        variadic (Final[frozenset[ArgumentOrigin]]): Argument origins of
+            ``*args`` and ``**kwargs``.
+        constructors (Final[frozenset[str]]): Methods whose call evaluates to
+            the class instead.
+        scopes (Final[tuple[type[AST], ...]]): Nodes that open a scope the
+            narrowing must not enter.
+        derivable (Final[tuple[type[expr], ...]]): Expression kinds a derived
+            node may be built from.
+        comprehensions (Final[tuple[type[expr], ...]]): Comprehensions, which
+            build fresh containers.
+        leaves (Final[tuple[type[expr], ...]]): Expressions that need no
+            operand.
+        markers (Final[tuple[type[AST], ...]]): Syntax nodes that are copied as
+            they are.
+        type_variables (Final[frozenset[str]]): Callees that declare a type
+            variable.
+        qualifiers (Final[frozenset[str]]): Grouped module constant.
 
     """
 
@@ -166,11 +203,13 @@ class Constants:
         ListComp,
         SetComp,
         DictComp,
+        GeneratorExp,
     )
     comprehensions: Final[tuple[type[expr], ...]] = (
         ListComp,
         SetComp,
         DictComp,
+        GeneratorExp,
     )
     leaves: Final[tuple[type[expr], ...]] = (Constant,)
     markers: Final[tuple[type[AST], ...]] = (
@@ -197,6 +236,10 @@ class Constants:
         {ArgumentOrigin.VAR_POSITIONAL, ArgumentOrigin.VAR_KEYWORD},
     )
 
+    qualifiers: Final[frozenset[str]] = frozenset(
+        {"Final", "ClassVar", "InitVar"},
+    )
+
 
 @final
 @dataclass(frozen=True, slots=True)
@@ -204,28 +247,31 @@ class Built:
     """A module's contract graph.
 
     Attributes:
-        graph: Nodes, contracts and seeds.
-        opaque: Nodes whose evidence is incomplete; nothing may be settled
-            for them or anything they flow into.
-        kinds: ``"parameter"`` or ``"return"`` for the nodes worth reporting.
-        variables: The assignment that binds each function-local variable,
-            by node path.
-        attributes: The first write of each instance attribute (the one in
-            ``__init__`` when there is one), by node path.
-        why: The first reason each opaque node is opaque.
-        risky: Attributes some method uses in a way that could change the
-            element type of a container they hold; opaque if they settle to
-            one.
+        graph (ContractGraph): Nodes, contracts and seeds.
+        opaque (frozenset[str]): Nodes whose evidence is incomplete; nothing
+            may
+            be settled for them or anything they flow into.
+        kinds (DictStr): ``"parameter"`` or ``"return"`` for the nodes worth
+            reporting.
+        variables (dict[str, Assign]): The assignment that binds each
+            function-local variable, by node path.
+        attributes (dict[str, Assign]): The first write of each instance
+            attribute (the one
+            in ``__init__`` when there is one), by node path.
+        why (DictStr): The first reason each opaque node is opaque.
+        risky (frozenset[str]): Attributes some method uses in a way that could
+            change the element
+            type of a container they hold; opaque if they settle to one.
 
     """
 
     graph: ContractGraph
     opaque: frozenset[str]
-    kinds: dict[str, str]
+    kinds: DictStr
     variables: dict[str, Assign]
     attributes: dict[str, Assign]
     risky: frozenset[str]
-    why: dict[str, str]
+    why: DictStr
 
 
 @final
@@ -234,18 +280,18 @@ class _Scope:
     """The names a function body can reason about.
 
     Attributes:
-        names: Node path by local or parameter name.
-        env: Proven type by name, for the syntax typer.
-        receiver: Name of the instance parameter inside a method.
-        members: Node path by instance attribute the class owns.
-        qual: Qualified name of the function.
+        names (DictStr): Node path by local or parameter name.
+        env (DictStr): Proven type by name, for the syntax typer.
+        receiver (StrOrNone): Name of the instance parameter inside a method.
+        members (DictStr): Node path by instance attribute the class owns.
+        qual (str): Qualified name of the function.
 
     """
 
-    names: dict[str, str] = field(default_factory=dict)
-    env: dict[str, str] = field(default_factory=dict)
-    receiver: str | None = None
-    members: dict[str, str] = field(default_factory=dict)
+    names: DictStr = field(default_factory=dict)
+    env: DictStr = field(default_factory=dict)
+    receiver: StrOrNone = None
+    members: DictStr = field(default_factory=dict)
     qual: str = ""
 
 
@@ -258,12 +304,13 @@ def walk_functions(
     """List every function with its qualified name.
 
     Args:
-        node: Module or class or function whose body is scanned.
-        trail: Qualified-name prefix.
-        in_class: Whether ``node`` is a class body.
+        node (AST): Module or class or function whose body is scanned.
+        trail (tuple[str, ...]): Qualified-name prefix.
+        in_class (bool): Whether ``node`` is a class body.
 
     Yields:
-        ``(qualified name, definition, defined directly in a class)``.
+        tuple[str, Function, bool]:
+            ``(qualified name, definition, defined directly in a class)``.
 
     """
     for child in getattr(node, "body", []):
@@ -290,11 +337,13 @@ def _parameters(
     """Pair each plain parameter with its default.
 
     Args:
-        function: Function definition.
-        skip_receiver: Whether the first parameter is an implicit receiver.
+        function (Function): Function definition.
+        skip_receiver (bool): Whether the first parameter is an implicit
+            receiver.
 
     Returns:
-        Positional-only, positional and keyword-only parameters.
+        list[tuple[arg, expr | None]]: Positional-only, positional and
+            keyword-only parameters.
 
     """
     arguments: arguments = function.args
@@ -313,15 +362,15 @@ def _parameters(
     return pairs
 
 
-def _blocked_names(*, node: AST) -> set[str]:
+def _blocked_names(*, node: AST) -> SetStr:
     """List the names a statement binds in a way contracts cannot follow.
 
     Args:
-        node: Any node of a function body.
+        node (AST): Any node of a function body.
 
     Returns:
-        Names bound by ``global``/``nonlocal``, imports, nested definitions,
-        exception handlers and annotated assignments.
+        SetStr: Names bound by ``global`` /``nonlocal``, imports, nested
+            definitions, exception handlers and annotated assignments.
 
     """
     if isinstance(node, (Global, Nonlocal)):
@@ -334,23 +383,69 @@ def _blocked_names(*, node: AST) -> set[str]:
         return {node.name}
     if isinstance(node, ExceptHandler) and node.name is not None:
         return {node.name}
-    if (
+    bound: StrOrNone = None
+    if isinstance(node, (MatchAs, MatchStar)):
+        bound = node.name
+    elif isinstance(node, MatchMapping):
+        bound = node.rest
+    elif (
         isinstance(node, AnnAssign)
         and isinstance(node.target, Name)
         and node.value is None
     ):
-        return {node.target.id}
-    return set()
+        bound = node.target.id
+    return {bound} if bound is not None else set()
 
 
-def _plain_target(*, node: AST) -> str | None:
+def _head_name(*, node: expr) -> str:
+    """Name the head of an attribute or name expression.
+
+    Args:
+        node (expr): The expression.
+
+    Returns:
+        str: ``x`` for ``x`` and ``mod.x``, else ``""``.
+
+    """
+    if isinstance(node, Name):
+        return node.id
+    if isinstance(node, Attribute):
+        return node.attr
+    return ""
+
+
+def _declared_source(*, annotation: expr) -> StrOrNone:
+    """Read the type an annotation declares, skipping bare qualifiers.
+
+    ``x: Final = v`` declares no type — ``Final`` is a qualifier — so the
+    value must speak instead; ``x: Final[int] = v`` still declares ``int``.
+
+    Args:
+        annotation (expr): The annotation expression.
+
+    Returns:
+        StrOrNone: The type text, or ``None`` for a bare qualifier.
+
+    """
+    if (
+        isinstance(annotation, Subscript)
+        and _head_name(node=annotation.value) in Constants.qualifiers
+    ):
+        return unparse(ast_obj=annotation.slice)
+    if _head_name(node=annotation) in Constants.qualifiers:
+        return None
+    return unparse(ast_obj=annotation)
+
+
+def _plain_target(*, node: AST) -> StrOrNone:
     """Name the variable a simple assignment or loop binds.
 
     Args:
-        node: Any node of a function body.
+        node (AST): Any node of a function body.
 
     Returns:
-        The name for ``x = ...`` and ``for x in ...``, else ``None``.
+        StrOrNone: The name for ``x = ...`` , ``for x in ...``
+            and ``(x := ...)``, else ``None``.
 
     """
     if (
@@ -367,6 +462,8 @@ def _plain_target(*, node: AST) -> str | None:
         and node.value is not None
     ):
         return node.target.id
+    if isinstance(node, NamedExpr):
+        return node.target.id
     return None
 
 
@@ -378,11 +475,11 @@ def walk_classes(
     """List every class with its qualified name.
 
     Args:
-        node: Module, class or function whose body is scanned.
-        trail: Qualified-name prefix.
+        node (AST): Module, class or function whose body is scanned.
+        trail (tuple[str, ...]): Qualified-name prefix.
 
     Yields:
-        ``(qualified name, definition)``.
+        tuple[str, ClassDef]: ``(qualified name, definition)``.
 
     """
     for child in getattr(node, "body", []):
@@ -398,10 +495,10 @@ def _external_stores(*, module: AST) -> Counter[str]:
     """Count the attribute writes of the whole module by attribute name.
 
     Args:
-        module: Parsed module.
+        module (AST): Parsed module.
 
     Returns:
-        Stores and deletes by attribute name.
+        Counter[str]: Stores and deletes by attribute name.
 
     """
     return Counter(
@@ -415,17 +512,18 @@ def _own_writes(
     *,
     method: Function,
     receiver: str,
-) -> tuple[dict[str, list[Assign]], set[str]]:
+) -> tuple[dict[str, list[Assign]], SetStr]:
     """Find the plain writes a method makes to its instance's attributes.
 
     Args:
-        method: Method definition.
-        receiver: Name of the instance parameter.
+        method (Function): Method definition.
+        receiver (str): Name of the instance parameter.
 
     Returns:
-        The ``self.name = value`` assignments by attribute, and the
-        attributes touched in any other way (augmented, unpacked, deleted) —
-        all of them when the receiver is rebound.
+        tuple[dict[str, list[Assign]], SetStr]: The ``self.name = value``
+            assignments by attribute, and the
+            attributes touched in any other way (augmented, unpacked,
+            deleted) — all of them when the receiver is rebound.
 
     """
     own: list[AST] = list(own_nodes(function=method))
@@ -441,7 +539,7 @@ def _own_writes(
         ):
             plain[id(node.targets[0])] = node.targets[0].attr
             writes.setdefault(node.targets[0].attr, []).append(node)
-    bad: set[str] = set()
+    bad: SetStr = set()
     for node in walk(node=method):
         if (
             isinstance(node, Attribute)
@@ -464,14 +562,14 @@ def _plain_classes(*, module: AST) -> frozenset[str]:
     bare name would be a bare generic.
 
     Args:
-        module: Parsed module.
+        module (AST): Parsed module.
 
     Returns:
-        Names of the top-level classes that are not generic.
+        frozenset[str]: Names of the top-level classes that are not generic.
 
     """
     body: list[stmt] = list(getattr(module, "body", []))
-    typevars: set[str] = {
+    typevars: SetStr = {
         statement.targets[0].id
         for statement in body
         if isinstance(statement, Assign)
@@ -508,26 +606,26 @@ class _Templater:
         """Start with no operands.
 
         Args:
-            builder: The builder, to recognise operand nodes.
-            scope: Scope the expression is evaluated in.
+            builder (ContractBuilder): The builder, to recognise operand nodes.
+            scope (_Scope): Scope the expression is evaluated in.
 
         """
         self._builder: ContractBuilder = builder
         self._scope: _Scope = scope
         self.parts: list[tuple[str, str]] = []
-        self.fixed: dict[str, str] = {}
-        self._bound: set[str] = set()
+        self.fixed: DictStr = {}
+        self._bound: SetStr = set()
 
     def convert(self, *, value: expr) -> expr | None:
         """Copy an expression, replacing operands by placeholder names.
 
         Args:
-            value: The expression.
+            value (expr): The expression.
 
         Returns:
-            The template, or ``None`` when the expression contains something
-            the syntax typer cannot read (lambdas, comprehensions, unknown
-            calls or names).
+            expr | None: The template, or ``None`` when the expression contains
+                something the syntax typer cannot read (lambdas,
+                async comprehensions, unknown calls or names).
 
         """
         handled, atom = self._atom(value=value)
@@ -549,16 +647,18 @@ class _Templater:
         """Handle operands, names and constants, which have no children.
 
         Args:
-            value: The expression.
+            value (expr): The expression.
 
         Returns:
-            ``(True, result)`` when the expression was handled here (the
-            result is ``None`` for an unknown name), else ``(False, None)``.
+            tuple[bool, expr | None]: ``(True, result)`` when the expression
+                was
+                handled here (the result is ``None`` for
+                an unknown name), else ``(False, None)``.
 
         """
         if isinstance(value, Name) and value.id in self._bound:
             return True, value
-        path: str | None = self._builder.operand(
+        path: StrOrNone = self._builder.operand(
             value=value,
             scope=self._scope,
         )
@@ -567,7 +667,7 @@ class _Templater:
             self.parts.append((placeholder, path))
             return True, Name(id=placeholder, ctx=Load())
         if isinstance(value, Name):
-            known: str | None = self._scope.env.get(value.id)
+            known: StrOrNone = self._scope.env.get(value.id)
             if known is None:
                 return True, None
             self.fixed[value.id] = known
@@ -577,20 +677,27 @@ class _Templater:
     def _comprehension(self, *, value: comprehension) -> comprehension | None:
         """Copy one ``for … in … if …`` clause of a comprehension.
 
-        The loop target is a name bound inside the expression, so it stays as
-        written and is not an operand.
+        Names in tuple/list targets are bound inside the expression, so
+        they stay as written and are not outer-scope operands.
 
         Args:
-            value: The clause.
+            value (comprehension): The clause.
 
         Returns:
-            The copy, or ``None`` for an async clause or an unreadable part.
+            comprehension | None: The copy, or ``None`` for an async
+                clause or an unreadable part.
 
         """
-        if value.is_async or not isinstance(value.target, Name):
+        targets: list[AST] = list(walk(node=value.target))
+        if value.is_async or any(
+            not isinstance(target, (Name, Tuple, List, Store))
+            for target in targets
+        ):
             return None
         source: expr | None = self.convert(value=value.iter)
-        self._bound.add(value.target.id)
+        self._bound.update(
+            target.id for target in targets if isinstance(target, Name)
+        )
         tests: list[expr] = []
         for test in value.ifs:
             converted: expr | None = self.convert(value=test)
@@ -614,18 +721,25 @@ class _Templater:
         variable is bound only inside that comprehension.
 
         Args:
-            value: The expression.
+            value (expr): The expression.
 
         Returns:
-            The copy, or ``None`` when some child cannot be converted.
+            expr | None:
+                The copy, or ``None`` when some child cannot be converted.
 
         """
-        outer: set[str] = set(self._bound)
+        outer: SetStr = set(self._bound)
         copied: expr = copy(x=value)
         for field_name, field_value in sorted(
             iter_fields(node=value),
             key=lambda pair: pair[0] != "generators",
         ):
+            if (
+                field_name == "func"
+                and isinstance(value, Call)
+                and isinstance(value.func, Name)
+            ):
+                continue
             converted: FieldValue | None = self._field(value=field_value)
             if converted is None:
                 return None
@@ -638,11 +752,11 @@ class _Templater:
         """Tell whether a field value can be copied as it is.
 
         Args:
-            value: A field of an expression node.
+            value (FieldValue): A field of an expression node.
 
         Returns:
-            ``True`` for names, numbers and the operator and context markers;
-            ``False`` for any other syntax node.
+            bool: ``True`` for names, numbers and the operator and
+                context markers; ``False`` for any other syntax node.
 
         """
         return not isinstance(value, AST) or isinstance(
@@ -654,11 +768,13 @@ class _Templater:
         """Convert one field of an expression node.
 
         Args:
-            value: An expression, a list of nodes, or a plain value.
+            value (FieldValue): An expression, a list of nodes, or a plain
+                value.
 
         Returns:
-            The converted field; plain values are returned as they are and
-            ``None`` means the field cannot be converted.
+            FieldValue | None:
+                The converted field; plain values are returned as they
+                are and ``None`` means the field cannot be converted.
 
         """
         if isinstance(value, expr):
@@ -668,7 +784,14 @@ class _Templater:
         items: list[AST | None] = []
         for item in value:
             converted: AST | None
-            if isinstance(item, expr):
+            if isinstance(item, keyword):
+                inner: expr | None = self.convert(value=item.value)
+                converted = (
+                    None
+                    if inner is None
+                    else keyword(arg=item.arg, value=inner)
+                )
+            elif isinstance(item, expr):
                 converted = self.convert(value=item)
             elif isinstance(item, comprehension):
                 converted = self._comprehension(value=item)
@@ -694,10 +817,12 @@ class ContractBuilder:
         """Prepare the shared analyses.
 
         Args:
-            module: Parsed module.
-            escaped: Names read as values, whose callers are unknown.
-            library: Resolver over typeshed, to type calls into the standard
-                library; ``None`` types none.
+            module (CommentedModule): Parsed module.
+            escaped (frozenset[str]): Names read as values, whose callers are
+                unknown.
+            library (Resolver | None): Resolver over typeshed, to type calls
+                into
+                the standard library; ``None`` types none.
 
         """
         self._library: Resolver | None = library
@@ -708,19 +833,19 @@ class ContractBuilder:
             module=module,
             counts=self._counts,
         )
-        self._constants: dict[str, str] = module_constants(
+        self._constants: DictStr = module_constants(
             module=module,
             counts=self._counts,
         )
         self._graph: ContractGraph = ContractGraph()
-        self._opaque: set[str] = set()
-        self._why: dict[str, str] = {}
-        self._kinds: dict[str, str] = {}
+        self._opaque: SetStr = set()
+        self._why: DictStr = {}
+        self._kinds: DictStr = {}
         self._ids: dict[int, str] = {}
         self._scopes: dict[int, _Scope] = {}
         self._params: dict[str, list[str]] = {}
-        self._by_name: dict[str, str] = {}
-        self._coroutines: set[str] = set()
+        self._by_name: DictStr = {}
+        self._coroutines: SetStr = set()
         self._name_path: dict[int, str] = {}
         self._methods: MethodIndex = MethodIndex(
             module=module,
@@ -729,13 +854,13 @@ class ContractBuilder:
         self._top_classes: frozenset[str] = _plain_classes(module=module)
         self._variables: dict[str, Assign] = {}
         self._attribute_writes: dict[str, Assign] = {}
-        self._risky: set[str] = set()
+        self._risky: SetStr = set()
 
     def build(self) -> Built:
         """Build the graph.
 
         Returns:
-            The graph, the opaque nodes and the reportable node kinds.
+            Built: The graph, the opaque nodes and the reportable node kinds.
 
         """
         entries: list[tuple[str, Function, bool]] = list(
@@ -773,8 +898,8 @@ class ContractBuilder:
         """Mark a node as having incomplete evidence, keeping the first reason.
 
         Args:
-            path: Node path.
-            why: What made the evidence incomplete.
+            path (str): Node path.
+            why (str): What made the evidence incomplete.
 
         """
         self._opaque.add(path)
@@ -784,8 +909,8 @@ class ContractBuilder:
         """Mark several nodes as having incomplete evidence.
 
         Args:
-            paths: Node paths.
-            why: What made the evidence incomplete.
+            paths (Iterable[str]): Node paths.
+            why (str): What made the evidence incomplete.
 
         """
         for path in paths:
@@ -797,6 +922,7 @@ class ContractBuilder:
         A parameter nobody calls and that has no default says nothing about
         its type; anything that depends on it must not settle from the other
         things that reach it.
+
         """
         for path in self._graph.nodes:
             if self._graph.feeds(path=path) and not self._graph.has_input(
@@ -814,9 +940,9 @@ class ContractBuilder:
         """Create the parameter and return nodes of a function.
 
         Args:
-            qual: Qualified name.
-            function: Function definition.
-            in_class: Whether it is defined directly in a class.
+            qual (str): Qualified name.
+            function (Function): Function definition.
+            in_class (bool): Whether it is defined directly in a class.
 
         """
         scope: _Scope = _Scope(qual=qual)
@@ -861,8 +987,8 @@ class ContractBuilder:
         """Seed a written annotation as a hard declaration.
 
         Args:
-            path: Node path.
-            source: Annotation text.
+            path (str): Node path.
+            source (str): Annotation text.
 
         """
         self._graph.seed(
@@ -881,13 +1007,13 @@ class ContractBuilder:
         """Create nodes for locals bound exactly once by a plain statement.
 
         Args:
-            function: Function definition.
-            qual: Qualified name.
-            scope: Scope extended in place.
+            function (Function): Function definition.
+            qual (str): Qualified name.
+            scope (_Scope): Scope extended in place.
 
         """
         stores: Counter[str] = Counter()
-        blocked: set[str] = {
+        blocked: SetStr = {
             name
             for node in walk(node=function)
             if isinstance(node, (Global, Nonlocal))
@@ -901,7 +1027,7 @@ class ContractBuilder:
             elif isinstance(node, Name) and isinstance(node.ctx, Del):
                 blocked.add(node.id)
             blocked.update(_blocked_names(node=node))
-            target: str | None = _plain_target(node=node)
+            target: StrOrNone = _plain_target(node=node)
             if target is not None:
                 plain.append(target)
         for parameter in [
@@ -923,8 +1049,8 @@ class ContractBuilder:
         """Give every name read after a type test the path of its narrowing.
 
         Args:
-            qual: Qualified name.
-            function: Function definition.
+            qual (str): Qualified name.
+            function (Function): Function definition.
 
         """
         scope: _Scope = self._scopes[id(function)]
@@ -939,20 +1065,20 @@ class ContractBuilder:
         self,
         *,
         stmts: list[stmt],
-        env: dict[str, str],
+        env: DictStr,
         scope: _Scope,
         qual: str,
-    ) -> dict[str, str]:
+    ) -> DictStr:
         """Walk statements in order, threading the narrowed environment.
 
         Args:
-            stmts: Statements of one block.
-            env: Current path of each name.
-            scope: Function scope.
-            qual: Qualified name of the function.
+            stmts (list[stmt]): Statements of one block.
+            env (DictStr): Current path of each name.
+            scope (_Scope): Function scope.
+            qual (str): Qualified name of the function.
 
         Returns:
-            The environment after the block.
+            DictStr: The environment after the block.
 
         """
         for item in stmts:
@@ -963,24 +1089,26 @@ class ContractBuilder:
         self,
         *,
         item: stmt,
-        env: dict[str, str],
+        env: DictStr,
         scope: _Scope,
         qual: str,
-    ) -> dict[str, str]:
+    ) -> DictStr:
         """Register the names of one statement and walk its blocks.
 
         Args:
-            item: The statement.
-            env: Current path of each name.
-            scope: Function scope.
-            qual: Qualified name of the function.
+            item (stmt): The statement.
+            env (DictStr): Current path of each name.
+            scope (_Scope): Function scope.
+            qual (str): Qualified name of the function.
 
         Returns:
-            The environment after the statement.
+            DictStr: The environment after the statement.
 
         """
         if isinstance(item, If):
             return self._branch(item=item, env=env, scope=scope, qual=qual)
+        if isinstance(item, Match):
+            return self._match(item=item, env=env, scope=scope, qual=qual)
         if isinstance(item, Constants.scopes):
             return env
         for _field, raw in iter_fields(node=item):
@@ -1002,10 +1130,16 @@ class ContractBuilder:
                         self._register(node=part.type, env=env, scope=scope)
                         self._statements(
                             stmts=part.body,
-                            env=env,
+                            env=self._handler_env(
+                                part=part,
+                                env=env,
+                                qual=qual,
+                            ),
                             scope=scope,
                             qual=qual,
                         )
+                        if part.name is not None:
+                            env.pop(part.name, None)
                     else:
                         self._register(node=part, env=env, scope=scope)
             else:
@@ -1020,28 +1154,29 @@ class ContractBuilder:
         self,
         *,
         item: If,
-        env: dict[str, str],
+        env: DictStr,
         scope: _Scope,
         qual: str,
-    ) -> dict[str, str]:
+    ) -> DictStr:
         """Narrow a name on each arm of an ``if`` and after it.
 
         Args:
-            item: The ``if`` statement.
-            env: Current path of each name.
-            scope: Function scope.
-            qual: Qualified name of the function.
+            item (If): The ``if`` statement.
+            env (DictStr): Current path of each name.
+            scope (_Scope): Function scope.
+            qual (str): Qualified name of the function.
 
         Returns:
-            The environment after the ``if``: an arm's narrowing survives it
-            when the other arm cannot fall through.
+            DictStr: The environment after the ``if`` : an arm's narrowing
+                survives it when the other arm cannot fall through.
 
         """
         self._register(node=item.test, env=env, scope=scope)
-        arms: Arms | None = read_test(test=item.test, counts=self._counts)
-        true_env: dict[str, str] = dict(env)
-        false_env: dict[str, str] = dict(env)
-        if arms is not None and arms.name in env:
+        true_env: DictStr = dict(env)
+        false_env: DictStr = dict(env)
+        for arms in read_test(test=item.test, counts=self._counts):
+            if arms.name not in env:
+                continue
             if arms.when_true is not None:
                 true_env[arms.name] = self._narrowed(
                     base=env[arms.name],
@@ -1056,13 +1191,13 @@ class ContractBuilder:
                     tag="f",
                     constraint=arms.when_false,
                 )
-        after_true: dict[str, str] = self._statements(
+        after_true: DictStr = self._statements(
             stmts=item.body,
             env=true_env,
             scope=scope,
             qual=qual,
         )
-        after_false: dict[str, str] = self._statements(
+        after_false: DictStr = self._statements(
             stmts=item.orelse,
             env=false_env,
             scope=scope,
@@ -1087,13 +1222,14 @@ class ContractBuilder:
         """Create the node for a name inside a narrowing arm.
 
         Args:
-            base: Path the name had before the test.
-            line: Line of the test, to keep paths unique.
-            tag: ``"t"`` or ``"f"`` for the arm.
-            constraint: What the arm establishes (``!None``, a class, ...).
+            base (str): Path the name had before the test.
+            line (int): Line of the test, to keep paths unique.
+            tag (str): ``"t"`` or ``"f"`` for the arm.
+            constraint (str): What the arm establishes (``!None``, a class,
+                ...).
 
         Returns:
-            The new node's path.
+            str: The new node's path.
 
         """
         path: str = f"{base}#{line}{tag}"
@@ -1118,19 +1254,124 @@ class ContractBuilder:
         )
         return path
 
+    def _match(
+        self,
+        *,
+        item: Match,
+        env: DictStr,
+        scope: _Scope,
+        qual: str,
+    ) -> DictStr:
+        """Narrow the subject inside each ``case`` body of a ``match``.
+
+        Every case sees the subject narrowed by its own pattern plus the
+        complement of the earlier unguarded cases; guarded cases narrow
+        positively but never subtract for the cases that follow.
+
+        Args:
+            item (Match): The ``match`` statement.
+            env (DictStr): Current path of each name.
+            scope (_Scope): Function scope.
+            qual (str): Qualified name of the function.
+
+        Returns:
+            DictStr: The environment after the ``match`` :
+                case narrowing does not outlive its body.
+
+        """
+        self._register(node=item.subject, env=env, scope=scope)
+        subject_name: StrOrNone = (
+            item.subject.id if isinstance(item.subject, Name) else None
+        )
+        subject: StrOrNone = (
+            None if subject_name is None else env.get(subject_name)
+        )
+        excluded: list[str] = []
+        for index, case in enumerate(iterable=item.cases):
+            case_env: DictStr = dict(env)
+            arms: CaseArms = read_case(
+                node=case.pattern,
+                counts=self._counts,
+                classes=self._top_classes,
+            )
+            atoms: list[str] = []
+            if arms.positive is not None:
+                atoms.append(arms.positive)
+            atoms.extend(f"{Narrowing.negation}{text}" for text in excluded)
+            if subject_name is not None and subject is not None and atoms:
+                case_env[subject_name] = self._narrowed(
+                    base=subject,
+                    line=case.pattern.lineno,
+                    tag=f"m{index}",
+                    constraint=" & ".join(atoms),
+                )
+            self._register(node=case.guard, env=case_env, scope=scope)
+            self._statements(
+                stmts=case.body,
+                env=case_env,
+                scope=scope,
+                qual=qual,
+            )
+            if case.guard is None:
+                excluded.extend(arms.excluded)
+        return env
+
+    def _handler_env(
+        self,
+        *,
+        part: ExceptHandler,
+        env: DictStr,
+        qual: str,
+    ) -> DictStr:
+        """Bind ``except E as e`` to the handler's exception type.
+
+        The binding lives only inside the handler body: the caller deletes
+        the name when the handler ends, as Python does, so the returned
+        environment is a copy and later reads stay opaque.
+
+        Args:
+            part (ExceptHandler): The exception handler.
+            env (DictStr): Current path of each name.
+            qual (str): Qualified name of the function.
+
+        Returns:
+            DictStr: The environment for the handler body.
+
+        """
+        if part.name is None:
+            return env
+        found: StrOrNone = exception_types(
+            node=part.type,
+            counts=self._counts,
+            classes=self._top_classes,
+        )
+        if found is None:
+            return env
+        path: str = f"{qual}.{part.name}#{part.lineno}e"
+        self._graph.add_node(path=path)
+        self._seed_type(
+            target=path,
+            type_text=found,
+            origin=Origin.syntax,
+            why=f"{path} is {found} from the except clause",
+        )
+        bound: DictStr = dict(env)
+        bound[part.name] = path
+        return bound
+
     def _register(
         self,
         *,
         node: AST | None,
-        env: dict[str, str],
+        env: DictStr,
         scope: _Scope,
     ) -> None:
         """Record the narrowed path of every name an expression reads.
 
         Args:
-            node: AST node to walk, or ``None``.
-            env: Current path of each name.
-            scope: Function scope.
+            node (AST | None): AST node to walk, or ``None``.
+            env (DictStr): Current path of each name.
+            scope (_Scope): Function scope.
 
         """
         pending: list[AST] = [node] if isinstance(node, AST) else []
@@ -1156,7 +1397,8 @@ class ContractBuilder:
         class-level binding clashes, and the receiver is never rebound.
 
         Args:
-            unique: Functions with unambiguous qualified names.
+            unique (list[tuple[str, Function, bool]]): Functions with
+                unambiguous qualified names.
 
         """
         index: MethodIndex = self._methods
@@ -1168,7 +1410,7 @@ class ContractBuilder:
         )
         owned: dict[str, list[tuple[Function, str]]] = {}
         for qual, function, in_class in unique:
-            receiver: str | None = receiver_of(function=function)
+            receiver: StrOrNone = receiver_of(function=function)
             owner: str = qual.rpartition(".")[0]
             if in_class and receiver is not None and owner in classes:
                 owned.setdefault(owner, []).append((function, receiver))
@@ -1187,7 +1429,7 @@ class ContractBuilder:
         self,
         *,
         methods: list[tuple[Function, str]],
-        members: dict[str, str],
+        members: DictStr,
     ) -> None:
         """Let each method read the class's attributes through its receiver.
 
@@ -1195,8 +1437,9 @@ class ContractBuilder:
         object's attributes afterwards, so it gets none.
 
         Args:
-            methods: The class's methods with their receiver names.
-            members: Node path by attribute name.
+            methods (list[tuple[Function, str]]): The class's methods with
+                their receiver names.
+            members (DictStr): Node path by attribute name.
 
         """
         for function, receiver in methods:
@@ -1221,15 +1464,16 @@ class ContractBuilder:
         """Create the attribute nodes of one class and link their writes.
 
         Args:
-            owner: Qualified name of the class.
-            _cls: The class definition.
-            methods: Its methods with their receiver parameter names.
-            index: Method facts of the module.
-            stores: Attribute writes in the module by name.
+            owner (str): Qualified name of the class.
+            _cls (ClassDef): The class definition.
+            methods (list[tuple[Function, str]]): Its methods with their
+                receiver parameter names.
+            index (MethodIndex): Method facts of the module.
+            stores (Counter[str]): Attribute writes in the module by name.
 
         """
         writes: dict[str, list[tuple[Function, Assign]]] = {}
-        bad: set[str] = set()
+        bad: SetStr = set()
         for function, receiver in methods:
             found, touched = _own_writes(method=function, receiver=receiver)
             bad |= touched
@@ -1237,8 +1481,8 @@ class ContractBuilder:
                 writes.setdefault(name, []).extend(
                     (function, item) for item in assigns
                 )
-        inherited: set[str] = index.inherited_names(_cls=_cls)
-        members: dict[str, str] = {}
+        inherited: SetStr = index.inherited_names(_cls=_cls)
+        members: DictStr = {}
         for name, items in writes.items():
             if (
                 name in bad
@@ -1278,8 +1522,8 @@ class ContractBuilder:
         """Add the contracts of a function body.
 
         Args:
-            qual: Qualified name.
-            function: Function definition.
+            qual (str): Qualified name.
+            function (Function): Function definition.
 
         """
         scope: _Scope = self._scopes[id(function)]
@@ -1311,8 +1555,8 @@ class ContractBuilder:
                 )
             elif isinstance(node, AnnAssign):
                 self._annotated(node=node, qual=qual, scope=scope)
-            elif isinstance(node, For):
-                self._loop(node=node, qual=qual, scope=scope)
+            elif isinstance(node, (For, NamedExpr)):
+                self._rebind(node=node, qual=qual, scope=scope)
         if can_fall_off(body=function.body):
             self._seed_type(
                 target=ret,
@@ -1321,22 +1565,25 @@ class ContractBuilder:
                 why="falls off the end",
             )
 
-    def _library_return(self, *, call: Call) -> str | None:
+    def _library_return(self, *, call: Call, scope: _Scope) -> StrOrNone:
         """Type a call into the standard library from its stub.
 
-        Only a function with one definition and a plain return type counts,
-        so the result does not depend on the arguments.
+        A single plain signature counts directly; an ``@overload`` group
+        is picked by the proven types of the arguments. Methods of stub
+        classes resolve through the receiver's class name.
 
         Args:
-            call: The call expression.
+            call (Call): The call expression.
+            scope (_Scope): Scope the call is evaluated in.
 
         Returns:
-            The return type, or ``None`` when it is not certain.
+            StrOrNone: The return type, or ``None`` when it is not certain.
 
         """
         if self._library is None:
             return None
-        key: str | None = callee_name(
+        allowed: frozenset[str] = frozenset(ImportConstants.known_imports)
+        key: StrOrNone = callee_name(
             module=self._module,
             counts=self._counts,
             call=call,
@@ -1344,17 +1591,287 @@ class ContractBuilder:
         found: Resolved | None = (
             None if key is None else self._library.resolve(qualified=key)
         )
-        return None if found is None else function_return(resolved=found)
+        if found is None and isinstance(call.func, Attribute):
+            found = self._library_method(call=call)
+        if found is None and isinstance(call.func, Attribute):
+            return self._library_typed_method(call=call, scope=scope)
+        if found is None:
+            return None
+        if found.name.overloaded:
+            return select_overload(
+                resolved=found,
+                positional=[
+                    expression_type(
+                        node=arg,
+                        counts=self._counts,
+                        env=scope.env,
+                    )
+                    for arg in call.args
+                ],
+                keywords={
+                    keyword.arg: expression_type(
+                        node=keyword.value,
+                        counts=self._counts,
+                        env=scope.env,
+                    )
+                    for keyword in call.keywords
+                    if keyword.arg is not None
+                },
+                allowed=allowed,
+                resolver=self._library,
+            )
+        return function_return(resolved=found, allowed=allowed)
+
+    def _library_method(self, *, call: Call) -> Resolved | None:
+        """Resolve ``receiver.method(...)`` on a known library class.
+
+        The receiver must name a class syntactically: a constructor call
+        (``Path(p).read_text()``) or an imported class object
+        (``datetime.now()``). Anything else stays opaque.
+
+        Args:
+            call (Call): The call expression; ``call.func`` is an ``Attribute``
+                .
+
+        Returns:
+            Resolved | None: The resolved method, or ``None``.
+
+        """
+        if self._library is None or not isinstance(call.func, Attribute):
+            return None
+        owner: StrOrNone = self._receiver_class(node=call.func.value)
+        if owner is None:
+            return None
+        return self._library.resolve_method(
+            class_name=owner,
+            method=call.func.attr,
+        )
+
+    def _receiver_kind(
+        self,
+        *,
+        value: expr,
+        scope: _Scope,
+    ) -> tuple[StrOrNone, StrOrNone]:
+        """Resolve a method receiver's proven type and import origin.
+
+        Args:
+            value (expr): The receiver expression.
+            scope (_Scope): Scope the call is evaluated in.
+
+        Returns:
+            tuple[StrOrNone, StrOrNone]: ``(type, origin)``, ``None`` when the
+                type is unproven.
+
+        """
+        if isinstance(value, Name):
+            kind: StrOrNone = self._seeded_type(node=value, scope=scope)
+            if kind is None:
+                kind = expression_type(
+                    node=value,
+                    counts=self._counts,
+                    env=scope.env,
+                )
+                constraint: StrOrNone = self._narrowing_of(node=value)
+                if constraint is not None and kind is not None:
+                    kind = TypeAlgebra().narrow(
+                        current=kind,
+                        constraint=constraint,
+                    )
+            return kind, None
+        if isinstance(value, Attribute):
+            library: Resolver | None = self._library
+            if library is None:
+                return None, None
+            variable: Resolved | None = library.resolve(
+                qualified=unparse(ast_obj=value),
+            )
+            if variable is not None and variable.name.kind == "variable":
+                return variable_type(resolved=variable), variable.module.name
+        return None, None
+
+    def _library_typed_method(
+        self,
+        *,
+        call: Call,
+        scope: _Scope,
+    ) -> StrOrNone:
+        """Type a method call on a name with a proven library type.
+
+        The receiver's proven annotation names the stub class and binds
+        its type variables, so ``m: Match[str]`` makes ``m.group()``
+        state ``str``. Unions and unknown receivers are refused.
+
+        Args:
+            call (Call): The call expression.
+            scope (_Scope): Scope the call is evaluated in.
+
+        Returns:
+            StrOrNone: The return type, or ``None`` when it is not certain.
+
+        """
+        if self._library is None:
+            return None
+        func: expr = call.func
+        if not isinstance(func, Attribute):
+            return None
+        kind: StrOrNone
+        origin: StrOrNone
+        kind, origin = self._receiver_kind(value=func.value, scope=scope)
+        if kind is None:
+            return None
+        parts: tuple[str, list[expr]] | None = receiver_parts(source=kind)
+        if parts is None:
+            return None
+        head: str = parts[0]
+        if "." not in head:
+            if origin is not None:
+                head = f"{origin}.{head}"
+            else:
+                prefix: StrOrNone = ImportConstants.known_imports.get(head)
+                head = (
+                    f"{prefix}.{head}"
+                    if prefix is not None
+                    else f"builtins.{head}"
+                )
+        resolved: Resolved | None = self._library.resolve_method(
+            class_name=head,
+            method=func.attr,
+        )
+        if resolved is None:
+            return None
+        return method_return(
+            resolved=resolved,
+            receiver=parts[1],
+            call=CallArguments(
+                positional=tuple(
+                    expression_type(
+                        node=arg,
+                        counts=self._counts,
+                        env=scope.env,
+                    )
+                    for arg in call.args
+                ),
+                keywords={
+                    keyword.arg: expression_type(
+                        node=keyword.value,
+                        counts=self._counts,
+                        env=scope.env,
+                    )
+                    for keyword in call.keywords
+                    if keyword.arg is not None
+                },
+            ),
+            allowed=frozenset(ImportConstants.known_imports),
+            resolver=self._library,
+        )
+
+    def _narrowing_of(self, *, node: expr) -> StrOrNone:
+        """Constraint text narrowing the node a name read resolved to.
+
+        Args:
+            node (expr): The name expression read.
+
+        Returns:
+            StrOrNone: The ``" & "`` -joined constraint of its narrowed
+                node, or ``None`` when the read saw no narrowing.
+
+        """
+        path: StrOrNone = self._name_path.get(id(node))
+        if path is None or "#" not in path:
+            return None
+        return self._seed_text(path=path)
+
+    def _seeded_type(self, *, node: expr, scope: _Scope) -> StrOrNone:
+        """Type a name read from the seeds of the node it resolves to.
+
+        A narrowed read applies its constraint to the base node's seed,
+        so ``m`` inside ``if m:`` reads ``Match[str]`` rather than
+        ``Match[str] | None``. Several distinct seeds union, which the
+        receiver parser then refuses.
+
+        Args:
+            node (expr): The name expression read.
+            scope (_Scope): Function scope, for the binding's node path.
+
+        Returns:
+            StrOrNone: The seeded type text, or ``None``.
+
+        """
+        if not isinstance(node, Name):
+            return None
+        path: StrOrNone = self._name_path.get(id(node))
+        if path is not None and "#" in path:
+            base: str = path.split(sep="#", maxsplit=1)[0]
+            constraint: StrOrNone = self._seed_text(path=path)
+            seeded: StrOrNone = self._seed_text(path=base)
+            if constraint is None or seeded is None:
+                return None
+            return TypeAlgebra().narrow(current=seeded, constraint=constraint)
+        path = path or scope.names.get(node.id)
+        return None if path is None else self._seed_text(path=path)
+
+    def _seed_text(self, *, path: str) -> StrOrNone:
+        """Type text a node path is seeded with.
+
+        Args:
+            path (str): Contract node path.
+
+        Returns:
+            StrOrNone:
+                The single seed's text, the union of several, or ``None``.
+
+        """
+        texts: SetStr = {
+            candidate.type_text
+            for seed_path, candidate, _polarity in self._graph.seeds()
+            if seed_path == path
+        }
+        if not texts:
+            return None
+        if len(texts) == 1:
+            return next(iter(texts))
+        return " | ".join(sorted(texts))
+
+    def _receiver_class(self, *, node: expr) -> StrOrNone:
+        """Name the library class an expression constructs or refers to.
+
+        Args:
+            node (expr): Receiver expression of a method call.
+
+        Returns:
+            StrOrNone:
+                A dotted class name the resolver understands, or ``None``.
+
+        """
+        target: expr = node
+        if isinstance(target, Call):
+            target = target.func
+        aliases: DictStr = import_aliases(module=self._module)
+        parts: list[str] = []
+        while isinstance(target, Attribute):
+            parts.append(target.attr)
+            target = target.value
+        if not isinstance(target, Name):
+            return None
+        root: str = target.id
+        prefix: StrOrNone = aliases.get(root)
+        if prefix is not None:
+            limit: int = 1 if root in aliases else 0
+            if self._counts.get(root, 0) > limit:
+                return None
+            return ".".join((prefix, *reversed(parts)))
+        return None
 
     def _proved(self, *, value: expr, scope: _Scope) -> bool:
         """Tell whether an expression's type is known without any derivation.
 
         Args:
-            value: The expression.
-            scope: Scope the expression is evaluated in.
+            value (expr): The expression.
+            scope (_Scope): Scope the expression is evaluated in.
 
         Returns:
-            ``True`` for a node or an expression the syntax typer proves.
+            bool: ``True`` for a node or an expression the syntax typer proves.
 
         """
         return (
@@ -1378,10 +1895,12 @@ class ContractBuilder:
         """Account for one ``return`` statement.
 
         Args:
-            value: The returned expression, or ``None`` for a bare return.
-            ret: The function's return node path.
-            scope: Function scope.
-            calibrated: Whether every returned value is boolean by syntax.
+            value (expr | None): The returned expression, or ``None`` for a
+                bare return.
+            ret (str): The function's return node path.
+            scope (_Scope): Function scope.
+            calibrated (bool): Whether every returned value is boolean by
+                syntax.
 
         """
         if value is None:
@@ -1411,11 +1930,11 @@ class ContractBuilder:
         """Give a protocol dunder its declared result, or leave it opaque.
 
         Args:
-            function: A function named like a protocol method.
-            ret: Its return node path.
+            function (Function): A function named like a protocol method.
+            ret (str): Its return node path.
 
         """
-        declared: str | None = protocol_result_for(
+        declared: StrOrNone = protocol_result_for(
             function=function,
             counts=self._counts,
         )
@@ -1433,16 +1952,28 @@ class ContractBuilder:
         """Take an annotated local at its word.
 
         Args:
-            node: The annotated assignment.
-            qual: Qualified name of the function.
-            scope: Function scope.
+            node (AnnAssign): The annotated assignment.
+            qual (str): Qualified name of the function.
+            scope (_Scope): Function scope.
 
         """
         if not isinstance(node.target, Name):
             return
-        path: str | None = scope.names.get(node.target.id)
-        if path is not None and path.startswith(f"{qual}."):
-            self._declared(path=path, source=unparse(ast_obj=node.annotation))
+        path: StrOrNone = scope.names.get(node.target.id)
+        if path is None or not path.startswith(f"{qual}."):
+            return
+        source: StrOrNone = _declared_source(annotation=node.annotation)
+        if source is None:
+            if node.value is not None:
+                self._flow(
+                    value=node.value,
+                    target=path,
+                    scope=scope,
+                    origin=Origin.syntax,
+                    relation=Relation.assigns,
+                )
+            return
+        self._declared(path=path, source=source)
 
     def _assignment(
         self,
@@ -1455,20 +1986,20 @@ class ContractBuilder:
         """Link ``name = value`` for a node-backed local.
 
         Args:
-            node: The assignment.
-            function: The enclosing function.
-            qual: Qualified name of the function.
-            scope: Function scope.
+            node (Assign): The assignment.
+            function (Function): The enclosing function.
+            qual (str): Qualified name of the function.
+            scope (_Scope): Function scope.
 
         """
         if len(node.targets) != 1 or not isinstance(node.targets[0], Name):
             return
         name: str = node.targets[0].id
-        path: str | None = scope.names.get(name)
+        path: StrOrNone = scope.names.get(name)
         if path is None or not path.startswith(f"{qual}."):
             return
         self._variables[path] = node
-        literal: str | None = literal_kind(value=node.value)
+        literal: StrOrNone = literal_kind(value=node.value)
         if literal is not None:
             self._literal_container(
                 node=node,
@@ -1478,7 +2009,7 @@ class ContractBuilder:
                 scope=scope,
             )
             return
-        kind: str | None = empty_kind(value=node.value, counts=self._counts)
+        kind: StrOrNone = empty_kind(value=node.value, counts=self._counts)
         if kind is not None:
             self._container(
                 function=function,
@@ -1513,11 +2044,11 @@ class ContractBuilder:
         must stay read-only.
 
         Args:
-            node: The assignment.
-            function: The enclosing function.
-            path: The variable's node path.
-            kind: ``"list"``, ``"set"`` or ``"dict"``.
-            scope: Function scope.
+            node (Assign): The assignment.
+            function (Function): The enclosing function.
+            path (str): The variable's node path.
+            kind (str): ``"list"``, ``"set"`` or ``"dict"``.
+            scope (_Scope): Function scope.
 
         """
         name: str = (
@@ -1529,7 +2060,7 @@ class ContractBuilder:
             kind=kind,
             counts=self._counts,
         )
-        proven: str | None = expression_type(
+        proven: StrOrNone = expression_type(
             node=node.value,
             counts=self._counts,
             env=scope.env,
@@ -1609,11 +2140,11 @@ class ContractBuilder:
         """Type a local container from the elements put into it.
 
         Args:
-            function: The enclosing function.
-            name: The local's name.
-            path: Its node path.
-            kind: ``"list"`` or ``"set"``.
-            scope: Function scope.
+            function (Function): The enclosing function.
+            name (str): The local's name.
+            path (str): Its node path.
+            kind (str): ``"list"`` or ``"set"``.
+            scope (_Scope): Function scope.
 
         """
         elements: tuple[expr, ...] | None = fillings(
@@ -1646,14 +2177,14 @@ class ContractBuilder:
         """Link ``for name in iterable`` to the element type.
 
         Args:
-            node: The loop.
-            qual: Qualified name of the function.
-            scope: Function scope.
+            node (For): The loop.
+            qual (str): Qualified name of the function.
+            scope (_Scope): Function scope.
 
         """
         if not isinstance(node.target, Name):
             return
-        path: str | None = scope.names.get(node.target.id)
+        path: StrOrNone = scope.names.get(node.target.id)
         if path is None or not path.startswith(f"{qual}."):
             return
         source: expr = node.iter
@@ -1665,7 +2196,7 @@ class ContractBuilder:
                 why=f"{path} iterates {source.id}",
             )
             return
-        proven: str | None = expression_type(
+        proven: StrOrNone = expression_type(
             node=source,
             counts=self._counts,
             env=scope.env,
@@ -1688,11 +2219,52 @@ class ContractBuilder:
         else:
             self._graph.seed(path=path, candidate=moved)
 
+    def _rebind(
+        self,
+        *,
+        node: For | NamedExpr,
+        qual: str,
+        scope: _Scope,
+    ) -> None:
+        """Build the contract of a name-binding flow node.
+
+        Args:
+            node (For | NamedExpr): A ``for`` target or a walrus assignment.
+            qual (str): Qualified name of the enclosing function.
+            scope (_Scope): Name resolution of the enclosing function.
+
+        """
+        if isinstance(node, For):
+            self._loop(node=node, qual=qual, scope=scope)
+        else:
+            self._walrus(node=node, qual=qual, scope=scope)
+
+    def _walrus(self, *, node: NamedExpr, qual: str, scope: _Scope) -> None:
+        """Link ``(name := value)`` to the local it binds.
+
+        Args:
+            node (NamedExpr): The walrus expression.
+            qual (str): Qualified name of the function.
+            scope (_Scope): Function scope.
+
+        """
+        path: StrOrNone = scope.names.get(node.target.id)
+        if path is None or not path.startswith(f"{qual}."):
+            return
+        self._flow(
+            value=node.value,
+            target=path,
+            scope=scope,
+            origin=Origin.syntax,
+            relation=Relation.assigns,
+        )
+
     def _calls(self, *, unique: list[tuple[str, Function, bool]]) -> None:
         """Add argument contracts and evidence for every call.
 
         Args:
-            unique: Functions with unambiguous qualified names.
+            unique (list[tuple[str, Function, bool]]): Functions with
+                unambiguous qualified names.
 
         """
         scopes: dict[int, _Scope] = {
@@ -1711,7 +2283,7 @@ class ContractBuilder:
                 continue
             scope: _Scope = scopes.get(id(call), outer)
             bound: BoundCall | None = self._bindings.get(call=call)
-            callee: str | None = (
+            callee: StrOrNone = (
                 None
                 if bound is None or bound.signature.declaration is None
                 else self._ids.get(id(bound.signature.declaration))
@@ -1734,9 +2306,9 @@ class ContractBuilder:
         """Turn the arguments of a bound call into evidence.
 
         Args:
-            bound: The trusted binding.
-            callee: Qualified name of the called function.
-            scope: Scope of the call.
+            bound (BoundCall): The trusted binding.
+            callee (str): Qualified name of the called function.
+            scope (_Scope): Scope of the call.
 
         """
         for argument in bound.arguments:
@@ -1776,22 +2348,27 @@ class ContractBuilder:
         """Recognise an expression that is another node's value.
 
         Args:
-            value: Expression.
-            scope: Scope the expression is evaluated in.
+            value (expr): Expression.
+            scope (_Scope): Scope the expression is evaluated in.
 
         Returns:
-            ``("node", path, relation)`` for a variable, a parameter, an
-            attribute of the instance, a call to a function of the module
-            (``("seed", class, assigns)`` for a constructor) or an item of
-            one of those; ``None`` for anything else.
+            tuple[str, str, Relation] | None:
+                ``("node", path, relation)`` for a variable, a parameter,
+                an attribute of the instance, a call to a function of the
+                module (``("seed", class, assigns)`` for a constructor)
+                or an item of one of those; ``None`` for anything else.
 
         """
-        if isinstance(value, Name) and value.id in scope.names:
-            return (
-                "node",
-                self._name_path.get(id(value), scope.names[value.id]),
-                Relation.assigns,
-            )
+        if isinstance(value, Name):
+            narrowed: StrOrNone = self._name_path.get(id(value))
+            if narrowed is not None:
+                return "node", narrowed, Relation.assigns
+            if value.id in scope.names:
+                return (
+                    "node",
+                    scope.names[value.id],
+                    Relation.assigns,
+                )
         if (
             isinstance(value, Attribute)
             and isinstance(value.ctx, Load)
@@ -1828,14 +2405,15 @@ class ContractBuilder:
         """Decide where a value's type comes from.
 
         Args:
-            value: Expression.
-            scope: Scope the expression is evaluated in.
-            shapes: Whether a tuple-literal shape may be the type; call-site
-                arguments say too little about it.
+            value (expr): Expression.
+            scope (_Scope): Scope the expression is evaluated in.
+            shapes (bool): Whether a tuple-literal shape may be the type;
+                call-site arguments say too little about it.
 
         Returns:
-            ``("node", path, relation)`` or ``("seed", type, relation)``, or
-            ``None`` when nothing sound can be said.
+            tuple[str, str, Relation] | None:
+                ``("node", path, relation)`` or ``("seed", type, relation)``
+                , or ``None`` when nothing sound can be said.
 
         """
         found: tuple[str, str, Relation] | None = self._node_source(
@@ -1844,13 +2422,13 @@ class ContractBuilder:
         )
         if found is not None:
             return found
-        proven: str | None = expression_type(
+        proven: StrOrNone = expression_type(
             node=value,
             counts=self._counts,
             env=scope.env,
         )
         if proven is None and isinstance(value, Call):
-            proven = self._library_return(call=value)
+            proven = self._library_return(call=value, scope=scope)
         if proven is None:
             return self._derived(value=value, scope=scope, shapes=shapes)
         if proven.startswith(HintConstants.shape_specific) and not shapes:
@@ -1865,11 +2443,13 @@ class ContractBuilder:
         """Decide what a call to a function of this module evaluates to.
 
         Args:
-            call: The call expression.
+            call (Call): The call expression.
 
         Returns:
-            The callee's return node, the class name for a constructor call,
-            or ``None`` for anything else (coroutines, unbound callees).
+            tuple[str, str, Relation] | None:
+                The callee's return node, the class name
+                for a constructor call, or ``None`` for
+                anything else (coroutines, unbound callees).
 
         """
         if (
@@ -1882,7 +2462,7 @@ class ContractBuilder:
         bound: BoundCall | None = self._bindings.get(call=call)
         if bound is None or bound.signature.declaration is None:
             return None
-        callee: str | None = self._ids.get(id(bound.signature.declaration))
+        callee: StrOrNone = self._ids.get(id(bound.signature.declaration))
         if callee is None or callee in self._coroutines:
             return None
         owner, _, method = callee.rpartition(".")
@@ -1892,17 +2472,18 @@ class ContractBuilder:
             return None
         return "node", f"{callee}->", Relation.call_result
 
-    def _operand(self, *, value: expr, scope: _Scope) -> str | None:
+    def _operand(self, *, value: expr, scope: _Scope) -> StrOrNone:
         """Name the node that holds the value of an operand expression.
 
         Args:
-            value: A sub-expression.
-            scope: Scope the expression is evaluated in.
+            value (expr): A sub-expression.
+            scope (_Scope): Scope the expression is evaluated in.
 
         Returns:
-            The node path for a variable, a parameter, an attribute of the
-            instance, a call to a function of the module or an item of one
-            of those; ``None`` when the expression is not a node.
+            StrOrNone:
+                The node path for a variable, a parameter, an attribute of
+                the instance, a call to a function of the module or an item
+                of one of those; ``None`` when the expression is not a node.
 
         """
         found: tuple[str, str, Relation] | None = self._node_source(
@@ -1926,15 +2507,16 @@ class ContractBuilder:
         )
         return hidden
 
-    def operand(self, *, value: expr, scope: _Scope) -> str | None:
+    def operand(self, *, value: expr, scope: _Scope) -> StrOrNone:
         """Name the node that holds the value of an operand expression.
 
         Args:
-            value: A sub-expression.
-            scope: Scope the expression is evaluated in.
+            value (expr): A sub-expression.
+            scope (_Scope): Scope the expression is evaluated in.
 
         Returns:
-            The node path, or ``None`` when the expression is not a node.
+            StrOrNone:
+                The node path, or ``None`` when the expression is not a node.
 
         """
         return self._operand(value=value, scope=scope)
@@ -1943,23 +2525,23 @@ class ContractBuilder:
         """Tell whether a name is a builtin the module does not rebind.
 
         Args:
-            name: A name used as a callee.
+            name (str): A name used as a callee.
 
         Returns:
-            ``True`` for an unshadowed builtin.
+            bool: ``True`` for an unshadowed builtin.
 
         """
-        return hasattr(builtins, name) and self._counts.get(name, 0) == 0
+        return (name in __dict__) and self._counts.get(name, 0) == 0
 
     def _hidden(self, *, value: expr, scope: _Scope) -> str:
         """Make the node that stands for an expression's value.
 
         Args:
-            value: The expression.
-            scope: Scope the expression is evaluated in.
+            value (expr): The expression.
+            scope (_Scope): Scope the expression is evaluated in.
 
         Returns:
-            Its path, unique by position.
+            str: Its path, unique by position.
 
         """
         path: str = (
@@ -1979,13 +2561,14 @@ class ContractBuilder:
         """Make a derived node for an expression over other nodes.
 
         Args:
-            value: The expression.
-            scope: Scope the expression is evaluated in.
-            shapes: Whether a container literal may be derived.
+            value (expr): The expression.
+            scope (_Scope): Scope the expression is evaluated in.
+            shapes (bool): Whether a container literal may be derived.
 
         Returns:
-            ``("node", path, assigns)`` for the new node, or ``None`` when
-            the expression has no operand node or reads something unknown.
+            tuple[str, str, Relation] | None:
+                ``("node", path, assigns)`` for the new node, or ``None`` when
+                the expression has no operand node or reads something unknown.
 
         """
         if not isinstance(value, Constants.derivable):
@@ -2020,13 +2603,30 @@ class ContractBuilder:
         """Connect a value to a node, or mark the node opaque.
 
         Args:
-            value: The expression flowing in.
-            target: Node path receiving it.
-            scope: Scope of the expression.
-            origin: Origin recorded for a syntax-proven seed.
-            relation: Relation to use when the value is another node.
+            value (expr): The expression flowing in.
+            target (str): Node path receiving it.
+            scope (_Scope): Scope of the expression.
+            origin (Origin): Origin recorded for a syntax-proven seed.
+            relation (Relation): Relation to use when the value is another
+                node.
 
         """
+        if isinstance(value, IfExp):
+            self._flow(
+                value=value.body,
+                target=target,
+                scope=scope,
+                origin=origin,
+                relation=relation,
+            )
+            self._flow(
+                value=value.orelse,
+                target=target,
+                scope=scope,
+                origin=origin,
+                relation=relation,
+            )
+            return
         found: tuple[str, str, Relation] | None = self._source(
             value=value,
             scope=scope,
@@ -2069,13 +2669,13 @@ class ContractBuilder:
         """Seed a node with a syntax-proven expression, or mark it opaque.
 
         Args:
-            value: The expression.
-            target: Node path.
-            scope: Scope of the expression.
-            origin: Origin to record.
+            value (expr): The expression.
+            target (str): Node path.
+            scope (_Scope): Scope of the expression.
+            origin (Origin): Origin to record.
 
         """
-        proven: str | None = expression_type(
+        proven: StrOrNone = expression_type(
             node=value,
             counts=self._counts,
             env=scope.env,
@@ -2101,10 +2701,10 @@ class ContractBuilder:
         """Seed a node with a type.
 
         Args:
-            target: Node path.
-            type_text: The type.
-            origin: What supports it.
-            why: Explanation recorded with the candidate.
+            target (str): Node path.
+            type_text (str): The type.
+            origin (Origin): What supports it.
+            why (str): Explanation recorded with the candidate.
 
         """
         self._graph.seed(
@@ -2129,10 +2729,10 @@ class ContractBuilder:
         """Add a union contract between two nodes.
 
         Args:
-            source: Source node path.
-            target: Target node path.
-            relation: What the contract states.
-            why: Explanation recorded with the contract.
+            source (str): Source node path.
+            target (str): Target node path.
+            relation (Relation): What the contract states.
+            why (str): Explanation recorded with the contract.
 
         """
         self._graph.add_contract(
@@ -2157,12 +2757,13 @@ def build_contracts(
     """Build the contract graph of a module.
 
     Args:
-        module: Parsed module.
-        escaped: Names read as values, whose callers are unknown.
-        library: Resolver over typeshed, or ``None``.
+        module (CommentedModule): Parsed module.
+        escaped (frozenset[str]): Names read as values, whose callers are
+            unknown.
+        library (Resolver | None): Resolver over typeshed, or ``None``.
 
     Returns:
-        The graph with its opaque nodes and node kinds.
+        Built: The graph with its opaque nodes and node kinds.
 
     """
     return ContractBuilder(

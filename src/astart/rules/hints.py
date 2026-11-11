@@ -75,6 +75,12 @@ from astart.rules.reasons import Rejection
 from astart.rules.resolve import CallBindings, binding_counts
 from astart.semantic import ArgumentOrigin
 
+type StrOrNone = str | None
+type FrozensetStr = frozenset[str]
+type DictInt = dict[str, int]
+type DictKeyStr = dict[Key, str]
+type DictStr = dict[str, str]
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
@@ -132,8 +138,8 @@ class Hint:
     """An accepted annotation and the evidence behind it.
 
     Attributes:
-        source: Annotation source text.
-        basis: Why it was accepted.
+        source (str): Annotation source text.
+        basis (HintBasis): Why it was accepted.
 
     """
 
@@ -146,28 +152,37 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        protocol_results: Result type each protocol dunder must declare.
-        variadic_origins: Origins of arguments bound to ``*args``/``**kwargs``.
-        calibrated_returns: Return candidates accepted on the engine's word
+        protocol_results (Final[dict[str, str]]): Result type each protocol
+            dunder must declare.
+        variadic_origins (Final[frozenset[ArgumentOrigin]]): Origins of
+            arguments bound to ``*args`` /``**kwargs``.
+        calibrated_returns (Final[frozenset[str]]): Return candidates accepted
+            on the engine's word
             alone: ``bool`` matched the original in 97 % of 232 cases and
             contradicted it in none (stdlib + 25 typed libraries).
-        predicate_calls: Builtins whose result is always a ``bool``.
-        propagation_passes: Most times accepted parameter hints are fed back
+        predicate_calls (Final[frozenset[str]]): Builtins whose result is
+            always a ``bool``.
+        propagation_passes (Final[int]): Most times accepted parameter hints
+            are fed back
             into call-site evidence before the index is final.
-        max_union_members: Most distinct types a call-site union may have to
-            be written.
-        shape_specific: Prefix of types that describe one literal's exact
-            shape (a tuple's length), which says nothing about other callers.
-        inference_errors: Failures of the inference layer that are contained:
+        max_union_members (Final[int]): Most distinct types a call-site union
+            may have to be written.
+        shape_specific (Final[str]): Prefix of types that describe one
+            literal's exact shape (a
+            tuple's length), which says nothing about other callers.
+        inference_errors (Final[tuple[type[Exception], ...]]): Failures of the
+            inference layer that are contained:
             the module simply gets no inferred candidates.
-        builtin_names: Grouped module constant.
-        banned_names: Grouped module constant.
-        scalar_types: Grouped module constant.
-        expression_nodes: Grouped module constant.
-        proposal_roles: Grouped module constant.
-        skipped_names: Grouped module constant.
-        declaration_decorators: Grouped module constant.
-        scope_nodes: Grouped module constant.
+        builtin_names (Final[frozenset[str]]): Grouped module constant.
+        banned_names (Final[frozenset[str]]): Grouped module constant.
+        scalar_types (Final[frozenset[str]]): Grouped module constant.
+        expression_nodes (Final[tuple[type[AST], ...]]): Grouped module
+            constant.
+        proposal_roles (Final[frozenset[str]]): Grouped module constant.
+        skipped_names (Final[frozenset[str]]): Grouped module constant.
+        declaration_decorators (Final[frozenset[str]]): Grouped module
+            constant.
+        scope_nodes (Final[tuple[type[AST], ...]]): Grouped module constant.
 
     """
 
@@ -260,10 +275,10 @@ def _key(*, node: AST) -> Key:
     computed on one parse can be looked up on another.
 
     Args:
-        node: Parameter or function node.
+        node (AST): Parameter or function node.
 
     Returns:
-        (kind, line, column).
+        Key: (kind, line, column).
 
     """
     return (
@@ -273,23 +288,24 @@ def _key(*, node: AST) -> Key:
     )
 
 
-def is_allowed_source(*, source: str, known_names: frozenset[str]) -> bool:
+def is_allowed_source(*, source: str, known_names: FrozensetStr) -> bool:
     """Decide whether an annotation may be written into a module.
 
     Args:
-        source: Annotation source text.
-        known_names: Names the module already imports or defines.
+        source (str): Annotation source text.
+        known_names (FrozensetStr): Names the module already imports or
+            defines.
 
     Returns:
-        Whether every name is a builtin type or known, and neither
-        ``object`` nor ``Any`` appears.
+        bool: Whether every name is a builtin type or known, and neither
+            ``object`` nor ``Any`` appears.
 
     """
     try:
         tree: Expression = parse(source=source, mode="eval")
     except SyntaxError:
         return False
-    allowed: frozenset[str] = Constants.builtin_names | known_names
+    allowed: FrozensetStr = Constants.builtin_names | known_names
     for node in walk(node=tree):
         if not isinstance(node, Constants.expression_nodes):
             return False
@@ -305,14 +321,15 @@ def is_allowed_source(*, source: str, known_names: frozenset[str]) -> bool:
     return True
 
 
-def _importable(*, module: Module) -> frozenset[str]:
+def _importable(*, module: Module) -> FrozensetStr:
     """List known names a new annotation may use because they can be imported.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Importable names the module does not already bind to something else.
+        FrozensetStr: Importable names the module does
+            not already bind to something else.
 
     """
     return frozenset(ImportConstants.known_imports) - bound_names(
@@ -320,14 +337,14 @@ def _importable(*, module: Module) -> frozenset[str]:
     )
 
 
-def _imported_names(*, module: Module) -> frozenset[str]:
+def _imported_names(*, module: Module) -> FrozensetStr:
     """Collect names bound by imports and by top-level definitions.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Names available to a new annotation.
+        FrozensetStr: Names available to a new annotation.
 
     """
     names: set[str] = set()
@@ -344,15 +361,16 @@ def _imported_names(*, module: Module) -> frozenset[str]:
 
 def _parameters(
     *,
-    function: FunctionDef | AsyncFunctionDef,
+    function: Function,
 ) -> list[tuple[arg, expr | None]]:
     """Pair each plain parameter with its default.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        Positional-only, positional and keyword-only parameters.
+        list[tuple[arg, expr | None]]: Positional-only, positional and
+            keyword-only parameters.
 
     """
     arguments: arguments = function.args
@@ -373,10 +391,10 @@ def own_nodes(*, function: Function) -> Iterator[AST]:
     """Walk a function body without entering nested scopes.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Yields:
-        Every node that belongs to the function itself.
+        AST: Every node that belongs to the function itself.
 
     """
     stack: list[AST] = [
@@ -398,11 +416,11 @@ def _is_stub_statement(*, statement: stmt) -> bool:
     """Report whether a statement carries no behaviour.
 
     Args:
-        statement: Statement from a function body.
+        statement (stmt): Statement from a function body.
 
     Returns:
-        Whether it is ``pass``, a docstring, ``...`` or a
-        ``NotImplementedError`` raise.
+        bool: Whether it is ``pass``, a docstring, ``...`` or a
+            ``NotImplementedError`` raise.
 
     """
     match statement:
@@ -421,14 +439,14 @@ def is_declaration(*, function: Function) -> bool:
     """Report whether a function only declares a signature.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        Whether it is an overload or abstract method, or has a stub body.
+        bool: Whether it is an overload or abstract method, or has a stub body.
 
     """
     for decorator in function.decorator_list:
-        name: str | None = (
+        name: StrOrNone = (
             decorator.id
             if isinstance(decorator, Name)
             else decorator.attr
@@ -444,10 +462,11 @@ def _value_returns(*, function: Function) -> list[expr]:
     """Collect the expressions of ``return <value>`` statements.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        Return expressions, ignoring bare and ``return None`` statements.
+        list[expr]: Return expressions, ignoring bare and ``return None``
+            statements.
 
     """
     return [
@@ -465,10 +484,10 @@ def _is_generator(*, function: Function) -> bool:
     """Report whether a function yields.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        Whether the body contains ``yield`` or ``yield from``.
+        bool: Whether the body contains ``yield`` or ``yield from``.
 
     """
     return any(
@@ -484,11 +503,11 @@ def returns_nothing(*, function: Function) -> bool:
     is wider than what their body returns (``bool | None``).
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        Whether it has no returned value, does not yield, and is not a
-        declaration (overload, abstract method or stub body).
+        bool: Whether it has no returned value, does not yield, and is not a
+            declaration (overload, abstract method or stub body).
 
     """
     return function.name not in Constants.protocol_results and (
@@ -500,11 +519,11 @@ def _body_returns_nothing(*, function: Function) -> bool:
     """Prove that a function body returns nothing.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        Whether it has no returned value, does not yield, never only raises,
-        and is not a declaration.
+        bool: Whether it has no returned value, does not yield,
+            never only raises, and is not a declaration.
 
     """
     return not (
@@ -515,15 +534,15 @@ def _body_returns_nothing(*, function: Function) -> bool:
     )
 
 
-def _mentions(*, node: AST, names: dict[str, str]) -> str | None:
+def _mentions(*, node: AST, names: DictStr) -> StrOrNone:
     """Find the first tainted name an expression mentions.
 
     Args:
-        node: Expression or statement part.
-        names: Tainted names mapped to their originating parameter.
+        node (AST): Expression or statement part.
+        names (DictStr): Tainted names mapped to their originating parameter.
 
     Returns:
-        The originating parameter, or ``None``.
+        StrOrNone: The originating parameter, or ``None``.
 
     """
     for inner in walk(node=node):
@@ -536,10 +555,10 @@ def _targets(*, node: AST) -> list[str]:
     """List the names bound by an assignment target.
 
     Args:
-        node: Target expression.
+        node (AST): Target expression.
 
     Returns:
-        The stored names.
+        list[str]: The stored names.
 
     """
     return [
@@ -549,15 +568,15 @@ def _targets(*, node: AST) -> list[str]:
     ]
 
 
-def _spread(*, node: AST, names: dict[str, str]) -> bool:
+def _spread(*, node: AST, names: DictStr) -> bool:
     """Spread taint through one statement or expression.
 
     Args:
-        node: Node from the function body.
-        names: Tainted names, extended in place.
+        node (AST): Node from the function body.
+        names (DictStr): Tainted names, extended in place.
 
     Returns:
-        Whether a new name became tainted.
+        bool: Whether a new name became tainted.
 
     """
     pairs: list[tuple[AST, AST]] = []
@@ -581,7 +600,7 @@ def _spread(*, node: AST, names: dict[str, str]) -> bool:
             return False
     changed: bool = False
     for target, source in pairs:
-        origin: str | None = _mentions(node=source, names=names)
+        origin: StrOrNone = _mentions(node=source, names=names)
         if origin is None:
             continue
         for name in _targets(node=target):
@@ -594,16 +613,16 @@ def _spread(*, node: AST, names: dict[str, str]) -> bool:
 def _taint_origins(
     *,
     function: Function,
-    accepted: frozenset[str],
-) -> dict[str, str]:
+    accepted: FrozensetStr,
+) -> DictStr:
     """Compute which names depend on an untyped parameter.
 
     Args:
-        function: Function definition.
-        accepted: Parameters that have an accepted hint.
+        function (Function): Function definition.
+        accepted (FrozensetStr): Parameters that have an accepted hint.
 
     Returns:
-        Tainted names mapped to the parameter that taints them.
+        DictStr: Tainted names mapped to the parameter that taints them.
 
     """
     arguments: arguments = function.args
@@ -613,7 +632,7 @@ def _taint_origins(
         *arguments.kwonlyargs,
         *[a for a in (arguments.vararg, arguments.kwarg) if a is not None],
     ]
-    names: dict[str, str] = {
+    names: DictStr = {
         parameter.arg: parameter.arg
         for parameter in parameters
         if parameter.annotation is None and parameter.arg not in accepted
@@ -629,19 +648,19 @@ def _taint_origins(
 def tainted_names(
     *,
     function: Function,
-    accepted: frozenset[str],
-) -> frozenset[str]:
+    accepted: FrozensetStr,
+) -> FrozensetStr:
     """List names whose type depends on an untyped parameter.
 
     Parameters without an annotation or an accepted hint are tainted, and
     taint flows through assignments, loops and walrus targets.
 
     Args:
-        function: Function definition.
-        accepted: Parameters that have an accepted hint.
+        function (Function): Function definition.
+        accepted (FrozensetStr): Parameters that have an accepted hint.
 
     Returns:
-        The tainted names.
+        FrozensetStr: The tainted names.
 
     """
     return frozenset(_taint_origins(function=function, accepted=accepted))
@@ -653,22 +672,25 @@ class _Judging:
     """What a parameter-judging pass needs besides the call sites.
 
     Attributes:
-        candidates: Proposed annotation sources by node identity.
-        known: Names a new annotation may use.
-        escaped: Names of functions used as values.
-        counts: Module binding counts.
-        constants: Types of the module's constants, for typing defaults.
-        project: Cross-module view of the project, or ``None``.
-        qualifieds: ``id`` of each definition to its project-qualified
-            name, for reading cross-module evidence and open-world status.
+        candidates (DictKeyStr): Proposed annotation sources by node identity.
+        known (FrozensetStr): Names a new annotation may use.
+        escaped (FrozensetStr): Names of functions used as values.
+        counts (DictInt): Module binding counts.
+        constants (DictStr): Types of the module's constants, for typing
+            defaults.
+        project (ProjectView | None): Cross-module view of the project, or
+            ``None``.
+        qualifieds (Mapping[int, str]): ``id`` of each definition to its
+            project-qualified name,
+            for reading cross-module evidence and open-world status.
 
     """
 
-    candidates: dict[Key, str]
-    known: frozenset[str]
-    escaped: frozenset[str]
-    counts: dict[str, int]
-    constants: dict[str, str]
+    candidates: DictKeyStr
+    known: FrozensetStr
+    escaped: FrozensetStr
+    counts: DictInt
+    constants: DictStr
     project: ProjectView | None = None
     qualifieds: Mapping[int, str] = field(default_factory=dict[int, str])
 
@@ -679,17 +701,17 @@ class _Judging:
         externally callable qualified name counts too.
 
         Args:
-            function: The definition being judged.
+            function (Function): The definition being judged.
 
         Returns:
-            Whether its caller set is incomplete.
+            bool: Whether its caller set is incomplete.
 
         """
         if function.name in self.escaped:
             return True
         if self.project is None:
             return False
-        qualified: str | None = self.qualifieds.get(id(function))
+        qualified: StrOrNone = self.qualifieds.get(id(function))
         return qualified is not None and self.project.open_world(
             qualified=qualified,
         )
@@ -701,10 +723,10 @@ class _Site:
     """What one direct call shows about one parameter.
 
     Attributes:
-        definite: Whether the argument type is trustworthy.
-        types: Rendered type spellings.
-        proven: Whether the argument expression's syntax alone proves the
-            type, independent of the analyzer.
+        definite (bool): Whether the argument type is trustworthy.
+        types (tuple[str, ...]): Rendered type spellings.
+        proven (bool): Whether the argument expression's syntax alone
+            proves the type, independent of the analyzer.
 
     """
 
@@ -719,28 +741,30 @@ class _Evidence:
     """What the module shows about a function's parameter types.
 
     Attributes:
-        sites: One entry per direct call: whether the argument type is
-            definite, and its rendered spellings.
-        escaped: Whether the function is also used as a value (aliased,
+        sites (list[_Site]): One entry per direct call: whether the argument
+            type is definite, and its rendered spellings.
+        escaped (bool): Whether the function is also used as a value (aliased,
             passed as a callback, stored), so its callers cannot be known.
-        default_type: Scalar type the syntax of a non-literal default proves
-            (``-1``, a constant's name), else ``None``.
+        default_type (StrOrNone): Scalar type the syntax of a non-literal
+            default
+            proves (``-1``, a constant's name), else ``None``.
 
     """
 
     sites: list[_Site]
     escaped: bool
-    default_type: str | None = None
+    default_type: StrOrNone = None
 
 
-def _escaped_names(*, module: Module) -> frozenset[str]:
+def _escaped_names(*, module: Module) -> FrozensetStr:
     """Collect names that are read anywhere other than as a direct callee.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Names used as values, which may reach callers the module cannot see.
+        FrozensetStr: Names used as values, which may
+            reach callers the module cannot see.
 
     """
     callees: set[int] = {
@@ -765,21 +789,21 @@ class HintIndex:
         self,
         *,
         hints: dict[Key, Hint],
-        rejections: dict[Key, str],
+        rejections: DictKeyStr,
     ) -> None:
         """Store computed results.
 
         Args:
-            hints: Accepted hints by node identity.
-            rejections: Rejection reasons by node identity.
+            hints (dict[Key, Hint]): Accepted hints by node identity.
+            rejections (DictKeyStr): Rejection reasons by node identity.
 
         """
         self._hints: dict[Key, Hint] = hints
-        self._rejections: dict[Key, str] = rejections
+        self._rejections: DictKeyStr = rejections
         self._extra: dict[Key, Hint] = {}
-        self.proposals: dict[Key, str] = {}
-        self._accepted: dict[int, dict[str, str]] = {}
-        self._attribute_types: dict[int, dict[str, str]] = {}
+        self.proposals: DictKeyStr = {}
+        self._accepted: dict[int, DictStr] = {}
+        self._attribute_types: dict[int, DictStr] = {}
 
     @classmethod
     def create(
@@ -792,18 +816,19 @@ class HintIndex:
         """Compute hints for every unannotated parameter of a module.
 
         Args:
-            module: Parsed module.
-            stubs_path: Stub directory, or ``None`` for an empty one.
-            project: Cross-module view of the project, or ``None`` for
-                single-module analysis.
+            module (CommentedModule): Parsed module.
+            stubs_path (Path | None): Stub directory, or ``None`` for an empty
+                one.
+            project (ProjectView | None): Cross-module view of the project, or
+                ``None`` for single-module analysis.
 
         Returns:
-            The index.
+            Self: The index.
 
         """
         if stubs_path is None:
             with TemporaryDirectory() as scratch:
-                candidates: dict[Key, str] = _candidates(
+                candidates: DictKeyStr = _candidates(
                     module=module,
                     stubs_path=Path(scratch),
                 )
@@ -828,10 +853,10 @@ class HintIndex:
         """Return the accepted hint for a node, if any.
 
         Args:
-            node: Parameter or function node.
+            node (AST): Parameter or function node.
 
         Returns:
-            The hint or ``None``.
+            Hint | None: The hint or ``None``.
 
         """
         key: Key = _key(node=node)
@@ -841,10 +866,10 @@ class HintIndex:
         """Return the hint this index itself accepted, ignoring supplements.
 
         Args:
-            node: Parameter or function node.
+            node (AST): Parameter or function node.
 
         Returns:
-            The hint or ``None``.
+            Hint | None: The hint or ``None``.
 
         """
         return self._hints.get(_key(node=node))
@@ -853,21 +878,22 @@ class HintIndex:
         """Add hints from another source where this index has none.
 
         Args:
-            hints: Hints by node identity; existing ones always win.
+            hints (Mapping[Key, Hint]): Hints by node identity; existing ones
+                always win.
 
         """
         self._extra = {
             key: hint for key, hint in hints.items() if key not in self._hints
         }
 
-    def rejection_for(self, *, node: AST) -> str | None:
+    def rejection_for(self, *, node: AST) -> StrOrNone:
         """Explain why a candidate was refused.
 
         Args:
-            node: Parameter or function node.
+            node (AST): Parameter or function node.
 
         Returns:
-            The reason, or ``None`` when accepted or never proposed.
+            StrOrNone: The reason, or ``None`` when accepted or never proposed.
 
         """
         return self._rejections.get(_key(node=node))
@@ -876,18 +902,19 @@ class HintIndex:
         self,
         *,
         module: CommentedModule,
-        candidates: dict[Key, str],
-        counts: dict[str, int],
+        candidates: DictKeyStr,
+        counts: DictInt,
     ) -> None:
         """Accept or refuse a return hint for every unannotated function.
 
         Args:
-            module: Parsed module.
-            candidates: Proposed annotation sources by node identity.
-            counts: Module binding counts.
+            module (CommentedModule): Parsed module.
+            candidates (DictKeyStr): Proposed annotation sources by node
+                identity.
+            counts (DictInt): Module binding counts.
 
         """
-        known: frozenset[str] = _imported_names(module=module) | _importable(
+        known: FrozensetStr = _imported_names(module=module) | _importable(
             module=module,
         )
         owners: dict[int, ClassDef] = {
@@ -937,18 +964,19 @@ class HintIndex:
         self,
         *,
         function: Function,
-        counts: dict[str, int],
+        counts: DictInt,
         key: Key,
     ) -> None:
         """Give a protocol dunder its declared result when the body fits.
 
         Args:
-            function: A dunder listed in ``Constants.protocol_results``.
-            counts: Module binding counts.
-            key: Function node key.
+            function (Function): A dunder listed in
+                ``Constants.protocol_results``.
+            counts (DictInt): Module binding counts.
+            key (Key): Function node key.
 
         """
-        declared: str | None = protocol_result_for(
+        declared: StrOrNone = protocol_result_for(
             function=function,
             counts=counts,
         )
@@ -968,10 +996,10 @@ class HintIndex:
         """Accept an annotation for each instance attribute whose writes agree.
 
         Args:
-            module: Parsed module.
+            module (CommentedModule): Parsed module.
 
         """
-        counts: dict[str, int] = binding_counts(module=module)
+        counts: DictInt = binding_counts(module=module)
         found: Attributes = attribute_annotations(
             scope=Scope(
                 module=module,
@@ -981,12 +1009,12 @@ class HintIndex:
                 index=MethodIndex(module=module, counts=counts),
             ),
         )
-        known: frozenset[str] = _imported_names(module=module) | _importable(
+        known: FrozensetStr = _imported_names(module=module) | _importable(
             module=module,
         )
         self._attribute_types = found.types
         for node in walk(node=module):
-            source: str | None = found.annotations.get(id(node))
+            source: StrOrNone = found.annotations.get(id(node))
             if source is not None and is_allowed_source(
                 source=source,
                 known_names=known,
@@ -1000,24 +1028,26 @@ class HintIndex:
         self,
         *,
         module: CommentedModule,
-        candidates: dict[Key, str],
+        candidates: DictKeyStr,
         project: ProjectView | None = None,
     ) -> None:
         """Accept or refuse a hint for every unannotated parameter.
 
         Args:
-            module: Parsed module.
-            candidates: Proposed annotation sources by node identity.
-            project: Cross-module view of the project, or ``None``.
+            module (CommentedModule): Parsed module.
+            candidates (DictKeyStr): Proposed annotation sources by node
+                identity.
+            project (ProjectView | None): Cross-module view of the project, or
+                ``None``.
 
         """
-        known: frozenset[str] = _imported_names(module=module) | _importable(
+        known: FrozensetStr = _imported_names(module=module) | _importable(
             module=module,
         )
-        counts: dict[str, int] = binding_counts(module=module)
+        counts: DictInt = binding_counts(module=module)
         bindings: CallBindings = CallBindings(module=module, counts=counts)
-        escaped: frozenset[str] = _escaped_names(module=module)
-        constants: dict[str, str] = module_constants(
+        escaped: FrozensetStr = _escaped_names(module=module)
+        constants: DictStr = module_constants(
             module=module,
             counts=counts,
         )
@@ -1026,7 +1056,7 @@ class HintIndex:
             if project is not None
             else {}
         )
-        accepted: dict[int, dict[str, str]] = self._accepted
+        accepted: dict[int, DictStr] = self._accepted
         for _pass in range(Constants.propagation_passes):
             sites: dict[tuple[int, str], list[_Site]] = _call_sites(
                 module=module,
@@ -1057,19 +1087,22 @@ class HintIndex:
         module: CommentedModule,
         context: _Judging,
         sites: dict[tuple[int, str], list[_Site]],
-        accepted: dict[int, dict[str, str]],
+        accepted: dict[int, DictStr],
     ) -> bool:
         """Judge every parameter not yet hinted, once.
 
         Args:
-            module: Parsed module.
-            context: Candidates, importable names and escaped functions.
-            sites: Call-site evidence by function identity and parameter.
-            accepted: Accepted hint sources by function identity and
-                parameter name, extended in place.
+            module (CommentedModule): Parsed module.
+            context (_Judging): Candidates, importable names and escaped
+                functions.
+            sites (dict[tuple[int, str], list[_Site]]): Call-site evidence by
+                function identity and parameter.
+            accepted (dict[int, DictStr]): Accepted hint sources by function
+                identity
+                and parameter name, extended in place.
 
         Returns:
-            Whether any parameter gained a hint in this pass.
+            bool: Whether any parameter gained a hint in this pass.
 
         """
         gained: bool = False
@@ -1130,9 +1163,10 @@ class HintIndex:
         The hint is not fed back as the name's type for the same reason.
 
         Args:
-            function: Function definition.
-            context: Importable names and escaped functions.
-            sites: Call-site evidence by function identity and parameter.
+            function (Function): Function definition.
+            context (_Judging): Importable names and escaped functions.
+            sites (dict[tuple[int, str], list[_Site]]): Call-site evidence by
+                function identity and parameter.
 
         """
         for parameter in _variadics(function=function):
@@ -1150,14 +1184,14 @@ class HintIndex:
                 known=context.known,
             )
 
-    def _accepted_parameters(self, *, function: Function) -> frozenset[str]:
+    def _accepted_parameters(self, *, function: Function) -> FrozensetStr:
         """List the parameters of a function that have an accepted hint.
 
         Args:
-            function: Function definition.
+            function (Function): Function definition.
 
         Returns:
-            Parameter names with a hint.
+            FrozensetStr: Parameter names with a hint.
 
         """
         return frozenset(
@@ -1173,22 +1207,23 @@ class HintIndex:
         *,
         function: Function,
         owner: ClassDef | None,
-    ) -> str | None:
+    ) -> StrOrNone:
         """Name the receiver whose attribute reads the class table types.
 
         The receiver is trusted only while nothing in the method rebinds it.
 
         Args:
-            function: Method definition.
-            owner: Class the method belongs to, if any.
+            function (Function): Method definition.
+            owner (ClassDef | None): Class the method belongs to, if any.
 
         Returns:
-            The receiver name, or ``None`` when the table does not apply.
+            StrOrNone:
+                The receiver name, or ``None`` when the table does not apply.
 
         """
         if owner is None or id(owner) not in self._attribute_types:
             return None
-        receiver: str | None = receiver_of(function=function)
+        receiver: StrOrNone = receiver_of(function=function)
         if receiver is None or any(
             isinstance(node, Name)
             and node.id == receiver
@@ -1198,18 +1233,18 @@ class HintIndex:
             return None
         return receiver
 
-    def _known_types(self, *, function: Function) -> dict[str, str]:
+    def _known_types(self, *, function: Function) -> DictStr:
         """Collect the types of a function's parameters.
 
         Args:
-            function: Function definition.
+            function (Function): Function definition.
 
         Returns:
-            Parameter names mapped to an accepted hint or a usable
-            declared annotation.
+            DictStr: Parameter names mapped to an accepted
+                hint or a usable declared annotation.
 
         """
-        types: dict[str, str] = {}
+        types: DictStr = {}
         for parameter, _default in _parameters(function=function):
             hint: Hint | None = self.hint_for(node=parameter)
             if hint is not None:
@@ -1224,8 +1259,8 @@ class HintIndex:
         self,
         *,
         function: Function,
-        candidate: str | None,
-        tainted: str | None,
+        candidate: StrOrNone,
+        tainted: StrOrNone,
     ) -> None:
         """Decide a return the prover could not type.
 
@@ -1233,9 +1268,10 @@ class HintIndex:
         everything else is refused with the reason.
 
         Args:
-            function: Function definition.
-            candidate: Proposed annotation source, if any.
-            tainted: The untyped parameter the return depends on, if any.
+            function (Function): Function definition.
+            candidate (StrOrNone): Proposed annotation source, if any.
+            tainted (StrOrNone): The untyped parameter the return depends on,
+                if any.
 
         """
         key: Key = _key(node=function)
@@ -1264,25 +1300,25 @@ class HintIndex:
         self,
         *,
         function: Function,
-        candidate: str | None,
-        known: frozenset[str],
-        counts: dict[str, int],
+        candidate: StrOrNone,
+        known: FrozensetStr,
+        counts: DictInt,
         owner: ClassDef | None,
     ) -> None:
         """Decide a derived return hint.
 
         Args:
-            function: Function definition.
-            candidate: Proposed annotation source, if any.
-            known: Names a new annotation may use.
-            counts: Module binding counts.
-            owner: Class the function is a method of, if any.
+            function (Function): Function definition.
+            candidate (StrOrNone): Proposed annotation source, if any.
+            known (FrozensetStr): Names a new annotation may use.
+            counts (DictInt): Module binding counts.
+            owner (ClassDef | None): Class the function is a method of, if any.
 
         """
         key: Key = _key(node=function)
-        types: dict[str, str] = self._known_types(function=function)
-        accepted: frozenset[str] = self._accepted_parameters(function=function)
-        receiver: str | None = self._trusted_receiver(
+        types: DictStr = self._known_types(function=function)
+        accepted: FrozensetStr = self._accepted_parameters(function=function)
+        receiver: StrOrNone = self._trusted_receiver(
             function=function,
             owner=owner,
         )
@@ -1299,11 +1335,11 @@ class HintIndex:
             known_types=types,
             counts=counts,
         )
-        origins: dict[str, str] = _taint_origins(
+        origins: DictStr = _taint_origins(
             function=function,
             accepted=accepted,
         )
-        tainted: str | None = next(
+        tainted: StrOrNone = next(
             (
                 found
                 for value in _value_returns(function=function)
@@ -1353,19 +1389,19 @@ class HintIndex:
         *,
         parameter: arg,
         default: expr | None,
-        candidate: str | None,
+        candidate: StrOrNone,
         evidence: _Evidence,
-        known: frozenset[str],
+        known: FrozensetStr,
     ) -> None:
         """Decide one parameter and record the outcome.
 
         Args:
-            parameter: Parameter node.
-            default: Default value expression, if any.
-            candidate: Proposed annotation source, if any.
-
-            evidence: What the module shows about the parameter's callers.
-            known: Names a new annotation may use.
+            parameter (arg): Parameter node.
+            default (expr | None): Default value expression, if any.
+            candidate (StrOrNone): Proposed annotation source, if any.
+            evidence (_Evidence): What the module shows about the parameter's
+                callers.
+            known (FrozensetStr): Names a new annotation may use.
 
         """
         key: Key = _key(node=parameter)
@@ -1385,7 +1421,7 @@ class HintIndex:
             )
             self._rejections[key] = reason
             return
-        literal: str | None = (
+        literal: StrOrNone = (
             type(default.value).__name__
             if isinstance(default, Constant)
             and type(default.value).__name__ in Constants.scalar_types
@@ -1411,7 +1447,7 @@ class HintIndex:
         *,
         key: Key,
         evidence: _Evidence,
-        known: frozenset[str],
+        known: FrozensetStr,
     ) -> None:
         """Decide a parameter whose default is ``None``.
 
@@ -1420,9 +1456,10 @@ class HintIndex:
         one site passes a value. Sites that pass ``None`` add nothing.
 
         Args:
-            key: Parameter node key.
-            evidence: What the module shows about the parameter's callers.
-            known: Names a new annotation may use.
+            key (Key): Parameter node key.
+            evidence (_Evidence): What the module shows about the parameter's
+                callers.
+            known (FrozensetStr): Names a new annotation may use.
 
         """
         if evidence.escaped:
@@ -1460,9 +1497,10 @@ class HintIndex:
         """Compare a candidate with the types passed at call sites.
 
         Args:
-            key: Parameter node key.
-            candidate: Proposed annotation source.
-            evidence: What the module shows about the parameter's callers.
+            key (Key): Parameter node key.
+            candidate (str): Proposed annotation source.
+            evidence (_Evidence): What the module shows about the parameter's
+                callers.
 
         """
         if evidence.escaped:
@@ -1484,7 +1522,7 @@ class HintIndex:
                 basis=HintBasis.call_sites,
             )
         else:
-            union: str | None = _site_union(
+            union: StrOrNone = _site_union(
                 evidence=evidence,
                 candidate=candidate,
             )
@@ -1501,11 +1539,11 @@ def _union_members(*, source: str) -> tuple[str, ...]:
     """Split a ``A | B | C`` annotation into its members.
 
     Args:
-        source: Annotation source.
+        source (str): Annotation source.
 
     Returns:
-        The unparsed top-level members in source order; one element when it
-        is no union.
+        tuple[str, ...]: The unparsed top-level members in source
+            order; one element when it is no union.
 
     """
     try:
@@ -1523,7 +1561,7 @@ def _union_members(*, source: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(members))
 
 
-def _site_union(*, evidence: _Evidence, candidate: str) -> str | None:
+def _site_union(*, evidence: _Evidence, candidate: str) -> StrOrNone:
     """Spell the union of the call sites when the candidate corroborates it.
 
     Every site must be syntax-proven, the types must differ, there must be at
@@ -1532,16 +1570,18 @@ def _site_union(*, evidence: _Evidence, candidate: str) -> str | None:
     ``bool`` is dropped beside ``int`` because it is a subtype.
 
     Args:
-        evidence: What the module shows about the parameter's callers.
-        candidate: Proposed annotation source.
+        evidence (_Evidence): What the module shows about the parameter's
+            callers.
+        candidate (str): Proposed annotation source.
 
     Returns:
-        The annotation source, or ``None`` when the union is not corroborated.
+        StrOrNone: The annotation source, or ``None``
+            when the union is not corroborated.
 
     """
     if not all(site.proven for site in evidence.sites):
         return None
-    seen: frozenset[str] = frozenset(site.types[0] for site in evidence.sites)
+    seen: FrozensetStr = frozenset(site.types[0] for site in evidence.sites)
     members: tuple[str, ...] = _union_members(source=candidate)
     if not (
         1 < len(seen) <= Constants.max_union_members
@@ -1559,15 +1599,15 @@ def _candidates(
     *,
     module: CommentedModule,
     stubs_path: Path,
-) -> dict[Key, str]:
+) -> DictKeyStr:
     """Collect the inference pipeline's parameter and return proposals.
 
     Args:
-        module: Parsed module.
-        stubs_path: Stub directory handed to the pipeline.
+        module (CommentedModule): Parsed module.
+        stubs_path (Path): Stub directory handed to the pipeline.
 
     Returns:
-        Proposed annotation sources by target node position.
+        DictKeyStr: Proposed annotation sources by target node position.
 
     """
     try:
@@ -1584,14 +1624,15 @@ def _candidates(
     }
 
 
-def _proven_site_type(*, evidence: _Evidence) -> str | None:
+def _proven_site_type(*, evidence: _Evidence) -> StrOrNone:
     """Find the type every call site's syntax proves, when they all agree.
 
     Args:
-        evidence: What the module shows about the parameter's callers.
+        evidence (_Evidence): What the module shows about the parameter's
+            callers.
 
     Returns:
-        The single proven type, or ``None``.
+        StrOrNone: The single proven type, or ``None``.
 
     """
     if evidence.escaped or not evidence.sites:
@@ -1607,7 +1648,7 @@ def _proven_site_type(*, evidence: _Evidence) -> str | None:
 def _argument_evidence(
     *,
     argument: BoundArgument,
-    counts: dict[str, int],
+    counts: DictInt,
     env: Mapping[str, str],
 ) -> _Site:
     """Turn one bound argument into call-site evidence.
@@ -1618,19 +1659,21 @@ def _argument_evidence(
     ``True + True``), so it is not consulted.
 
     Args:
-        argument: Bound argument of a direct call.
-        counts: Module binding counts.
-        env: Types of the names visible at the call, from its scope.
+        argument (BoundArgument): Bound argument of a direct call.
+        counts (DictInt): Module binding counts.
+        env (Mapping[str, str]): Types of the names visible at the call, from
+            its scope.
 
     Returns:
-        The site's trust, rendered spellings, and whether syntax proves them.
+        _Site: The site's trust, rendered spellings,
+            and whether syntax proves them.
 
     """
-    proofs: set[str | None] = {
+    proofs: set[StrOrNone] = {
         expression_type(node=value, counts=counts, env=env)
         for value in argument.values
     }
-    syntax: str | None = (
+    syntax: StrOrNone = (
         next(iter(proofs))
         if argument.values and len(proofs) == 1 and None not in proofs
         else None
@@ -1648,11 +1691,12 @@ def _call_sites_agree(*, evidence: _Evidence, kind: str) -> bool:
     the second signal that lifts it to the strong tier.
 
     Args:
-        evidence: What the module shows about the parameter's callers.
-        kind: The default literal's type.
+        evidence (_Evidence): What the module shows about the parameter's
+            callers.
+        kind (str): The default literal's type.
 
     Returns:
-        ``True`` when there are call sites and all prove ``kind``.
+        bool: ``True`` when there are call sites and all prove ``kind``.
 
     """
     return (
@@ -1673,11 +1717,11 @@ def _boolean_by_syntax(*, node: AST) -> bool:
     elsewhere is not covered by it.
 
     Args:
-        node: A returned expression.
+        node (AST): A returned expression.
 
     Returns:
-        ``True`` for comparisons, ``not``, ``and``/``or`` of such
-        expressions, ``bool`` constants and calls of builtin predicates.
+        bool: ``True`` for comparisons, ``not``, ``and``/``or`` of such
+            expressions, ``bool`` constants and calls of builtin predicates.
 
     """
     match node:
@@ -1701,12 +1745,12 @@ def _refines(*, candidate: str, proved: str) -> bool:
     contradicting it.
 
     Args:
-        candidate: Inference candidate source.
-        proved: Syntax-proven source.
+        candidate (str): Inference candidate source.
+        proved (str): Syntax-proven source.
 
     Returns:
-        ``True`` when every arm of ``proved`` is an arm of ``candidate`` and
-        some arm of ``candidate`` is missing from ``proved``.
+        bool: ``True`` when every arm of ``proved`` is an arm of ``candidate``
+            and some arm of ``candidate`` is missing from ``proved``.
 
     """
     mine: set[str] = set(proved.split(sep=" | "))
@@ -1721,32 +1765,32 @@ def _drops_none(*, candidate: str, proved: str) -> bool:
     starts out ``None``; the class's own writes show the ``None`` too.
 
     Args:
-        candidate: Inference candidate source.
-        proved: Syntax-proven source.
+        candidate (str): Inference candidate source.
+        proved (str): Syntax-proven source.
 
     Returns:
-        ``True`` when both name the same types apart from ``None``.
+        bool: ``True`` when both name the same types apart from ``None``.
 
     """
     kept: set[str] = set(proved.split(sep=" | ")) - {"None"}
     return kept == set(candidate.split(sep=" | ")) and kept != set()
 
 
-def _default_type(*, default: expr | None, context: _Judging) -> str | None:
+def _default_type(*, default: expr | None, context: _Judging) -> StrOrNone:
     """Prove the scalar type of a non-literal default expression.
 
     Args:
-        default: Default value expression, if any.
-        context: Binding counts and module constants.
+        default (expr | None): Default value expression, if any.
+        context (_Judging): Binding counts and module constants.
 
     Returns:
-        ``int``, ``str``, ``float``, ``bool`` or ``bytes`` when the syntax
-        guarantees it, else ``None``.
+        StrOrNone: ``int`` , ``str`` , ``float`` , ``bool`` or ``bytes``
+            when the syntax guarantees it, else ``None``.
 
     """
     if default is None or isinstance(default, Constant):
         return None
-    proven: str | None = expression_type(
+    proven: StrOrNone = expression_type(
         node=default,
         counts=context.counts,
         env=context.constants,
@@ -1758,10 +1802,10 @@ def _variadics(*, function: Function) -> list[arg]:
     """List a function's ``*args`` and ``**kwargs`` parameters.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        The variadic parameters that exist, positional one first.
+        list[arg]: The variadic parameters that exist, positional one first.
 
     """
     arguments: arguments = function.args
@@ -1775,7 +1819,7 @@ def _variadics(*, function: Function) -> list[arg]:
 def _bound_evidence(
     *,
     argument: BoundArgument,
-    counts: dict[str, int],
+    counts: DictInt,
     env: Mapping[str, str],
 ) -> _Site | None:
     """Turn one bound argument into evidence for its parameter, if any.
@@ -1785,12 +1829,13 @@ def _bound_evidence(
     carries no evidence either way.
 
     Args:
-        argument: Bound argument of a direct call.
-        counts: Module binding counts.
-        env: Types of the names visible at the call, from its scope.
+        argument (BoundArgument): Bound argument of a direct call.
+        counts (DictInt): Module binding counts.
+        env (Mapping[str, str]): Types of the names visible at the call, from
+            its scope.
 
     Returns:
-        The site, or ``None`` when the argument says nothing.
+        _Site | None: The site, or ``None`` when the argument says nothing.
 
     """
     origin: ArgumentOrigin = argument.origin
@@ -1809,25 +1854,27 @@ def _bound_evidence(
 def _scope_env(
     *,
     scope: Function,
-    envs: dict[int, dict[str, str]],
-    counts: dict[str, int],
-    constants: dict[str, str],
+    envs: dict[int, DictStr],
+    counts: DictInt,
+    constants: DictStr,
     declared: Mapping[str, str] | None,
-) -> dict[str, str]:
+) -> DictStr:
     """Return the types visible in a scope, computing them once per pass.
 
     Args:
-        scope: Enclosing function.
-        envs: Environments computed so far, by function identity.
-        counts: Module binding counts.
-        constants: Types of the module's constants.
-        declared: Parameter hints already accepted for the scope.
+        scope (Function): Enclosing function.
+        envs (dict[int, DictStr]): Environments computed so far, by function
+            identity.
+        counts (DictInt): Module binding counts.
+        constants (DictStr): Types of the module's constants.
+        declared (Mapping[str, str] | None): Parameter hints already accepted
+            for the scope.
 
     Returns:
-        The scope's environment.
+        DictStr: The scope's environment.
 
     """
-    found: dict[str, str] | None = envs.get(id(scope))
+    found: DictStr | None = envs.get(id(scope))
     if found is None:
         found = envs[id(scope)] = scope_types(
             function=scope,
@@ -1841,7 +1888,7 @@ def _scope_env(
 def _call_sites(
     *,
     module: CommentedModule,
-    counts: dict[str, int],
+    counts: DictInt,
     bindings: CallBindings,
     accepted: Mapping[int, Mapping[str, str]],
     project: ProjectView | None = None,
@@ -1853,15 +1900,18 @@ def _call_sites(
     for every parameter, never as absent.
 
     Args:
-        module: Parsed module.
-        counts: Module binding counts.
-        bindings: Trusted call bindings of the module.
-        accepted: Hints already accepted for parameters, by function identity
+        module (CommentedModule): Parsed module.
+        counts (DictInt): Module binding counts.
+        bindings (CallBindings): Trusted call bindings of the module.
+        accepted (Mapping[int, Mapping[str, str]]): Hints already accepted for
+            parameters, by function identity
             and parameter name; they type the names callers pass on.
-        project: Cross-module view of the project, or ``None``.
+        project (ProjectView | None): Cross-module view of the project, or
+            ``None``.
 
     Returns:
-        For each (definition identity, parameter name), one entry per call
+        dict[tuple[int, str], list[_Site]]: For each (definition identity,
+            parameter name), one entry per call
         site: whether the type is trustworthy and its rendered spellings.
 
     """
@@ -1872,20 +1922,20 @@ def _call_sites(
         and counts.get(node.name, 0) == 1
     }
     index: dict[tuple[int, str], list[_Site]] = {}
-    constants: dict[str, str] = module_constants(module=module, counts=counts)
+    constants: DictStr = module_constants(module=module, counts=counts)
     scopes: dict[int, Function] = {
         id(inner): function
         for function in walk(node=module)
         if isinstance(function, (FunctionDef, AsyncFunctionDef))
         for inner in own_calls(function=function)
     }
-    envs: dict[int, dict[str, str]] = {}
+    envs: dict[int, DictStr] = {}
     for call in walk(node=module):
         if not isinstance(call, Call):
             continue
         scope: Function | None = scopes.get(id(call))
         if scope is None:
-            env: dict[str, str] = constants
+            env: DictStr = constants
         else:
             env = _scope_env(
                 scope=scope,
@@ -1950,19 +2000,21 @@ def _merge_project_sites(
     the other one.
 
     Args:
-        index: The site index, extended in place.
-        module: Parsed module.
-        project: Cross-module view of the project.
-        qualifieds: ``id`` of each definition to its qualified name.
+        index (dict[tuple[int, str], list[_Site]]): The site index, extended in
+            place.
+        module (CommentedModule): Parsed module.
+        project (ProjectView): Cross-module view of the project.
+        qualifieds (Mapping[int, str]): ``id`` of each definition to its
+            qualified name.
 
     """
-    counts: dict[str, int] = {}
+    counts: DictInt = {}
     for qualified in qualifieds.values():
         counts[qualified] = counts.get(qualified, 0) + 1
     for function in walk(node=module):
         if not isinstance(function, (FunctionDef, AsyncFunctionDef)):
             continue
-        qualified: str | None = qualifieds.get(id(function))
+        qualified: StrOrNone = qualifieds.get(id(function))
         if qualified is None or counts.get(qualified, 0) != 1:
             continue
         extras: list[dict[str, tuple[CrossSite, ...]] | None] = [
@@ -1992,7 +2044,7 @@ class HintCache:
     def __init__(self) -> None:
         """Start with no indexes."""
         self._entries: dict[
-            tuple[str, str | None, tuple[int, int, str] | None],
+            tuple[str, StrOrNone, tuple[int, int, str] | None],
             HintIndex,
         ] = {}
 
@@ -2007,17 +2059,19 @@ class HintCache:
         """Return the index for a text, building it on the first request.
 
         Args:
-            source: Source text the index describes.
-            stubs_path: Stub directory used for inference.
-            build: Builds the index when it is not cached.
-            project: Cross-module view the hints were computed with; the
+            source (str): Source text the index describes.
+            stubs_path (Path | None): Stub directory used for inference.
+            build (Callable[[], HintIndex]): Builds the index when it is not
+                cached.
+            project (ProjectView | None): Cross-module view the hints were
+                computed with; the
                 index's identity and version discriminate the cache key.
 
         Returns:
-            The cached or newly built index.
+            HintIndex: The cached or newly built index.
 
         """
-        key: tuple[str, str | None, tuple[int, int, str] | None] = (
+        key: tuple[str, StrOrNone, tuple[int, int, str] | None] = (
             source,
             None if stubs_path is None else str(object=stubs_path),
             None
@@ -2036,6 +2090,7 @@ class LazyHints:
     Inference is the expensive part of a run, so rules that never read a
     hint never pay for it, and a shared :class:`HintCache` lets repeated
     parses of one text pay only once.
+
     """
 
     def __init__(
@@ -2043,23 +2098,26 @@ class LazyHints:
         *,
         module: CommentedModule,
         stubs_path: Path | None,
-        source: str | None = None,
+        source: StrOrNone = None,
         cache: HintCache | None = None,
         project: ProjectView | None = None,
     ) -> None:
         """Remember what is needed to build the index.
 
         Args:
-            module: Parsed module.
-            stubs_path: Stub directory, or ``None`` for an empty one.
-            source: Source text of the module, needed for caching.
-            cache: Shared cache, or ``None`` to compute privately.
-            project: Cross-module view of the project, or ``None``.
+            module (CommentedModule): Parsed module.
+            stubs_path (Path | None): Stub directory, or ``None`` for an empty
+                one.
+            source (StrOrNone): Source text of the module, needed for caching.
+            cache (HintCache | None): Shared cache, or ``None`` to compute
+                privately.
+            project (ProjectView | None): Cross-module view of the project, or
+                ``None``.
 
         """
         self._module: CommentedModule = module
         self._stubs_path: Path | None = stubs_path
-        self._source: str | None = source
+        self._source: StrOrNone = source
         self._cache: HintCache | None = cache
         self._project: ProjectView | None = project
         self._supplement: Callable[[HintIndex], Mapping[Key, Hint]] | None = (
@@ -2075,10 +2133,11 @@ class LazyHints:
         """Add hints from another source for nodes the index has none for.
 
         Args:
-            by: Produces the extra hints from the built index.
+            by (Callable[[HintIndex], Mapping[Key, Hint]]): Produces the extra
+                hints from the built index.
 
         Returns:
-            This object, for chaining.
+            Self: This object, for chaining.
 
         """
         self._supplement = by
@@ -2088,7 +2147,7 @@ class LazyHints:
         """Return the index, building it on the first call.
 
         Returns:
-            The module's hint index.
+            HintIndex: The module's hint index.
 
         """
         if self._index is None:
@@ -2097,7 +2156,7 @@ class LazyHints:
                 """Compute the index from scratch.
 
                 Returns:
-                    A freshly built hint index.
+                    HintIndex: A freshly built hint index.
 
                 """
                 return HintIndex.create(
@@ -2120,28 +2179,30 @@ class LazyHints:
         return self._index
 
 
-def engine_proposals(*, module: CommentedModule) -> dict[Key, str]:
+def engine_proposals(*, module: CommentedModule) -> DictKeyStr:
     """Run the inference engine and list its parameter and return proposals.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Proposed annotation sources by node position (see :func:`_key`).
+        DictKeyStr:
+            Proposed annotation sources by node position (see :func:`_key`).
 
     """
     with TemporaryDirectory() as scratch:
         return _candidates(module=module, stubs_path=Path(scratch))
 
 
-def escaped_function_names(*, module: Module) -> frozenset[str]:
+def escaped_function_names(*, module: Module) -> FrozensetStr:
     """Collect names read anywhere other than as a direct callee.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Names used as values, which may reach callers the module cannot see.
+        FrozensetStr: Names used as values, which may
+            reach callers the module cannot see.
 
     """
     return _escaped_names(module=module)
@@ -2151,10 +2212,10 @@ def node_key(*, node: AST) -> Key:
     """Identify a parameter or function by kind and source position.
 
     Args:
-        node: Parameter or function node.
+        node (AST): Parameter or function node.
 
     Returns:
-        (kind, line, column), the identity used by :class:`HintIndex`.
+        Key: (kind, line, column), the identity used by :class:`HintIndex`.
 
     """
     return _key(node=node)
@@ -2164,21 +2225,22 @@ def protocol_result_for(
     *,
     function: Function,
     counts: Mapping[str, int],
-) -> str | None:
+) -> StrOrNone:
     """Give a protocol dunder its declared result when its body fits.
 
     Args:
-        function: A function; only those listed in
+        function (Function): A function; only those listed in
             ``Constants.protocol_results`` can qualify.
-        counts: Module binding counts.
+        counts (Mapping[str, int]): Module binding counts.
 
     Returns:
-        The declared result (``__len__`` gives ``int``), or ``None`` when the
-        function is no protocol dunder, is a declaration or generator, or
-        its body does not fit the declared type.
+        StrOrNone:
+            The declared result (``__len__`` gives ``int``), or ``None``
+            when the function is no protocol dunder, is a declaration
+            or generator, or its body does not fit the declared type.
 
     """
-    declared: str | None = Constants.protocol_results.get(function.name)
+    declared: StrOrNone = Constants.protocol_results.get(function.name)
     if (
         declared is None
         or is_declaration(function=function)
@@ -2188,7 +2250,7 @@ def protocol_result_for(
     allowed: set[str] = set(declared.split(sep=" | "))
     if "None" in allowed and _body_returns_nothing(function=function):
         return declared
-    proved: str | None = provable_return_detail(
+    proved: StrOrNone = provable_return_detail(
         function=function,
         known_types={},
         counts=counts,
@@ -2203,12 +2265,12 @@ def boolean_returns(*, function: Function) -> bool:
     This is the category the calibrated-candidate rule was measured on.
 
     Args:
-        function: Function definition.
+        function (Function): Function definition.
 
     Returns:
-        ``True`` for a non-generator that returns at least one value, all of
-        them comparisons, ``not``, ``bool`` constants, predicate calls or
-        ``and``/``or`` of those.
+        bool: ``True`` for a non-generator that returns at least one
+            value, all of them comparisons, ``not``, ``bool``
+            constants, predicate calls or ``and`` /``or`` of those.
 
     """
     values: list[expr] = _value_returns(function=function)
@@ -2219,14 +2281,14 @@ def boolean_returns(*, function: Function) -> bool:
     )
 
 
-def allowed_names(*, module: Module) -> frozenset[str]:
+def allowed_names(*, module: Module) -> FrozensetStr:
     """List the names a new annotation of this module may use.
 
     Args:
-        module: Parsed module.
+        module (Module): Parsed module.
 
     Returns:
-        Imported names plus those a fix can import on its own.
+        FrozensetStr: Imported names plus those a fix can import on its own.
 
     """
     return _imported_names(module=module) | _importable(module=module)

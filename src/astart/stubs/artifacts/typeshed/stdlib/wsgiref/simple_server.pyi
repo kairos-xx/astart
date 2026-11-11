@@ -1,0 +1,55 @@
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Final, TypeVar, overload
+
+from _typeshed.wsgi import (
+    ErrorStream,
+    StartResponse,
+    WSGIApplication,
+    WSGIEnvironment,
+)
+
+from .handlers import SimpleHandler
+
+__all__ = ["WSGIRequestHandler", "WSGIServer", "demo_app", "make_server"]
+server_version: Final[str]
+sys_version: Final[str]
+software_version: Final[str]
+
+class ServerHandler(SimpleHandler):
+    server_software: str
+
+class WSGIServer(HTTPServer):
+    application: WSGIApplication | None
+    base_environ: WSGIEnvironment
+    def setup_environ(self) -> None: ...
+    def get_app(self) -> WSGIApplication | None: ...
+    def set_app(self, application: WSGIApplication | None) -> None: ...
+
+class WSGIRequestHandler(BaseHTTPRequestHandler):
+    server_version: str
+    def get_environ(self) -> WSGIEnvironment: ...
+    def get_stderr(self) -> ErrorStream: ...
+
+def demo_app(
+    environ: WSGIEnvironment,
+    start_response: StartResponse,
+) -> list[bytes]: ...
+
+_S = TypeVar("_S", bound=WSGIServer)
+
+@overload
+def make_server(
+    host: str,
+    port: int,
+    app: WSGIApplication,
+    *,
+    handler_class: type[WSGIRequestHandler] = ...,
+) -> WSGIServer: ...
+@overload
+def make_server[S: WSGIServer](
+    host: str,
+    port: int,
+    app: WSGIApplication,
+    server_class: type[_S],
+    handler_class: type[WSGIRequestHandler] = ...,
+) -> _S: ...

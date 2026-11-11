@@ -1,0 +1,29 @@
+import asyncio
+from typing import AnyStr
+
+from .expect import Expecter
+
+async def expect_async[AnyStr: (bytes, str)](
+    expecter: Expecter[AnyStr],
+    timeout: float | None = None,
+) -> int: ...
+async def repl_run_command_async(
+    repl,
+    cmdlines,
+    timeout: float | None = -1,
+): ...
+
+class PatternWaiter[AnyStr: (bytes, str)](asyncio.Protocol):
+    transport: asyncio.ReadTransport | None
+    expecter: Expecter[AnyStr]
+    fut: asyncio.Future[int]
+    def set_expecter(self, expecter: Expecter[AnyStr]) -> None: ...
+    def found(self, result: int) -> None: ...
+    def error(self, exc: BaseException | type[BaseException]) -> None: ...
+    def connection_made(self, transport: asyncio.BaseTransport) -> None: ...
+    def data_received(self, data: bytes) -> None: ...
+    def eof_received(self) -> None: ...
+    def connection_lost(
+        self,
+        exc: BaseException | type[BaseException] | None,
+    ) -> None: ...

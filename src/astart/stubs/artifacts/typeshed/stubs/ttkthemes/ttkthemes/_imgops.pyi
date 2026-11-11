@@ -1,0 +1,6 @@
+from typing import Any
+
+type _Image = Any
+
+def shift_hue(image: _Image, hue: float) -> _Image: ...
+def make_transparent(image: _Image) -> _Image: ...

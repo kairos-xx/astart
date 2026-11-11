@@ -17,9 +17,9 @@ class FactSpec:
     """Declare one fact a predicate may read.
 
     Attributes:
-        name: Dotted fact name.
-        value_type: One of ``bool``, ``int``, ``float`` or ``str``.
-        cost: What computing the fact needs.
+        name (str): Dotted fact name.
+        value_type (str): One of ``bool``, ``int``, ``float`` or ``str``.
+        cost (Cost): What computing the fact needs.
 
     """
 
@@ -34,10 +34,10 @@ class Registries:
     """Vocabulary the engine supplies when a catalog is loaded.
 
     Attributes:
-        node_kinds: Subject kinds rules may target.
-        facts: Fact declarations by name.
-        procedures: Keys of registered procedural triggers.
-        appliers: Keys of registered edit appliers.
+        node_kinds (frozenset[str]): Subject kinds rules may target.
+        facts (Mapping[str, FactSpec]): Fact declarations by name.
+        procedures (frozenset[str]): Keys of registered procedural triggers.
+        appliers (frozenset[str]): Keys of registered edit appliers.
 
     """
 
@@ -50,10 +50,10 @@ class Registries:
         """Look up a fact declaration.
 
         Args:
-            name: Fact name.
+            name (str): Fact name.
 
         Returns:
-            The declaration.
+            FactSpec: The declaration.
 
         Raises:
             KeyError: If the fact is not declared.
@@ -70,11 +70,11 @@ def rule_cost(*, registries: Registries, requires: Iterable[str]) -> Cost:
     """Compute the cost of evaluating a rule.
 
     Args:
-        registries: Declared facts.
-        requires: Fact names the rule needs.
+        registries (Registries): Declared facts.
+        requires (Iterable[str]): Fact names the rule needs.
 
     Returns:
-        The highest cost among the facts, syntactic when none.
+        Cost: The highest cost among the facts, syntactic when none.
 
     """
     highest: Cost = Cost.syntactic

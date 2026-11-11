@@ -1,0 +1,26 @@
+from typing import Final
+
+from _typeshed import Incomplete
+
+IConnectionPointContainer_methods: Final = [
+    "EnumConnectionPoints",
+    "FindConnectionPoint",
+]
+IConnectionPoint_methods: Final = [
+    "EnumConnections",
+    "Unadvise",
+    "Advise",
+    "GetConnectionPointContainer",
+    "GetConnectionInterface",
+]
+
+class ConnectableServer:
+    cookieNo: int
+    connections: dict[int, Incomplete]
+    def EnumConnections(self) -> None: ...
+    def GetConnectionInterface(self) -> None: ...
+    def GetConnectionPointContainer(self): ...
+    def Advise(self, pUnk) -> int: ...
+    def Unadvise(self, cookie: int) -> None: ...
+    def EnumConnectionPoints(self) -> None: ...
+    def FindConnectionPoint(self, iid) -> Incomplete | None: ...

@@ -5,6 +5,7 @@ target, ``@overload`` definitions are grouped, ``__all__`` is followed, and
 the typeshed export rules decide which names are public: no leading
 underscore, and an import only when it is a re-export (``import x as x``,
 ``from m import n as n`` or ``from m import *``).
+
 """
 
 from __future__ import annotations
@@ -37,15 +38,19 @@ from typing import Final, final
 
 from astart.stubs.conditions import Target, evaluate
 
+type DictStubName = dict[str, StubName]
+
 
 @final
 class Constants:
     """Group module-level constants.
 
     Attributes:
-        overload: Decorator names that start an overload group.
-        type_variables: Callees that declare a type variable.
-        dunder_all: Name of the export list.
+        overload (Final[frozenset[str]]): Decorator names that start an
+            overload group.
+        type_variables (Final[frozenset[str]]): Callees that declare a type
+            variable.
+        dunder_all (Final[str]): Name of the export list.
 
     """
 
@@ -64,9 +69,10 @@ class ImportedName:
     """A name that stands for something defined in another module.
 
     Attributes:
-        module: Absolute module the name comes from.
-        name: The name inside that module, or ``None`` when the bound name is
-            the module itself (``import os.path as p``).
+        module (str): Absolute module the name comes from.
+        name (str | None): The name inside that module, or ``None`` when the
+            bound
+            name is the module itself (``import os.path as p``).
 
     """
 
@@ -80,19 +86,21 @@ class StubName:
     """One name a stub defines.
 
     Attributes:
-        name: The name.
-        kind: ``function``, ``class``, ``variable``, ``typevar`` or
+        name (str): The name.
+        kind (str): ``function``, ``class``, ``variable``, ``typevar`` or
             ``import``.
-        exported: Whether the name is public.
-        nodes: The definitions in order (several for an overload group).
-        children: For a class, the names defined in its body.
-        imported: Where an ``import`` name comes from.
-        alias_of: The dotted name a plain ``X = Y`` assignment refers to.
-        ambiguous: Whether a branch the evaluator could not decide may have
-            defined it differently or not at all.
-        decorators: Decorator names of a function.
-        bases: Base-class expressions of a class, as text.
-        overloaded: Whether the definitions are an ``@overload`` group.
+        exported (bool): Whether the name is public.
+        nodes (list[AST]): The definitions in order (several for an overload
+            group).
+        children (DictStubName): For a class, the names defined in its body.
+        imported (ImportedName | None): Where an ``import`` name comes from.
+        alias_of (str | None): The dotted name a plain ``X = Y`` assignment
+            refers to.
+        ambiguous (bool): Whether a branch the evaluator could not decide
+            may have defined it differently or not at all.
+        decorators (tuple[str, ...]): Decorator names of a function.
+        bases (tuple[str, ...]): Base-class expressions of a class, as text.
+        overloaded (bool): Whether the definitions are an ``@overload`` group.
 
     """
 
@@ -100,7 +108,7 @@ class StubName:
     kind: str
     exported: bool = True
     nodes: list[AST] = field(default_factory=list)
-    children: dict[str, StubName] = field(default_factory=dict)
+    children: DictStubName = field(default_factory=dict)
     imported: ImportedName | None = None
     alias_of: str | None = None
     ambiguous: bool = False
@@ -115,16 +123,17 @@ class StubModule:
     """The public shape of one stub file.
 
     Attributes:
-        name: Dotted module name.
-        names: Every name the file defines.
-        stars: Modules star-imported (``from m import *``).
-        dunder_all: The literal ``__all__``, or ``None`` when absent.
-        typevars: Names declared as type variables.
+        name (str): Dotted module name.
+        names (DictStubName): Every name the file defines.
+        stars (list[str]): Modules star-imported (``from m import *``).
+        dunder_all (list[str] | None): The literal ``__all__`` , or ``None``
+            when absent.
+        typevars (set[str]): Names declared as type variables.
 
     """
 
     name: str
-    names: dict[str, StubName] = field(default_factory=dict)
+    names: DictStubName = field(default_factory=dict)
     stars: list[str] = field(default_factory=list)
     dunder_all: list[str] | None = None
     typevars: set[str] = field(default_factory=set)
@@ -134,10 +143,10 @@ def _decorators(*, node: FunctionDef | AsyncFunctionDef) -> tuple[str, ...]:
     """Name the decorators of a function.
 
     Args:
-        node: Function definition.
+        node (FunctionDef | AsyncFunctionDef): Function definition.
 
     Returns:
-        Their source text, call arguments dropped.
+        tuple[str, ...]: Their source text, call arguments dropped.
 
     """
     return tuple(
@@ -150,10 +159,11 @@ def _strings(*, node: expr) -> list[str] | None:
     """Read a literal list or tuple of strings.
 
     Args:
-        node: An expression.
+        node (expr): An expression.
 
     Returns:
-        The strings, or ``None`` when it is not such a literal.
+        list[str] | None:
+            The strings, or ``None`` when it is not such a literal.
 
     """
     if not isinstance(node, (List, Tuple)):
@@ -176,9 +186,9 @@ class _Reader:
         """Prepare an empty result.
 
         Args:
-            module: Dotted module name.
-            package: Whether the file is a package's ``__init__.pyi``.
-            target: The environment the branches are decided for.
+            module (str): Dotted module name.
+            package (bool): Whether the file is a package's ``__init__.pyi``.
+            target (Target): The environment the branches are decided for.
 
         """
         self._package: bool = package
@@ -189,10 +199,10 @@ class _Reader:
         """Read the top-level statements.
 
         Args:
-            body: Statements of the module.
+            body (list[stmt]): Statements of the module.
 
         Returns:
-            The finished module, exports decided.
+            StubModule: The finished module, exports decided.
 
         """
         self._block(body=body, scope=self.module.names, undecided=False)
@@ -203,15 +213,15 @@ class _Reader:
         self,
         *,
         body: list[stmt],
-        scope: dict[str, StubName],
+        scope: DictStubName,
         undecided: bool,
     ) -> None:
         """Read statements into a scope.
 
         Args:
-            body: Statements.
-            scope: Names being defined (module or class body).
-            undecided: Whether an undecidable branch encloses the block.
+            body (list[stmt]): Statements.
+            scope (DictStubName): Names being defined (module or class body).
+            undecided (bool): Whether an undecidable branch encloses the block.
 
         """
         for item in body:
@@ -232,15 +242,15 @@ class _Reader:
         self,
         *,
         item: If,
-        scope: dict[str, StubName],
+        scope: DictStubName,
         undecided: bool,
     ) -> None:
         """Read the branch an ``if`` selects, or both when undecidable.
 
         Args:
-            item: The ``if`` statement.
-            scope: Names being defined.
-            undecided: Whether an undecidable branch encloses it.
+            item (If): The ``if`` statement.
+            scope (DictStubName): Names being defined.
+            undecided (bool): Whether an undecidable branch encloses it.
 
         """
         verdict: bool | None = evaluate(test=item.test, target=self._target)
@@ -257,19 +267,19 @@ class _Reader:
     @staticmethod
     def _define(
         *,
-        scope: dict[str, StubName],
+        scope: DictStubName,
         entry: StubName,
         undecided: bool,
     ) -> StubName:
         """Add or replace a name, noting undecided definitions.
 
         Args:
-            scope: Names being defined.
-            entry: The new definition.
-            undecided: Whether it sits in an undecidable branch.
+            scope (DictStubName): Names being defined.
+            entry (StubName): The new definition.
+            undecided (bool): Whether it sits in an undecidable branch.
 
         Returns:
-            The entry now stored.
+            StubName: The entry now stored.
 
         """
         entry.ambiguous = undecided
@@ -280,15 +290,15 @@ class _Reader:
         self,
         *,
         item: FunctionDef | AsyncFunctionDef,
-        scope: dict[str, StubName],
+        scope: DictStubName,
         undecided: bool,
     ) -> None:
         """Read a function, grouping ``@overload`` definitions.
 
         Args:
-            item: The definition.
-            scope: Names being defined.
-            undecided: Whether an undecidable branch encloses it.
+            item (FunctionDef | AsyncFunctionDef): The definition.
+            scope (DictStubName): Names being defined.
+            undecided (bool): Whether an undecidable branch encloses it.
 
         """
         names: tuple[str, ...] = _decorators(node=item)
@@ -314,15 +324,15 @@ class _Reader:
         self,
         *,
         item: ClassDef,
-        scope: dict[str, StubName],
+        scope: DictStubName,
         undecided: bool,
     ) -> None:
         """Read a class and the names in its body.
 
         Args:
-            item: The definition.
-            scope: Names being defined.
-            undecided: Whether an undecidable branch encloses it.
+            item (ClassDef): The definition.
+            scope (DictStubName): Names being defined.
+            undecided (bool): Whether an undecidable branch encloses it.
 
         """
         entry: StubName = StubName(
@@ -338,15 +348,15 @@ class _Reader:
         self,
         *,
         item: Assign | AnnAssign,
-        scope: dict[str, StubName],
+        scope: DictStubName,
         undecided: bool,
     ) -> None:
         """Read an assignment: a variable, alias, type variable or ``__all__``.
 
         Args:
-            item: The statement.
-            scope: Names being defined.
-            undecided: Whether an undecidable branch encloses it.
+            item (Assign | AnnAssign): The statement.
+            scope (DictStubName): Names being defined.
+            undecided (bool): Whether an undecidable branch encloses it.
 
         """
         targets: list[expr] = (
@@ -364,13 +374,14 @@ class _Reader:
                 kind="variable",
                 nodes=[item],
             )
-            if (
-                isinstance(value, Call)
-                and unparse(ast_obj=value.func).split(
-                    sep=".",
-                )[-1]
-                in Constants.type_variables
-            ):
+            callee: str | None = None
+            if isinstance(value, Call):
+                func: expr = value.func
+                if isinstance(func, Attribute):
+                    callee = func.attr
+                elif isinstance(func, Name):
+                    callee = func.id
+            if callee in Constants.type_variables:
                 entry.kind = "typevar"
                 self.module.typevars.add(target.id)
             elif isinstance(value, (Name, Attribute)):
@@ -381,7 +392,7 @@ class _Reader:
         """Read statements that only edit ``__all__``.
 
         Args:
-            item: The statement.
+            item (stmt): The statement.
 
         """
         if (
@@ -405,7 +416,7 @@ class _Reader:
         """Apply ``__all__.extend([...])`` and ``__all__.append("x")``.
 
         Args:
-            call: The method call on ``__all__``.
+            call (Call): The method call on ``__all__``.
 
         """
         if not isinstance(call.func, Attribute) or not call.args:
@@ -426,10 +437,10 @@ class _Reader:
         """Turn a possibly relative ``from`` import into a module name.
 
         Args:
-            node: The statement.
+            node (ImportFrom): The statement.
 
         Returns:
-            The absolute dotted module name.
+            str: The absolute dotted module name.
 
         """
         if node.level == 0:
@@ -444,15 +455,15 @@ class _Reader:
         self,
         *,
         item: Import | ImportFrom,
-        scope: dict[str, StubName],
+        scope: DictStubName,
         undecided: bool,
     ) -> None:
         """Read an import into names that point at their origin.
 
         Args:
-            item: The statement.
-            scope: Names being defined.
-            undecided: Whether an undecidable branch encloses it.
+            item (Import | ImportFrom): The statement.
+            scope (DictStubName): Names being defined.
+            undecided (bool): Whether an undecidable branch encloses it.
 
         """
         if isinstance(item, Import):
@@ -483,7 +494,7 @@ class _Reader:
     def _bind(
         self,
         *,
-        scope: dict[str, StubName],
+        scope: DictStubName,
         bound: str,
         imported: ImportedName,
         exported: bool,
@@ -492,11 +503,11 @@ class _Reader:
         """Record one imported name.
 
         Args:
-            scope: Names being defined.
-            bound: The local name.
-            imported: Where it comes from.
-            exported: Whether the import is written as a re-export.
-            undecided: Whether an undecidable branch encloses it.
+            scope (DictStubName): Names being defined.
+            bound (str): The local name.
+            imported (ImportedName): Where it comes from.
+            exported (bool): Whether the import is written as a re-export.
+            undecided (bool): Whether an undecidable branch encloses it.
 
         """
         entry: StubName = StubName(
@@ -529,13 +540,14 @@ def parse_stub(
     """Read a stub file.
 
     Args:
-        source: The ``.pyi`` text.
-        module: Dotted module name the file defines.
-        package: Whether the file is a package's ``__init__.pyi``.
-        target: The Python version, platform and implementation to read for.
+        source (str): The ``.pyi`` text.
+        module (str): Dotted module name the file defines.
+        package (bool): Whether the file is a package's ``__init__.pyi``.
+        target (Target): The Python version, platform and implementation to
+            read for.
 
     Returns:
-        The module's names, grouped overloads and export decisions.
+        StubModule: The module's names, grouped overloads and export decisions.
 
     """
     return _Reader(module=module, package=package, target=target).read(

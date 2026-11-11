@@ -1,10 +1,10 @@
-"""Regenerate the dashboard block of ``docs/TODO.md``.
+"""Regenerate the dashboard block of ``docs/planning/TODO.md``.
 
 Usage::
 
-    python scripts/todo_index.py docs/TODO.md
+    python -m scripts.todo_update index docs/planning/TODO.md
 
-Every task in ``docs/TODO.md`` has this exact shape::
+Every task in ``docs/planning/TODO.md`` has this exact shape::
 
     ### F-17 — Title
     - **Status:** open
@@ -16,6 +16,7 @@ The script counts them per chapter and rewrites the text between
 ``<!-- dashboard:start -->`` and ``<!-- dashboard:end -->``, and the
 linked task index between ``<!-- index:start -->`` and
 ``<!-- index:end -->``.
+
 """
 
 from __future__ import annotations
@@ -35,15 +36,19 @@ class Constants:
     """Constants for the TODO index script.
 
     Attributes:
-        task: Pattern matching one task heading block.
-        done_row: Pattern matching one dashboard table row.
-        heading_line: Pattern matching one ATX heading line.
-        start: Marker opening the generated dashboard section.
-        end: Marker closing the generated dashboard section.
-        index_start: Marker opening the generated task index.
-        index_end: Marker closing the generated task index.
-        priorities: Priority labels recognised in task headers.
-        chapters: Chapter definitions: number, title, ID prefixes, scope.
+        task (Final[Pattern[str]]): Pattern matching one task heading block.
+        done_row (Final[Pattern[str]]): Pattern matching one dashboard table
+            row.
+        heading_line (Final[Pattern[str]]): Pattern matching one ATX heading
+            line.
+        start (Final[str]): Marker opening the generated dashboard section.
+        end (Final[str]): Marker closing the generated dashboard section.
+        index_start (Final[str]): Marker opening the generated task index.
+        index_end (Final[str]): Marker closing the generated task index.
+        priorities (Final[tuple[str, ...]]): Priority labels recognised in task
+            headers.
+        chapters (Final[tuple[tuple[int,str,tuple[str,...],str],...]]): Chapter
+            definitions: number, title, ID prefixes, scope.
 
     """
 
@@ -76,8 +81,10 @@ class Constants:
             1,
             "Foundations and measurement",
             ("M0", "M1"),
-            "Checker oracle, benchmarks, gold sets: "
-            "how we know a fix is right.",
+            (
+                "Checker oracle, benchmarks, gold sets: how we know a fix "
+                "is right."
+            ),
         ),
         (
             2,
@@ -119,7 +126,7 @@ class Constants:
             8,
             "Ontology and inference core",
             ("M8",),
-            "Rule catalog, predicates, the `_graph` inference engine.",
+            "Rule catalog, predicates, the `graph` inference engine.",
         ),
         (
             9,
@@ -137,7 +144,10 @@ class Constants:
             11,
             "Untyped to typed conversion",
             ("P", "T", "W"),
-            "Converting `dev/untyped.py` into `dev/typed.py` automatically.",
+            (
+                "Converting `fixtures/untyped.py` into "
+                "`fixtures/typed.py` automatically."
+            ),
         ),
         (
             12,
@@ -185,8 +195,10 @@ class Constants:
             21,
             "Risks and contingencies",
             ("R",),
-            "Problems forecast in advance, each "
-            "with detection and mitigation.",
+            (
+                "Problems forecast in advance, each with detection "
+                "and mitigation."
+            ),
         ),
         (
             22,
@@ -202,13 +214,13 @@ class Task:
     """One parsed task.
 
     Attributes:
-        identifier: Stable ID.
-        title: Heading title.
-        done: Whether the task is finished.
-        priority: ``P0``…``P3`` or ``Untriaged``.
-        area: Category.
-        readiness: ``ready``, ``needs recipe`` or ``done``.
-        position: Offset of the task's heading or row in the document.
+        identifier (str): Stable ID.
+        title (str): Heading title.
+        done (bool): Whether the task is finished.
+        priority (str): ``P0``…``P3`` or ``Untriaged``.
+        area (str): Category.
+        readiness (str): ``ready``, ``needs recipe`` or ``done``.
+        position (int): Offset of the task's heading or row in the document.
 
     """
 
@@ -225,23 +237,23 @@ def prefix_of(*, identifier: str) -> str:
     """Return the group prefix of a task ID.
 
     Args:
-        identifier: Task ID such as ``M4-06`` or ``F-12``.
+        identifier (str): Task ID such as ``M4-06`` or ``F-12``.
 
     Returns:
-        Prefix such as ``M4`` or ``F``.
+        str: Prefix such as ``M4`` or ``F``.
 
     """
-    return identifier.split(sep="-")[0]
+    return identifier.split(sep="-", maxsplit=1)[0]
 
 
 def chapter_of(*, identifier: str) -> int:
     """Return the chapter number of a task ID.
 
     Args:
-        identifier: Task ID.
+        identifier (str): Task ID.
 
     Returns:
-        Chapter number, ``12`` for an unknown prefix.
+        int: Chapter number, ``12`` for an unknown prefix.
 
     """
     prefix: str = prefix_of(identifier=identifier)
@@ -251,16 +263,61 @@ def chapter_of(*, identifier: str) -> int:
     return 12
 
 
+def _fenced_spans(*, text: str) -> list[tuple[int, int]]:
+    """Locate fenced code blocks so matches inside them can be skipped.
+
+    Args:
+        text (str): Document text.
+
+    Returns:
+        list[tuple[int, int]]: ``(start, end)`` offsets of each fenced region,
+            in document order.
+
+    """
+    spans: list[tuple[int, int]] = []
+    fenced: bool = False
+    start: int = 0
+    offset: int = 0
+    for line in text.splitlines(keepends=True):
+        if line.strip().startswith(("```", "~~~")):
+            if fenced:
+                spans.append((start, offset))
+            else:
+                start = offset
+            fenced = not fenced
+        offset += len(line)
+    return spans
+
+
+def _outside(*, spans: list[tuple[int, int]], position: int) -> bool:
+    """Tell whether a document offset lies outside every fenced region.
+
+    Args:
+        spans (list[tuple[int, int]]): Fenced regions from
+            :func:`_fenced_spans`.
+        position (int): Character offset of a match.
+
+    Returns:
+        bool: Whether the position is not inside a fence.
+
+    """
+    return all(not start <= position < end for start, end in spans)
+
+
 def parse(*, text: str) -> list[Task]:
     """Read every task from the document.
 
+    Task-shaped text inside fenced code blocks (format examples) is not a
+    task and does not count.
+
     Args:
-        text: Document text.
+        text (str): Document text.
 
     Returns:
-        Tasks in document order.
+        list[Task]: Tasks in document order.
 
     """
+    fenced: list[tuple[int, int]] = _fenced_spans(text=text)
     found: list[Task] = [
         Task(
             identifier=m.group(1),
@@ -272,6 +329,7 @@ def parse(*, text: str) -> list[Task]:
             position=m.start(),
         )
         for m in Constants.task.finditer(string=text)
+        if _outside(spans=fenced, position=m.start())
     ]
     found.extend(
         Task(
@@ -284,6 +342,7 @@ def parse(*, text: str) -> list[Task]:
             position=m.start(),
         )
         for m in Constants.done_row.finditer(string=text)
+        if _outside(spans=fenced, position=m.start())
     )
     return found
 
@@ -292,19 +351,28 @@ def split_tasks(*, text: str) -> dict[str, str]:
     """Cut the document into the text of each task.
 
     Args:
-        text: Document text.
+        text (str): Document text.
 
     Returns:
-        Task body text by ID (heading to the next ``## `` or ``### `` heading).
+        dict[str, str]: Task body text by ID (heading to the
+            next ``## `` or ``### `` heading).
 
     """
+    fenced: list[tuple[int, int]] = _fenced_spans(text=text)
     heads: list[tuple[int, str]] = [
-        (m.start(), m.group(1)) for m in Constants.task.finditer(string=text)
+        (m.start(), m.group(1))
+        for m in Constants.task.finditer(string=text)
+        if _outside(spans=fenced, position=m.start())
     ]
     found: dict[str, str] = {}
     for position, identifier in heads:
         end: int = len(text)
-        for marker in ("\n### ", "\n## "):
+        for marker in (
+            """
+### """,
+            """
+## """,
+        ):
             nxt: int = text.find(marker, position + 1)
             if nxt != -1:
                 end = min(end, nxt)
@@ -316,11 +384,11 @@ def dashboard(*, tasks: list[Task], text_by_task: dict[str, str]) -> str:
     """Render the dashboard.
 
     Args:
-        tasks: Parsed tasks.
-        text_by_task: Task body text by ID.
+        tasks (list[Task]): Parsed tasks.
+        text_by_task (dict[str, str]): Task body text by ID.
 
     Returns:
-        Markdown for the dashboard block.
+        str: Markdown for the dashboard block.
 
     """
     done: int = sum(1 for task in tasks if task.done)
@@ -344,8 +412,8 @@ def dashboard(*, tasks: list[Task], text_by_task: dict[str, str]) -> str:
         f"{full} tasks are fully specified (insights, architecture, "
         "algorithm, performance); "
         f"{sum(1 for t in tasks if t.readiness == 'needs recipe')} "
-        "still need a recipe.** "
-        "Regenerate with `python scripts/todo_index.py docs/TODO.md`.",
+        "still need a recipe.** Regenerate with `python -m "
+        "scripts.todo_update index docs/planning/TODO.md`.",
         "",
         "| # | Chapter | Done | Open | Ready | P0 | P1 |",
         "| ---: | --- | ---: | ---: | ---: | ---: | ---: |",
@@ -384,11 +452,11 @@ def slug(*, text: str) -> str:
     """Return the GitHub-style anchor slug of a heading text.
 
     Args:
-        text: Heading text without the leading ``#`` marks.
+        text (str): Heading text without the leading ``#`` marks.
 
     Returns:
-        Lowercase slug: alphanumerics, ``_`` and ``-`` kept, spaces become
-        ``-``, every other character dropped.
+        str: Lowercase slug: alphanumerics, ``_`` and ``-`` kept, spaces become
+            ``-``, every other character dropped.
 
     """
     kept: str = "".join(
@@ -403,12 +471,13 @@ def anchors(*, text: str) -> list[tuple[int, str]]:
     """Map every heading to its deduplicated anchor slug.
 
     Args:
-        text: Document text.
+        text (str): Document text.
 
     Returns:
-        ``(offset, slug)`` pairs in document order. Headings inside fenced
-        code blocks are skipped, and repeated slugs get ``-1``, ``-2`` …
-        suffixes like GitHub's renderer.
+        list[tuple[int, str]]: ``(offset, slug)`` pairs in document order.
+            Headings
+            inside fenced code blocks are skipped, and repeated slugs
+            get ``-1``, ``-2``… suffixes like GitHub's renderer.
 
     """
     seen: dict[str, int] = {}
@@ -436,14 +505,14 @@ def task_index(*, text: str, tasks: list[Task]) -> str:
     """Render the linked index of every task.
 
     Args:
-        text: Document text, for heading anchors.
-        tasks: Parsed tasks with document positions.
+        text (str): Document text, for heading anchors.
+        tasks (list[Task]): Parsed tasks with document positions.
 
     Returns:
-        Markdown table with one row per task: linked ID, title, priority
-        and a done checkbox. Open tasks link to their own heading; done
-        tasks only exist as ``Completed`` table rows and link to the
-        ``### Completed`` section that holds them.
+        str: Markdown table with one row per task: linked ID, title, priority
+            and a done checkbox. Open tasks link to their own heading; done
+            tasks only exist as ``Completed`` table rows and link to the
+            ``### Completed`` section that holds them.
 
     """
     heads: list[tuple[int, str]] = anchors(text=text)
@@ -468,10 +537,10 @@ def missing_in_matrix(*, text: str) -> list[str]:
     """List task IDs cited in the Accuracy contract that do not exist.
 
     Args:
-        text: Document text.
+        text (str): Document text.
 
     Returns:
-        Unknown IDs, sorted.
+        list[str]: Unknown IDs, sorted.
 
     """
     start: int = text.find("## Accuracy contract")
@@ -493,7 +562,7 @@ def main() -> int:
     """Rewrite the dashboard of the document given as the first argument.
 
     Returns:
-        Zero on success, one when the markers are missing.
+        int: Zero on success, one when the markers are missing.
 
     """
     path: Path = Path(argv[1])

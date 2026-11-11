@@ -6,6 +6,7 @@ call of the function and reports the first argument whose type is provable
 and provably lacks a required member: a builtin value (``"abc"`` has no
 ``read``), ``None``, or an instance of a plain class defined in the module.
 Anything it cannot decide counts as no objection.
+
 """
 
 from __future__ import annotations
@@ -40,8 +41,10 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        passed: Argument origins that carry a caller's value.
-        dynamic: Class members that make attribute lookup unpredictable.
+        passed (Final[frozenset[ArgumentOrigin]]): Argument origins that carry
+            a caller's value.
+        dynamic (Final[frozenset[str]]): Class members that make attribute
+            lookup unpredictable.
 
     """
 
@@ -57,13 +60,13 @@ def _builtin_type(*, text: str) -> type | None:
     """Resolve a proven annotation like ``list[int]`` to its builtin class.
 
     Args:
-        text: Annotation source from the typer.
+        text (str): Annotation source from the typer.
 
     Returns:
-        The class, or ``None`` when it is not a builtin type.
+        type | None: The class, or ``None`` when it is not a builtin type.
 
     """
-    module: ModuleType = __import__("builtins")
+    module: ModuleType = __import__(name="builtins")
     name: str = text.split(sep="[", maxsplit=1)[0]
     return (
         module.__dict__[name]
@@ -79,8 +82,8 @@ def _class_members(*, cls: ClassDef) -> set[str] | None:
         cls: Class definition.
 
     Returns:
-        The member names, or ``None`` when inheritance, decorators or dynamic
-        lookup make the set unknowable.
+        set[str] | None: The member names, or ``None`` when inheritance,
+            decorators or dynamic lookup make the set unknowable.
 
     """
     if cls.bases or cls.keywords or cls.decorator_list:
@@ -112,12 +115,12 @@ def _lacks(
     """Name a required member the argument provably lacks.
 
     Args:
-        value: The argument expression.
-        members: Members the Protocol would require.
-        facts: Resolved imports and the parsed module.
+        value (AST): The argument expression.
+        members (Iterable[str]): Members the Protocol would require.
+        facts (ModuleFacts): Resolved imports and the parsed module.
 
     Returns:
-        The missing member, or ``None`` when nothing is provable.
+        str | None: The missing member, or ``None`` when nothing is provable.
 
     """
     required: list[str] = list(members)
@@ -166,13 +169,13 @@ def call_site_objection(
     """Find a caller whose argument cannot satisfy the required members.
 
     Args:
-        function: The function that owns the parameter.
-        parameter: Parameter name.
-        members: Members the Protocol would require.
-        facts: Resolved imports and the parsed module.
+        function (Function): The function that owns the parameter.
+        parameter (str): Parameter name.
+        members (Iterable[str]): Members the Protocol would require.
+        facts (ModuleFacts): Resolved imports and the parsed module.
 
     Returns:
-        A short description of the first objection, or ``None``.
+        str | None: A short description of the first objection, or ``None``.
 
     """
     if facts.calls is None:

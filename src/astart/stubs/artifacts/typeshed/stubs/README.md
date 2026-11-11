@@ -1,0 +1,216 @@
+# `stubs/`
+
+Provide init pyi content.
+
+<!-- exactus:inventory:start -->
+## Directory contents
+
+### Files
+
+No direct files besides this README.
+
+### Subdirectories
+
+- [`Authlib/`](Authlib/README.md) — Provide init pyi content.
+- [`Deprecated/`](Deprecated/README.md) — Provide init pyi content.
+- [`Flask-Cors/`](Flask-Cors/README.md) — Provide init pyi content.
+- [`Flask-Migrate/`](Flask-Migrate/README.md) — Provide init pyi content.
+- [`Flask-SocketIO/`](Flask-SocketIO/README.md) — Provide init pyi content.
+- [`JACK-Client/`](JACK-Client/README.md) — Provide init pyi content.
+- [`Jetson.GPIO/`](Jetson.GPIO/README.md) — Provide init pyi content.
+- [`Markdown/`](Markdown/README.md) — Provide init pyi content.
+- [`PyAutoGUI/`](PyAutoGUI/README.md) — Provide init pyi content.
+- [`PyMeeus/`](PyMeeus/README.md) — Provide Angle pyi content.
+- [`PyMySQL/`](PyMySQL/README.md) — Provide init pyi content.
+- [`PyScreeze/`](PyScreeze/README.md) — Provide init pyi content.
+- [`PySocks/`](PySocks/README.md) — Provide socks pyi content.
+- [`PyYAML/`](PyYAML/README.md) — Provide init pyi content.
+- [`Pygments/`](Pygments/README.md) — Provide init pyi content.
+- [`RPi.GPIO/`](RPi.GPIO/README.md) — Provide init pyi content.
+- [`Send2Trash/`](Send2Trash/README.md) — Provide init pyi content.
+- [`TgCrypto/`](TgCrypto/README.md) — Provide init pyi content.
+- [`WTForms/`](WTForms/README.md) — Provide init pyi content.
+- [`WebOb/`](WebOb/README.md) — Provide init pyi content.
+- [`WebTest/`](WebTest/README.md) — Provide init pyi content.
+- [`aiofiles/`](aiofiles/README.md) — Provide init pyi content.
+- [`antlr4-python3-runtime/`](antlr4-python3-runtime/README.md) — Provide BufferedTokenStream pyi content.
+- [`assertpy/`](assertpy/README.md) — Provide init pyi content.
+- [`atheris/`](atheris/README.md) — Provide init pyi content.
+- [`auth0-python/`](auth0-python/README.md) — Provide init pyi content.
+- [`aws-xray-sdk/`](aws-xray-sdk/README.md) — Provide init pyi content.
+- [`behave/`](behave/README.md) — Provide init pyi content.
+- [`binaryornot/`](binaryornot/README.md) — Provide init pyi content.
+- [`bleach/`](bleach/README.md) — Provide init pyi content.
+- [`boltons/`](boltons/README.md) — Provide init pyi content.
+- [`braintree/`](braintree/README.md) — Provide init pyi content.
+- [`cachetools/`](cachetools/README.md) — Provide init pyi content.
+- [`capturer/`](capturer/README.md) — Provide capturer pyi content.
+- [`cffi/`](cffi/README.md) — Provide cffi backend pyi content.
+- [`channels/`](channels/README.md) — Provide init pyi content.
+- [`chevron/`](chevron/README.md) — Provide init pyi content.
+- [`click-default-group/`](click-default-group/README.md) — Provide click default group pyi content.
+- [`click-log/`](click-log/README.md) — Provide init pyi content.
+- [`click-shell/`](click-shell/README.md) — Provide init pyi content.
+- [`click-spinner/`](click-spinner/README.md) — Provide init pyi content.
+- [`click-web/`](click-web/README.md) — Provide init pyi content.
+- [`colorama/`](colorama/README.md) — Provide init pyi content.
+- [`colorful/`](colorful/README.md) — Provide init pyi content.
+- [`console-menu/`](console-menu/README.md) — Provide init pyi content.
+- [`convertdate/`](convertdate/README.md) — Provide init pyi content.
+- [`croniter/`](croniter/README.md) — Provide init pyi content.
+- [`datauri/`](datauri/README.md) — Provide init pyi content.
+- [`dateparser/`](dateparser/README.md) — Provide init pyi content.
+- [`decorator/`](decorator/README.md) — Provide decorator pyi content.
+- [`defusedxml/`](defusedxml/README.md) — Provide ElementTree pyi content.
+- [`dirhash/`](dirhash/README.md) — Provide init pyi content.
+- [`django-filter/`](django-filter/README.md) — Provide init pyi content.
+- [`django-import-export/`](django-import-export/README.md) — Provide init pyi content.
+- [`docker/`](docker/README.md) — Provide init pyi content.
+- [`dockerfile-parse/`](dockerfile-parse/README.md) — Provide init pyi content.
+- [`docutils/`](docutils/README.md) — Provide init pyi content.
+- [`editdistance/`](editdistance/README.md) — Provide init pyi content.
+- [`entrypoints/`](entrypoints/README.md) — Provide entrypoints pyi content.
+- [`ephem/`](ephem/README.md) — Provide init pyi content.
+- [`et_xmlfile/`](et_xmlfile/README.md) — Provide init pyi content.
+- [`fanstatic/`](fanstatic/README.md) — Provide init pyi content.
+- [`first/`](first/README.md) — Provide first pyi content.
+- [`flake8/`](flake8/README.md) — Provide init pyi content.
+- [`flake8-bugbear/`](flake8-bugbear/README.md) — Provide bugbear pyi content.
+- [`flake8-builtins/`](flake8-builtins/README.md) — Provide flake8 builtins pyi content.
+- [`flake8-docstrings/`](flake8-docstrings/README.md) — Provide flake8 docstrings pyi content.
+- [`flake8-rst-docstrings/`](flake8-rst-docstrings/README.md) — Provide flake8 rst docstrings pyi content.
+- [`flake8-simplify/`](flake8-simplify/README.md) — Provide init pyi content.
+- [`flake8-typing-imports/`](flake8-typing-imports/README.md) — Provide flake8 typing imports pyi content.
+- [`fpdf2/`](fpdf2/README.md) — Provide init pyi content.
+- [`gdb/`](gdb/README.md) — Provide FrameDecorator pyi content.
+- [`geopandas/`](geopandas/README.md) — Provide init pyi content.
+- [`gevent/`](gevent/README.md) — Provide init pyi content.
+- [`google-cloud-ndb/`](google-cloud-ndb/README.md) — Provide init pyi content.
+- [`greenlet/`](greenlet/README.md) — Provide init pyi content.
+- [`grpcio/`](grpcio/README.md) — Provide init pyi content.
+- [`grpcio-channelz/`](grpcio-channelz/README.md) — Provide init pyi content.
+- [`grpcio-health-checking/`](grpcio-health-checking/README.md) — Provide init pyi content.
+- [`grpcio-reflection/`](grpcio-reflection/README.md) — Provide init pyi content.
+- [`grpcio-status/`](grpcio-status/README.md) — Provide init pyi content.
+- [`gunicorn/`](gunicorn/README.md) — Provide init pyi content.
+- [`hdbcli/`](hdbcli/README.md) — Provide init pyi content.
+- [`hnswlib/`](hnswlib/README.md) — Provide hnswlib pyi content.
+- [`html5lib/`](html5lib/README.md) — Provide init pyi content.
+- [`httplib2/`](httplib2/README.md) — Provide init pyi content.
+- [`hvac/`](hvac/README.md) — Provide init pyi content.
+- [`ibm-db/`](ibm-db/README.md) — Provide ibm db pyi content.
+- [`icalendar/`](icalendar/README.md) — Provide init pyi content.
+- [`inifile/`](inifile/README.md) — Provide inifile pyi content.
+- [`jmespath/`](jmespath/README.md) — Provide init pyi content.
+- [`jsonnet/`](jsonnet/README.md) — Provide jsonnet pyi content.
+- [`jsonschema/`](jsonschema/README.md) — Provide init pyi content.
+- [`jwcrypto/`](jwcrypto/README.md) — Provide init pyi content.
+- [`kafka-python/`](kafka-python/README.md) — Provide init pyi content.
+- [`keyboard/`](keyboard/README.md) — Provide init pyi content.
+- [`ldap3/`](ldap3/README.md) — Provide init pyi content.
+- [`lunardate/`](lunardate/README.md) — Provide lunardate pyi content.
+- [`lupa/`](lupa/README.md) — Provide init pyi content.
+- [`lzstring/`](lzstring/README.md) — Provide init pyi content.
+- [`m3u8/`](m3u8/README.md) — Provide init pyi content.
+- [`mock/`](mock/README.md) — Provide init pyi content.
+- [`mypy-extensions/`](mypy-extensions/README.md) — Provide mypy extensions pyi content.
+- [`mysqlclient/`](mysqlclient/README.md) — Provide init pyi content.
+- [`nanoid/`](nanoid/README.md) — Provide init pyi content.
+- [`nanoleafapi/`](nanoleafapi/README.md) — Provide init pyi content.
+- [`netaddr/`](netaddr/README.md) — Provide init pyi content.
+- [`netifaces/`](netifaces/README.md) — Provide netifaces pyi content.
+- [`networkx/`](networkx/README.md) — Provide init pyi content.
+- [`oauthlib/`](oauthlib/README.md) — Provide init pyi content.
+- [`objgraph/`](objgraph/README.md) — Provide objgraph pyi content.
+- [`olefile/`](olefile/README.md) — Provide init pyi content.
+- [`openpyxl/`](openpyxl/README.md) — Provide init pyi content.
+- [`opentracing/`](opentracing/README.md) — Provide init pyi content.
+- [`paramiko/`](paramiko/README.md) — Provide init pyi content.
+- [`parsimonious/`](parsimonious/README.md) — Provide init pyi content.
+- [`passpy/`](passpy/README.md) — Provide init pyi content.
+- [`peewee/`](peewee/README.md) — Provide peewee pyi content.
+- [`pep8-naming/`](pep8-naming/README.md) — Provide pep8ext naming pyi content.
+- [`pexpect/`](pexpect/README.md) — Provide ANSI pyi content.
+- [`pika/`](pika/README.md) — Provide init pyi content.
+- [`polib/`](polib/README.md) — Provide polib pyi content.
+- [`pony/`](pony/README.md) — Provide init pyi content.
+- [`portpicker/`](portpicker/README.md) — Provide portpicker pyi content.
+- [`protobuf/`](protobuf/README.md) — Provide message pyi content.
+- [`psutil/`](psutil/README.md) — Provide init pyi content.
+- [`psycopg2/`](psycopg2/README.md) — Provide init pyi content.
+- [`punq/`](punq/README.md) — Provide init pyi content.
+- [`pyasn1/`](pyasn1/README.md) — Provide init pyi content.
+- [`pyaudio/`](pyaudio/README.md) — Provide pyaudio pyi content.
+- [`pycocotools/`](pycocotools/README.md) — Provide init pyi content.
+- [`pycurl/`](pycurl/README.md) — Provide pycurl pyi content.
+- [`pyfarmhash/`](pyfarmhash/README.md) — Provide farmhash pyi content.
+- [`pyflakes/`](pyflakes/README.md) — Provide init pyi content.
+- [`pyinstaller/`](pyinstaller/README.md) — Provide init pyi content.
+- [`pyjks/`](pyjks/README.md) — Provide init pyi content.
+- [`pyluach/`](pyluach/README.md) — Provide init pyi content.
+- [`pynput/`](pynput/README.md) — Provide init pyi content.
+- [`pyperclip/`](pyperclip/README.md) — Provide init pyi content.
+- [`pyphen/`](pyphen/README.md) — Provide init pyi content.
+- [`pyserial/`](pyserial/README.md) — Provide init pyi content.
+- [`pytest-lazy-fixture/`](pytest-lazy-fixture/README.md) — Provide pytest lazyfixture pyi content.
+- [`python-crontab/`](python-crontab/README.md) — Provide cronlog pyi content.
+- [`python-dateutil/`](python-dateutil/README.md) — Provide init pyi content.
+- [`python-http-client/`](python-http-client/README.md) — Provide init pyi content.
+- [`python-jenkins/`](python-jenkins/README.md) — Provide init pyi content.
+- [`python-jose/`](python-jose/README.md) — Provide init pyi content.
+- [`python-nmap/`](python-nmap/README.md) — Provide init pyi content.
+- [`python-xlib/`](python-xlib/README.md) — Provide X pyi content.
+- [`pytz/`](pytz/README.md) — Provide init pyi content.
+- [`pywin32/`](pywin32/README.md) — Provide win32typing pyi content.
+- [`pyxdg/`](pyxdg/README.md) — Provide BaseDirectory pyi content.
+- [`qrbill/`](qrbill/README.md) — Provide init pyi content.
+- [`qrcode/`](qrcode/README.md) — Provide LUT pyi content.
+- [`ratelimit/`](ratelimit/README.md) — Provide init pyi content.
+- [`regex/`](regex/README.md) — Provide init pyi content.
+- [`reportlab/`](reportlab/README.md) — Provide init pyi content.
+- [`requests/`](requests/README.md) — Provide init pyi content.
+- [`requests-oauthlib/`](requests-oauthlib/README.md) — Provide init pyi content.
+- [`resampy/`](resampy/README.md) — Provide init pyi content.
+- [`retry/`](retry/README.md) — Provide init pyi content.
+- [`rfc3339-validator/`](rfc3339-validator/README.md) — Provide rfc3339 validator pyi content.
+- [`s2clientprotocol/`](s2clientprotocol/README.md) — Provide build pyi content.
+- [`scp/`](scp/README.md) — Provide scp pyi content.
+- [`seaborn/`](seaborn/README.md) — Provide init pyi content.
+- [`setuptools/`](setuptools/README.md) — Provide init pyi content.
+- [`shapely/`](shapely/README.md) — Provide init pyi content.
+- [`simple-websocket/`](simple-websocket/README.md) — Provide init pyi content.
+- [`simplejson/`](simplejson/README.md) — Provide init pyi content.
+- [`singledispatch/`](singledispatch/README.md) — Provide singledispatch pyi content.
+- [`six/`](six/README.md) — Provide init pyi content.
+- [`slumber/`](slumber/README.md) — Provide init pyi content.
+- [`str2bool/`](str2bool/README.md) — Provide init pyi content.
+- [`tabulate/`](tabulate/README.md) — Provide init pyi content.
+- [`tensorflow/`](tensorflow/README.md) — Provide init pyi content.
+- [`tinycss2/`](tinycss2/README.md) — Provide init pyi content.
+- [`toml/`](toml/README.md) — Provide init pyi content.
+- [`toposort/`](toposort/README.md) — Provide toposort pyi content.
+- [`tqdm/`](tqdm/README.md) — Provide init pyi content.
+- [`translationstring/`](translationstring/README.md) — Provide init pyi content.
+- [`ttkthemes/`](ttkthemes/README.md) — Provide init pyi content.
+- [`tzdata/`](tzdata/README.md) — Provide init pyi content.
+- [`uWSGI/`](uWSGI/README.md) — Provide uwsgi pyi content.
+- [`unidiff/`](unidiff/README.md) — Provide init pyi content.
+- [`untangle/`](untangle/README.md) — Provide untangle pyi content.
+- [`usersettings/`](usersettings/README.md) — Provide usersettings pyi content.
+- [`vobject/`](vobject/README.md) — Provide init pyi content.
+- [`waitress/`](waitress/README.md) — Provide init pyi content.
+- [`watchpoints/`](watchpoints/README.md) — Provide init pyi content.
+- [`webencodings/`](webencodings/README.md) — Provide init pyi content.
+- [`whatthepatch/`](whatthepatch/README.md) — Provide init pyi content.
+- [`workalendar/`](workalendar/README.md) — Provide init pyi content.
+- [`wurlitzer/`](wurlitzer/README.md) — Provide wurlitzer pyi content.
+- [`www-authenticate/`](www-authenticate/README.md) — Provide www authenticate pyi content.
+- [`xdgenvpy/`](xdgenvpy/README.md) — Provide init pyi content.
+- [`xlrd/`](xlrd/README.md) — Provide init pyi content.
+- [`xmldiff/`](xmldiff/README.md) — Provide init pyi content.
+- [`xmltodict/`](xmltodict/README.md) — Provide xmltodict pyi content.
+- [`yt-dlp/`](yt-dlp/README.md) — Provide YoutubeDL pyi content.
+- [`zstd/`](zstd/README.md) — Provide zstd pyi content.
+- [`zxcvbn/`](zxcvbn/README.md) — Provide init pyi content.
+
+<!-- exactus:inventory:end -->

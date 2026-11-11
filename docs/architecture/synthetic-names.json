@@ -1,0 +1,1010 @@
+{
+  "source_before_sha256": "80276eedf78613e5246e49683f74d47ec6513aeef951b8f123d77d724a1b7a8b",
+  "source_after_sha256": "7d6e30c119b23def0605b0bc0a9a8f9e864efb76692ef44c0ee9ef3054f258a6",
+  "policy": "Manual curated reference; structural aliases and capability-based protocol names are expected synthesis targets. This inventory does not claim the automatic optimizer already reproduces every declaration.",
+  "runtime_structure": "Not revalidated by this inventory refresh; reference changes are restricted to typing declarations and annotations.",
+  "declarations": [
+    {
+      "kind": "protocol",
+      "old": "NodeReference",
+      "new": "SupportsMetadataAndName",
+      "members": [
+        "metadata",
+        "name"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsUpdate",
+      "new": "SupportsUpdate",
+      "members": [
+        "update"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsExecuteInt",
+      "new": "SupportsExecute",
+      "members": [
+        "execute"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsAction",
+      "new": "SupportsAction",
+      "members": [
+        "action"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "InstanceWithClassMethods",
+      "new": "SupportsClassMethodAndInstanceMethodAndStaticMethod",
+      "members": [
+        "class_method",
+        "instance_method",
+        "static_method"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "InstanceWithIntegerProperty",
+      "new": "SupportsValue",
+      "members": [
+        "value"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsMatrixMultiplication",
+      "new": "SupportsMatrixMultiplicationAndData",
+      "members": [
+        "__matmul__",
+        "data"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "WrappedInstance",
+      "new": "SupportsInstance",
+      "members": [
+        "instance"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsPathJoin",
+      "new": "SupportsJoin",
+      "members": [
+        "join"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsOsPathModule",
+      "new": "SupportsNameAndPath",
+      "members": [
+        "__name__",
+        "path"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "AppliesCallable",
+      "new": "SupportsCall",
+      "members": [
+        "__call__"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "OptionalValueFunction",
+      "new": "SupportsCall2",
+      "members": [
+        "__call__"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsInitializedByMeta",
+      "new": "SupportsInitializedByMeta",
+      "members": [
+        "initialized_by_meta"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsNewMethod",
+      "new": "SupportsNewMethod",
+      "members": [
+        "new_method"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "SupportsVector",
+      "new": "SupportsAdditionAndXAndY",
+      "members": [
+        "__add__",
+        "x",
+        "y"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "LocalMultiplierProtocol",
+      "new": "SupportsApplyAndOffset",
+      "members": [
+        "apply",
+        "offset"
+      ]
+    },
+    {
+      "kind": "protocol",
+      "old": "LocalMultiplierFactory",
+      "new": "SupportsCallAndFromValues",
+      "members": [
+        "__call__",
+        "from_values"
+      ]
+    },
+    {
+      "kind": "alias",
+      "name": "StrOrBufferOrSupportsIntOrSupportsIndex",
+      "parameters": [],
+      "body": "str | Buffer | SupportsInt | SupportsIndex",
+      "source_line": 89
+    },
+    {
+      "kind": "alias",
+      "name": "ListInt",
+      "parameters": [],
+      "body": "list[int]",
+      "source_line": 92
+    },
+    {
+      "kind": "alias",
+      "name": "DictInt",
+      "parameters": [],
+      "body": "dict[str, int]",
+      "source_line": 93
+    },
+    {
+      "kind": "alias",
+      "name": "ListIntOrDictIntOrStrOrInt",
+      "parameters": [],
+      "body": "ListInt | DictInt | str | int",
+      "source_line": 94
+    },
+    {
+      "kind": "alias",
+      "name": "CallableSequenceSequenceIntListInt",
+      "parameters": [],
+      "body": "Callable[[SequenceSequenceInt], ListInt]",
+      "source_line": 95
+    },
+    {
+      "kind": "alias",
+      "name": "DictObject",
+      "parameters": [],
+      "body": "dict[str, object]",
+      "source_line": 98
+    },
+    {
+      "kind": "alias",
+      "name": "TupleExtendedResultListIntStrIntBool",
+      "parameters": [],
+      "body": "tuple['ExtendedResult[ListInt]', str, int, bool]",
+      "source_line": 99
+    },
+    {
+      "kind": "alias",
+      "name": "MappingStrObjectOrSequenceObjectOrNone",
+      "parameters": [],
+      "body": "MappingStrObject | SequenceValue[object] | None",
+      "source_line": 102
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntIntOrListObjectOrDictObjectOrStrOrObject",
+      "parameters": [],
+      "body": "TupleIntVariadic | ListObject | DictObject | str | object",
+      "source_line": 105
+    },
+    {
+      "kind": "alias",
+      "name": "MutableMappingStrObject",
+      "parameters": [],
+      "body": "MutableMapping[str, object]",
+      "source_line": 108
+    },
+    {
+      "kind": "alias",
+      "name": "ListStr",
+      "parameters": [],
+      "body": "list[str]",
+      "source_line": 112
+    },
+    {
+      "kind": "alias",
+      "name": "ListObject",
+      "parameters": [],
+      "body": "list[object]",
+      "source_line": 113
+    },
+    {
+      "kind": "alias",
+      "name": "SetInt",
+      "parameters": [],
+      "body": "set[int]",
+      "source_line": 114
+    },
+    {
+      "kind": "alias",
+      "name": "SetBool",
+      "parameters": [],
+      "body": "set[bool]",
+      "source_line": 115
+    },
+    {
+      "kind": "alias",
+      "name": "TypeObject",
+      "parameters": [],
+      "body": "type[object]",
+      "source_line": 116
+    },
+    {
+      "kind": "alias",
+      "name": "TypeObjectOrNone",
+      "parameters": [],
+      "body": "TypeObject | None",
+      "source_line": 117
+    },
+    {
+      "kind": "alias",
+      "name": "TupleTypeObjectVariadic",
+      "parameters": [],
+      "body": "tuple[TypeObject, ...]",
+      "source_line": 118
+    },
+    {
+      "kind": "alias",
+      "name": "IntOrStr",
+      "parameters": [],
+      "body": "int | str",
+      "source_line": 119
+    },
+    {
+      "kind": "alias",
+      "name": "IntOrNone",
+      "parameters": [],
+      "body": "int | None",
+      "source_line": 120
+    },
+    {
+      "kind": "alias",
+      "name": "StrOrNone",
+      "parameters": [],
+      "body": "str | None",
+      "source_line": 121
+    },
+    {
+      "kind": "alias",
+      "name": "IntOrFloat",
+      "parameters": [],
+      "body": "int | float",
+      "source_line": 122
+    },
+    {
+      "kind": "alias",
+      "name": "IntOrStrOrNone",
+      "parameters": [],
+      "body": "IntOrStr | None",
+      "source_line": 123
+    },
+    {
+      "kind": "alias",
+      "name": "StrOrBoolOrListInt",
+      "parameters": [],
+      "body": "str | bool | ListInt",
+      "source_line": 124
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntVariadic",
+      "parameters": [],
+      "body": "tuple[int, ...]",
+      "source_line": 125
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntStr",
+      "parameters": [],
+      "body": "tuple[int, str]",
+      "source_line": 126
+    },
+    {
+      "kind": "alias",
+      "name": "TupleStrInt",
+      "parameters": [],
+      "body": "tuple[str, int]",
+      "source_line": 127
+    },
+    {
+      "kind": "alias",
+      "name": "TupleStrVariadic",
+      "parameters": [],
+      "body": "tuple[str, ...]",
+      "source_line": 128
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntVariadicStr",
+      "parameters": [],
+      "body": "tuple[*TupleIntVariadic, str]",
+      "source_line": 129
+    },
+    {
+      "kind": "alias",
+      "name": "TupleBoolVariadic",
+      "parameters": [],
+      "body": "tuple[bool, ...]",
+      "source_line": 130
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntOrNoneVariadic",
+      "parameters": [],
+      "body": "tuple[IntOrNone, ...]",
+      "source_line": 131
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntOrNoneStrOrNone",
+      "parameters": [],
+      "body": "tuple[IntOrNone, StrOrNone]",
+      "source_line": 132
+    },
+    {
+      "kind": "alias",
+      "name": "ListTupleIntVariadic",
+      "parameters": [],
+      "body": "list[TupleIntVariadic]",
+      "source_line": 133
+    },
+    {
+      "kind": "alias",
+      "name": "ListTupleIntStr",
+      "parameters": [],
+      "body": "list[TupleIntStr]",
+      "source_line": 134
+    },
+    {
+      "kind": "alias",
+      "name": "ListTupleIntOrNoneStrOrNone",
+      "parameters": [],
+      "body": "list[TupleIntOrNoneStrOrNone]",
+      "source_line": 135
+    },
+    {
+      "kind": "alias",
+      "name": "TupleListIntVariadic",
+      "parameters": [],
+      "body": "tuple[ListInt, ...]",
+      "source_line": 136
+    },
+    {
+      "kind": "alias",
+      "name": "TupleDictIntVariadic",
+      "parameters": [],
+      "body": "tuple[DictInt, ...]",
+      "source_line": 137
+    },
+    {
+      "kind": "alias",
+      "name": "TupleListStrVariadic",
+      "parameters": [],
+      "body": "tuple[ListStr, ...]",
+      "source_line": 138
+    },
+    {
+      "kind": "alias",
+      "name": "TupleSetIntVariadic",
+      "parameters": [],
+      "body": "tuple[SetInt, ...]",
+      "source_line": 139
+    },
+    {
+      "kind": "alias",
+      "name": "DictListInt",
+      "parameters": [],
+      "body": "dict[str, ListInt]",
+      "source_line": 140
+    },
+    {
+      "kind": "alias",
+      "name": "DictIntInt",
+      "parameters": [],
+      "body": "dict[int, int]",
+      "source_line": 141
+    },
+    {
+      "kind": "alias",
+      "name": "DictStr",
+      "parameters": [],
+      "body": "dict[str, str]",
+      "source_line": 142
+    },
+    {
+      "kind": "alias",
+      "name": "DictTupleIntVariadic",
+      "parameters": [],
+      "body": "dict[str, TupleIntVariadic]",
+      "source_line": 143
+    },
+    {
+      "kind": "alias",
+      "name": "DictDictTupleIntVariadic",
+      "parameters": [],
+      "body": "dict[str, DictTupleIntVariadic]",
+      "source_line": 144
+    },
+    {
+      "kind": "alias",
+      "name": "MappingStrObject",
+      "parameters": [],
+      "body": "Mapping[str, object]",
+      "source_line": 145
+    },
+    {
+      "kind": "alias",
+      "name": "SequenceInt",
+      "parameters": [],
+      "body": "Sequence[int]",
+      "source_line": 146
+    },
+    {
+      "kind": "alias",
+      "name": "SequenceStr",
+      "parameters": [],
+      "body": "Sequence[str]",
+      "source_line": 147
+    },
+    {
+      "kind": "alias",
+      "name": "SequenceSequenceInt",
+      "parameters": [],
+      "body": "Sequence[SequenceInt]",
+      "source_line": 148
+    },
+    {
+      "kind": "alias",
+      "name": "CallableIntInt",
+      "parameters": [],
+      "body": "Callable[[int], int]",
+      "source_line": 149
+    },
+    {
+      "kind": "alias",
+      "name": "CallableIntIntInt",
+      "parameters": [],
+      "body": "Callable[[int, int], int]",
+      "source_line": 150
+    },
+    {
+      "kind": "alias",
+      "name": "CallableVariadicInt",
+      "parameters": [],
+      "body": "Callable[..., int]",
+      "source_line": 151
+    },
+    {
+      "kind": "alias",
+      "name": "CallableStr",
+      "parameters": [],
+      "body": "Callable[[], str]",
+      "source_line": 152
+    },
+    {
+      "kind": "alias",
+      "name": "CallableNone",
+      "parameters": [],
+      "body": "Callable[[], None]",
+      "source_line": 153
+    },
+    {
+      "kind": "alias",
+      "name": "AwaitableInt",
+      "parameters": [],
+      "body": "Awaitable[int]",
+      "source_line": 154
+    },
+    {
+      "kind": "alias",
+      "name": "GeneratorInt",
+      "parameters": [],
+      "body": "Generator[int]",
+      "source_line": 155
+    },
+    {
+      "kind": "alias",
+      "name": "GeneratorIntIntOrStrOrNoneInt",
+      "parameters": [],
+      "body": "Generator[int, IntOrStrOrNone, int]",
+      "source_line": 156
+    },
+    {
+      "kind": "alias",
+      "name": "DequeInt",
+      "parameters": [],
+      "body": "deque[int]",
+      "source_line": 157
+    },
+    {
+      "kind": "alias",
+      "name": "CounterInt",
+      "parameters": [],
+      "body": "Counter[int]",
+      "source_line": 158
+    },
+    {
+      "kind": "alias",
+      "name": "OrderedDictStrInt",
+      "parameters": [],
+      "body": "OrderedDict[str, int]",
+      "source_line": 159
+    },
+    {
+      "kind": "alias",
+      "name": "DefaultdictStrInt",
+      "parameters": [],
+      "body": "defaultdict[str, int]",
+      "source_line": 160
+    },
+    {
+      "kind": "alias",
+      "name": "DefaultdictStrListInt",
+      "parameters": [],
+      "body": "defaultdict[str, ListInt]",
+      "source_line": 161
+    },
+    {
+      "kind": "alias",
+      "name": "DefaultdictStrDefaultdictStrListInt",
+      "parameters": [],
+      "body": "defaultdict[str, DefaultdictStrListInt]",
+      "source_line": 162
+    },
+    {
+      "kind": "alias",
+      "name": "CallableParametersToResult",
+      "parameters": [
+        "Parameters",
+        "Result"
+      ],
+      "body": "Callable[Parameters, Result]",
+      "source_line": 168
+    },
+    {
+      "kind": "alias",
+      "name": "CallableValueToResult",
+      "parameters": [
+        "Value",
+        "Result"
+      ],
+      "body": "Callable[[Value], Result]",
+      "source_line": 171
+    },
+    {
+      "kind": "alias",
+      "name": "ListValue",
+      "parameters": [
+        "Value"
+      ],
+      "body": "list[Value]",
+      "source_line": 172
+    },
+    {
+      "kind": "alias",
+      "name": "SequenceValue",
+      "parameters": [
+        "Value"
+      ],
+      "body": "Sequence[Value]",
+      "source_line": 173
+    },
+    {
+      "kind": "alias",
+      "name": "MappingValueToResult",
+      "parameters": [
+        "Value",
+        "Result"
+      ],
+      "body": "Mapping[Value, Result]",
+      "source_line": 174
+    },
+    {
+      "kind": "alias",
+      "name": "TypeValue",
+      "parameters": [
+        "Value"
+      ],
+      "body": "type[Value]",
+      "source_line": 175
+    },
+    {
+      "kind": "alias",
+      "name": "TupleValueVariadic",
+      "parameters": [
+        "Value"
+      ],
+      "body": "tuple[Value, ...]",
+      "source_line": 176
+    },
+    {
+      "kind": "alias",
+      "name": "ValueOrNone",
+      "parameters": [
+        "Value"
+      ],
+      "body": "Value | None",
+      "source_line": 177
+    },
+    {
+      "kind": "alias",
+      "name": "ValueOrInt",
+      "parameters": [
+        "Value"
+      ],
+      "body": "Value | int",
+      "source_line": 178
+    },
+    {
+      "kind": "alias",
+      "name": "ValueOrIntOrStr",
+      "parameters": [
+        "Value"
+      ],
+      "body": "Value | IntOrStr",
+      "source_line": 179
+    },
+    {
+      "kind": "alias",
+      "name": "ValueOrListObject",
+      "parameters": [
+        "Value"
+      ],
+      "body": "Value | ListObject",
+      "source_line": 180
+    },
+    {
+      "kind": "alias",
+      "name": "StrOrValue",
+      "parameters": [
+        "Value"
+      ],
+      "body": "str | Value",
+      "source_line": 181
+    },
+    {
+      "kind": "alias",
+      "name": "StrOrValueOrDictObject",
+      "parameters": [
+        "Value"
+      ],
+      "body": "StrOrValue[Value] | DictObject",
+      "source_line": 182
+    },
+    {
+      "kind": "alias",
+      "name": "ValueOrOther",
+      "parameters": [
+        "Value",
+        "Other"
+      ],
+      "body": "Value | Other",
+      "source_line": 183
+    },
+    {
+      "kind": "alias",
+      "name": "ValueOrOtherOrNone",
+      "parameters": [
+        "Value",
+        "Other"
+      ],
+      "body": "ValueOrOther[Value, Other] | None",
+      "source_line": 184
+    },
+    {
+      "kind": "alias",
+      "name": "TupleStrValue",
+      "parameters": [
+        "Value"
+      ],
+      "body": "tuple[str, Value]",
+      "source_line": 185
+    },
+    {
+      "kind": "alias",
+      "name": "ObjectOrNone",
+      "parameters": [],
+      "body": "object | None",
+      "source_line": 188
+    },
+    {
+      "kind": "alias",
+      "name": "DictObjectOrNone",
+      "parameters": [],
+      "body": "DictObject | None",
+      "source_line": 189
+    },
+    {
+      "kind": "alias",
+      "name": "DictRegistryMeta",
+      "parameters": [],
+      "body": "dict[str, RegistryMeta]",
+      "source_line": 190
+    },
+    {
+      "kind": "alias",
+      "name": "StrOrBuilderStructured",
+      "parameters": [],
+      "body": "str | BuilderStructured",
+      "source_line": 191
+    },
+    {
+      "kind": "alias",
+      "name": "StrOrDictStr",
+      "parameters": [],
+      "body": "str | DictStr",
+      "source_line": 192
+    },
+    {
+      "kind": "alias",
+      "name": "ListRecursiveChild",
+      "parameters": [],
+      "body": "list[RecursiveChild]",
+      "source_line": 193
+    },
+    {
+      "kind": "alias",
+      "name": "ListNormalizedRow",
+      "parameters": [],
+      "body": "list[NormalizedRow]",
+      "source_line": 194
+    },
+    {
+      "kind": "alias",
+      "name": "ListException",
+      "parameters": [],
+      "body": "list[Exception]",
+      "source_line": 195
+    },
+    {
+      "kind": "alias",
+      "name": "ListListInt",
+      "parameters": [],
+      "body": "list[ListInt]",
+      "source_line": 196
+    },
+    {
+      "kind": "alias",
+      "name": "DescriptorWithOwnerCacheInt",
+      "parameters": [],
+      "body": "DescriptorWithOwnerCache[int]",
+      "source_line": 197
+    },
+    {
+      "kind": "alias",
+      "name": "TypeAbstractBase",
+      "parameters": [],
+      "body": "type[AbstractBase]",
+      "source_line": 198
+    },
+    {
+      "kind": "alias",
+      "name": "TypeSupportsValue",
+      "parameters": [],
+      "body": "type[SupportsValue]",
+      "source_line": 199
+    },
+    {
+      "kind": "alias",
+      "name": "TypeSupportsClassMethods",
+      "parameters": [],
+      "body": "type[SupportsClassMethodAndInstanceMethodAndStaticMethod]",
+      "source_line": 200
+    },
+    {
+      "kind": "alias",
+      "name": "CallableIntOrStrToIntOrStr",
+      "parameters": [],
+      "body": "Callable[[IntOrStr], IntOrStr]",
+      "source_line": 203
+    },
+    {
+      "kind": "alias",
+      "name": "CallablePayloadInt",
+      "parameters": [],
+      "body": "CallablePayload[int]",
+      "source_line": 204
+    },
+    {
+      "kind": "alias",
+      "name": "CallablePayloadStr",
+      "parameters": [],
+      "body": "CallablePayload[str]",
+      "source_line": 205
+    },
+    {
+      "kind": "alias",
+      "name": "IntOrStrOrCallablePayloadInt",
+      "parameters": [],
+      "body": "IntOrStr | CallablePayloadInt",
+      "source_line": 206
+    },
+    {
+      "kind": "alias",
+      "name": "IntOrStrOrCallablePayloadStr",
+      "parameters": [],
+      "body": "IntOrStr | CallablePayloadStr",
+      "source_line": 207
+    },
+    {
+      "kind": "alias",
+      "name": "HybridContainerIntOrFloatStrOrBoolOrListInt",
+      "parameters": [],
+      "body": "HybridContainer[IntOrFloat, StrOrBoolOrListInt]",
+      "source_line": 208
+    },
+    {
+      "kind": "alias",
+      "name": "TupleListTupleIntVariadicVariadic",
+      "parameters": [],
+      "body": "tuple[ListTupleIntVariadic, ...]",
+      "source_line": 211
+    },
+    {
+      "kind": "alias",
+      "name": "TupleAsyncPayloadListInt",
+      "parameters": [],
+      "body": "tuple[AsyncPayload, ListInt]",
+      "source_line": 212
+    },
+    {
+      "kind": "alias",
+      "name": "TupleListIntListStr",
+      "parameters": [],
+      "body": "tuple[ListInt, ListStr]",
+      "source_line": 213
+    },
+    {
+      "kind": "alias",
+      "name": "TupleListIntIntVariadic",
+      "parameters": [],
+      "body": "tuple[ListInt, *TupleIntVariadic]",
+      "source_line": 214
+    },
+    {
+      "kind": "alias",
+      "name": "TupleDefaultdictStrIntListStr",
+      "parameters": [],
+      "body": "tuple[DefaultdictStrInt, ListStr]",
+      "source_line": 215
+    },
+    {
+      "kind": "alias",
+      "name": "TupleListIntDictIntIntGeneratorInt",
+      "parameters": [],
+      "body": "tuple[ListInt, DictIntInt, GeneratorInt]",
+      "source_line": 216
+    },
+    {
+      "kind": "alias",
+      "name": "TupleDefaultdictStrDefaultdictStrListIntDictDictTupleIntVariadic",
+      "parameters": [],
+      "body": "tuple[DefaultdictStrDefaultdictStrListInt, DictDictTupleIntVariadic]",
+      "source_line": 219
+    },
+    {
+      "kind": "alias",
+      "name": "TupleListNormalizedRowDictListInt",
+      "parameters": [],
+      "body": "tuple[ListNormalizedRow, DictListInt]",
+      "source_line": 222
+    },
+    {
+      "kind": "alias",
+      "name": "TupleBuilderStructuredStr",
+      "parameters": [],
+      "body": "tuple[BuilderStructured, str]",
+      "source_line": 223
+    },
+    {
+      "kind": "alias",
+      "name": "TupleDescriptorSummaryIntStr",
+      "parameters": [],
+      "body": "tuple[DescriptorSummary, int, str]",
+      "source_line": 224
+    },
+    {
+      "kind": "alias",
+      "name": "TupleRegistryItemVariadicListStr",
+      "parameters": [],
+      "body": "tuple[*TupleValueVariadic[RegistryItem], ListStr]",
+      "source_line": 225
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntFloatVariadicListInt",
+      "parameters": [],
+      "body": "tuple[int, *TupleValueVariadic[float], ListInt]",
+      "source_line": 228
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntVariadicGeneratorIntIntOrStrOrNoneInt",
+      "parameters": [],
+      "body": "tuple[*TupleIntVariadic, GeneratorIntIntOrStrOrNoneInt]",
+      "source_line": 231
+    },
+    {
+      "kind": "alias",
+      "name": "TupleBuiltinMethodListBuiltinMethodDictCustomAddSetInt",
+      "parameters": [],
+      "body": "tuple[BuiltinMethodList, BuiltinMethodDict, CustomAddSet, int]",
+      "source_line": 234
+    },
+    {
+      "kind": "alias",
+      "name": "TupleHybridContainerIntOrFloatStrOrBoolOrListIntBoolListInt",
+      "parameters": [],
+      "body": "tuple[HybridContainerIntOrFloatStrOrBoolOrListInt, bool, ListInt]",
+      "source_line": 237
+    },
+    {
+      "kind": "alias",
+      "name": "TupleIntOrStrOrCallablePayloadIntIntOrStrOrCallablePayloadStrVariadic",
+      "parameters": [],
+      "body": "tuple[IntOrStrOrCallablePayloadInt, *TupleValueVariadic[IntOrStrOrCallablePayloadStr]]",
+      "source_line": 240
+    },
+    {
+      "kind": "alias",
+      "name": "TupleSupportsMetadataAndNameVariadicNodeMetadata",
+      "parameters": [],
+      "body": "tuple[*TupleValueVariadic[SupportsMetadataAndName], NodeMetadata]",
+      "source_line": 246
+    },
+    {
+      "kind": "alias",
+      "name": "TupleBytearrayMemoryviewBytesInt",
+      "parameters": [],
+      "body": "tuple[bytearray, memoryview, bytes, int]",
+      "source_line": 249
+    },
+    {
+      "kind": "alias",
+      "name": "UnpackingStressResult",
+      "parameters": [],
+      "body": "tuple[int, ListInt, int, *TupleListTupleIntVariadicVariadic]",
+      "source_line": 252
+    },
+    {
+      "kind": "alias",
+      "name": "CallableExamples",
+      "parameters": [],
+      "body": "tuple[CallableVariadicInt, ...]",
+      "source_line": 255
+    },
+    {
+      "kind": "alias",
+      "name": "CallableIntIntSupportsAdditionAndXAndY",
+      "parameters": [],
+      "body": "Callable[[int, int], SupportsAdditionAndXAndY]",
+      "source_line": 736
+    }
+  ],
+  "alias_count": 117
+}

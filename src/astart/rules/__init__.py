@@ -4,6 +4,7 @@ The model modules (``vocabulary``, ``predicate``, ``model``, ``registry``,
 ``catalog`` and ``schema``) do not depend on the AST packages. ``engine``,
 ``facts`` and ``appliers`` are the reference implementation that evaluates
 the catalog against Python source.
+
 """
 
 from __future__ import annotations

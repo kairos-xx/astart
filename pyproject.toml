@@ -27,10 +27,12 @@ where = ["src"]
 include = ["astart*"]
 
 [tool.setuptools.package-data]
-astart = ["py.typed", "rules/catalog/*.json", "rules/schema.json"]
+astart = ["py.typed", "rules/artifacts/catalog/*.json", "rules/artifacts/schema.json"]
+"astart.docstrings" = ["artifacts/catalog.json"]
+"astart.stubs" = ["artifacts/typeshed/**/*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/astart", "tests/scripts", "tests/support"]
 pythonpath = ["src"]
 filterwarnings = ["error"]
 markers = [
@@ -50,6 +52,9 @@ skip_covered = false
 [tool.ruff]
 extend-exclude = [
     "dev",
+    "fixtures",
+    "tests/corpus",
+    "scripts/compare/artifacts/results/result.py",
     ".history",
     "mutants",
     "build",
@@ -59,6 +64,7 @@ extend-exclude = [
     "node_modules",
     "src/node_modules",
     "EXACTUS_RESULTS/COVERAGE_TESTS/ARTIFACTS/COVERAGE/tmp",
+    "src/astart/stubs/artifacts/typeshed"
 
 ]
 line-length = 79
@@ -87,14 +93,18 @@ exclude = [
     "dist",
     "build",
     "dev",
+    "fixtures",
+    "tests/corpus",
+    "scripts/compare/artifacts/results/result.py",
     ".build-cache",
     "vsix",
     "EXACTUS_RESULTS/COVERAGE_TESTS/ARTIFACTS/COVERAGE/tmp",
+    "src/astart/stubs/artifacts/typeshed",
 ]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
-# venvPath = "."
-# venv = ".venv"
+venvPath = "."
+venv = ".venv"
 # extraPaths = ["tools"]
 
 #
@@ -103,22 +113,29 @@ typeCheckingMode = "strict"
 
 [tool.pyrefly]
 project-excludes = [
+    "scripts/compare/artifacts/results/result.py",
+    "tests/corpus/**",
     "**/node_modules/**",
     "**/mutants/**",
     "**/dist/**",
     "**/build/**",
     "**/.build-cache/**",
     "**/vsix/**",
+    "**/astart/stubs/artifacts/typeshed/**",
 ]
 project-includes = ["**/district/**"]
 python-version = "3.13"
-search-path = ["src", ".", "tools"]
+python-interpreter-path = ".venv/bin/python"
+search-path = ["src", "."]
 
 
 [tool.exactus]
 collect-files = true                                                        # bundle FILES/{README,TREE,files.zip} with
 clear = true                                                                # clear reports before running; a list
-exclude = ["dev", "dev/**", "artifacts", "artifacts/**", "EXACTUS_RESULTS"]
+exclude = ["scripts/compare/artifacts/results/result.py", 
+"tests/corpus", 
+"tests/corpus/**", "fixtures",
+"fixtures/**", "dev", "dev/**", "artifacts", "artifacts/**", "EXACTUS_RESULTS","src/astart/stubs/artifacts/typeshed"]
 root = true
 
 
@@ -131,7 +148,7 @@ fail-under = 90       # overall Python+JS coverage floor
 per-file-minimum = 80 # per-source-file coverage floor
 
 [tool.exactus.kwargs_typehints]
-# python = ".venv"
+python = ".venv"
 
 [tool.exactus.docs]
 fail-on = "warning"

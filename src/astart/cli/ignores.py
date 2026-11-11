@@ -6,6 +6,7 @@ every other file's findings are filtered through the effective
 named catalog profile by :func:`resolve`, so per-path
 ``select``/``ignore`` overrides, profile rule sets, severity overrides
 and safety ceilings hold.
+
 """
 
 from __future__ import annotations
@@ -32,8 +33,9 @@ class ResolvedSelection:
     """A selection expanded through its catalog profile.
 
     Attributes:
-        selection: The effective selection.
-        profile: The catalog profile the selection names, or ``None``.
+        selection (Selection): The effective selection.
+        profile (Profile | None): The catalog profile the selection names, or
+            ``None``.
 
     """
 
@@ -45,7 +47,8 @@ class ResolvedSelection:
         """Highest fix safety this selection allows, if configured.
 
         Returns:
-            The explicit ceiling, else the profile's, else ``None``.
+            FixSafety | None:
+                The explicit ceiling, else the profile's, else ``None``.
 
         """
         if self.selection.safety_ceiling is not None:
@@ -58,11 +61,11 @@ class ResolvedSelection:
         """Answer whether a rule runs under this selection.
 
         Args:
-            rule: Catalog rule.
+            rule (Rule): Catalog rule.
 
         Returns:
-            ``True`` when the profile enables the rule and select/ignore
-            keep its code.
+            bool: ``True`` when the profile enables the rule and select/ignore
+                keep its code.
 
         """
         if self.profile is not None and rule.key not in self.profile.rules:
@@ -73,10 +76,10 @@ class ResolvedSelection:
         """Resolve a rule's severity under this selection.
 
         Args:
-            rule: Catalog rule.
+            rule (Rule): Catalog rule.
 
         Returns:
-            The profile's override, else the rule's default.
+            Severity: The profile's override, else the rule's default.
 
         """
         if self.profile is None:
@@ -90,10 +93,10 @@ class ResolvedSelection:
         overridden by the selection's own ``params`` table.
 
         Args:
-            rule: Catalog rule.
+            rule (Rule): Catalog rule.
 
         Returns:
-            Effective parameters keyed by name.
+            Mapping[str, FactValue]: Effective parameters keyed by name.
 
         """
         merged: dict[str, FactValue] = dict(rule.params)
@@ -107,11 +110,11 @@ def resolve(*, selection: Selection, catalog: Catalog) -> ResolvedSelection:
     """Expand a selection through the catalog's profiles.
 
     Args:
-        selection: Effective selection, possibly naming a profile.
-        catalog: Catalog holding the profiles.
+        selection (Selection): Effective selection, possibly naming a profile.
+        catalog (Catalog): Catalog holding the profiles.
 
     Returns:
-        The resolved selection.
+        ResolvedSelection: The resolved selection.
 
     Raises:
         ConfigError: If the named profile does not exist.
@@ -138,13 +141,15 @@ def apply_ignores(
     """Filter reports through the config's path selections.
 
     Args:
-        results: Reports to filter.
-        config: The loaded ``[tool.astart]`` config.
-        catalog: Catalog that resolves rule keys to codes and profiles.
+        results (Sequence[FileReport]): Reports to filter.
+        config (AstartConfig): The loaded ``[tool.astart]`` config.
+        catalog (Catalog): Catalog that resolves rule keys to codes and
+            profiles.
 
     Returns:
-        Reports with excluded files and unselected findings removed,
-        severities rewritten by profile overrides.
+        tuple[FileReport, ...]: Reports with excluded files and unselected
+            findings
+            removed, severities rewritten by profile overrides.
 
     """
     kept: list[FileReport] = []
@@ -178,12 +183,12 @@ def selected_rules(
     """Apply the root selection and profile to a catalog's rules.
 
     Args:
-        rules: Catalog rules.
-        config: The loaded config.
-        catalog: Catalog holding the profiles.
+        rules (Sequence[Rule]): Catalog rules.
+        config (AstartConfig): The loaded config.
+        catalog (Catalog): Catalog holding the profiles.
 
     Returns:
-        Rules the root selection keeps.
+        tuple[Rule, ...]: Rules the root selection keeps.
 
     """
     resolved: ResolvedSelection = resolve(

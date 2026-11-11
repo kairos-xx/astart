@@ -1,0 +1,154 @@
+[
+  {
+    "id": "A-01",
+    "metric": "recovery.std.precision",
+    "op": ">=",
+    "value": 0.999,
+    "unit": "share",
+    "description": "stdlib corpus contradiction precision"
+  },
+  {
+    "id": "A-01",
+    "metric": "recovery.ext.precision",
+    "op": ">=",
+    "value": 0.999,
+    "unit": "share",
+    "description": "external corpus contradiction precision"
+  },
+  {
+    "id": "A-01",
+    "metric": "gold.pass_share",
+    "op": ">=",
+    "value": 1.0,
+    "unit": "share",
+    "description": "gold cases without a contradiction"
+  },
+  {
+    "id": "A-02",
+    "metric": "pair.both.params.exact_share",
+    "op": ">=",
+    "value": 0.9,
+    "unit": "share",
+    "description": "exact parameters/returns on the configured pair"
+  },
+  {
+    "id": "A-02",
+    "metric": "pair.both.variables.exact_share",
+    "op": ">=",
+    "value": 0.9,
+    "unit": "share",
+    "description": "exact variables on the configured pair"
+  },
+  {
+    "id": "A-03",
+    "metric": "pair.all.contradiction_share",
+    "op": "<=",
+    "value": 0.02,
+    "unit": "share",
+    "description": "contradictions of everything written"
+  },
+  {
+    "id": "A-03",
+    "metric": "pair.all.compatible_share",
+    "op": ">=",
+    "value": 0.93,
+    "unit": "share",
+    "description": "exact+narrower+looser of recoverable annotations"
+  },
+  {
+    "id": "A-04",
+    "metric": "recovery.std.new_errors",
+    "op": "==",
+    "value": 0,
+    "unit": "count",
+    "description": "new checker errors on the stdlib corpus"
+  },
+  {
+    "id": "A-04",
+    "metric": "recovery.ext.new_errors",
+    "op": "==",
+    "value": 0,
+    "unit": "count",
+    "description": "new checker errors on the external corpus"
+  },
+  {
+    "id": "A-04",
+    "metric": "pair.both.gated.kept_share",
+    "op": ">=",
+    "value": 0.8,
+    "unit": "share",
+    "description": "annotations kept under the checker gate on the configured pair"
+  },
+  {
+    "id": "A-05",
+    "metric": "semantic.passed_share",
+    "op": ">=",
+    "value": 1.0,
+    "unit": "share",
+    "description": "semantic-equivalence projects passing"
+  },
+  {
+    "id": "A-06",
+    "metric": "idempotence.share",
+    "op": ">=",
+    "value": 1.0,
+    "unit": "share",
+    "description": "fix ∘ fix byte-equal corpus share"
+  },
+  {
+    "id": "A-07",
+    "metric": "determinism.share",
+    "op": ">=",
+    "value": 1.0,
+    "unit": "share",
+    "description": "hash-seed deterministic corpus share"
+  },
+  {
+    "id": "A-08",
+    "metric": "compile.share",
+    "op": ">=",
+    "value": 1.0,
+    "unit": "share",
+    "description": "fixed corpus modules that still compile"
+  },
+  {
+    "id": "A-09",
+    "metric": "kwargs_danger.share",
+    "op": ">=",
+    "value": 1.0,
+    "unit": "share",
+    "description": "danger-matrix calls unchanged by added keywords"
+  },
+  {
+    "id": "A-10",
+    "metric": "roundtrip.dev.params.exact_share",
+    "op": ">=",
+    "value": 0.9,
+    "unit": "share",
+    "description": "fix(untype(typed)) exact parameters/returns"
+  },
+  {
+    "id": "A-11",
+    "metric": "perf.12000.median_seconds",
+    "op": "<=",
+    "value": 5.0,
+    "unit": "seconds",
+    "description": "median seconds per 12k-line module"
+  },
+  {
+    "id": "A-11",
+    "metric": "recovery.std.crashes",
+    "op": "==",
+    "value": 0,
+    "unit": "count",
+    "description": "crashes on the stdlib corpus"
+  },
+  {
+    "id": "A-11",
+    "metric": "recovery.ext.crashes",
+    "op": "==",
+    "value": 0,
+    "unit": "count",
+    "description": "crashes on the external corpus"
+  }
+]

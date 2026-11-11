@@ -1,7 +1,7 @@
 """Bind calls to curated library signatures from ``libkw``.
 
 ``libkw.SIGNATURES`` is a typeshed-generated table of callees whose
-parameters may be passed by keyword.  This module resolves a call's
+parameters may be passed by keyword. This module resolves a call's
 callee to a ``module.qualname`` key — through the module's own import
 aliases or the ``builtins`` fallback — and synthesizes a ``BoundCall``
 so ``calls.add-keywords`` can rewrite positional arguments.
@@ -9,6 +9,7 @@ so ``calls.add-keywords`` can rewrite positional arguments.
 Only syntactically certain bindings are produced: ``*args``/``**kwargs``
 expansions, attribute chains on non-imported roots, shadowed import
 roots and already-keyworded duplicates all refuse.
+
 """
 
 from __future__ import annotations
@@ -32,14 +33,15 @@ if TYPE_CHECKING:
     from astart import CommentedModule
 
 
-def _aliases(*, module: CommentedModule) -> dict[str, str]:
+def import_aliases(*, module: CommentedModule) -> dict[str, str]:
     """Map top-level bound names to the dotted name they refer to.
 
     Args:
-        module: Parsed module.
+        module (CommentedModule): Parsed module.
 
     Returns:
-        Bound name to dotted prefix (``import a.b as ab`` → ``ab: a.b``;
+        dict[str, str]: Bound name to dotted prefix (``import a.b as ab`` →
+            ``ab: a.b``;
         ``from a import b`` → ``b: a.b``; plain ``import a.b`` → ``a: a``).
 
     """
@@ -71,12 +73,13 @@ def _callee_key(
     """Resolve a call's function to a ``(key, root)`` pair.
 
     Args:
-        call: Call expression.
-        aliases: Import aliases of the module.
+        call (Call): Call expression.
+        aliases (Mapping[str, str]): Import aliases of the module.
 
     Returns:
-        The ``SIGNATURES`` lookup key and the root bound name, or
-        ``None`` when the callee is not a plain name or module attribute.
+        tuple[str, str] | None:
+            The ``SIGNATURES`` lookup key and the root bound name, or
+            ``None`` when the callee is not a plain name or module attribute.
 
     """
     parts: list[str] = []
@@ -104,16 +107,17 @@ def callee_name(
     """Name the library function a call refers to, if it is certain.
 
     Args:
-        module: Parsed module.
-        counts: Binding counts from :func:`binding_counts`.
-        call: Call expression.
+        module (CommentedModule): Parsed module.
+        counts (Mapping[str, int]): Binding counts from :func:`binding_counts`.
+        call (Call): Call expression.
 
     Returns:
-        A dotted name such as ``os.getcwd`` or ``builtins.len``; ``None``
-        when the callee is not a plain imported name or unshadowed builtin.
+        str | None:
+            A dotted name such as ``os.getcwd`` or ``builtins.len``; ``None``
+            when the callee is not a plain imported name or unshadowed builtin.
 
     """
-    aliases: dict[str, str] = _aliases(module=module)
+    aliases: dict[str, str] = import_aliases(module=module)
     resolved: tuple[str, str] | None = _callee_key(call=call, aliases=aliases)
     if resolved is None:
         return None
@@ -133,15 +137,15 @@ def _trusted(
     """Answer whether the resolved callee may be keyworded safely.
 
     Args:
-        signature: Table entry for the callee.
-        call: Call expression.
-        counts: Binding counts from :func:`binding_counts`.
-        aliases: Import aliases of the module.
-        root: Root bound name of the callee.
+        signature (KwSignature | None): Table entry for the callee.
+        call (Call): Call expression.
+        counts (Mapping[str, int]): Binding counts from :func:`binding_counts`.
+        aliases (Mapping[str, str]): Import aliases of the module.
+        root (str): Root bound name of the callee.
 
     Returns:
-        ``False`` for shadowed roots, ``**`` expansions, duplicate
-        keywords, or positionals beyond the known signature.
+        bool: ``False`` for shadowed roots, ``**`` expansions, duplicate
+            keywords, or positionals beyond the known signature.
 
     """
     if signature is None:
@@ -179,12 +183,12 @@ def _argument(
     """Bind one positional argument to its signature parameter.
 
     Args:
-        signature: Table entry for the callee.
-        index: Positional index of the argument.
-        value: Argument expression.
+        signature (KwSignature): Table entry for the callee.
+        index (int): Positional index of the argument.
+        value (expr): Argument expression.
 
     Returns:
-        The bound argument with positional or variadic origin.
+        BoundArgument: The bound argument with positional or variadic origin.
 
     """
     if index < len(signature.positional):
@@ -211,11 +215,11 @@ def _has_inner_comment(*, module: CommentedModule, call: Call) -> bool:
     """Answer whether a comment sits inside the call's line span.
 
     Args:
-        module: Parsed module carrying lexical comments.
-        call: Call expression about to be rewritten.
+        module (CommentedModule): Parsed module carrying lexical comments.
+        call (Call): Call expression about to be rewritten.
 
     Returns:
-        ``True`` when rewriting arguments could disturb a comment.
+        bool: ``True`` when rewriting arguments could disturb a comment.
 
     """
     return any(
@@ -234,16 +238,17 @@ def library_binding(
     """Bind a call to a ``libkw`` signature when it is provably safe.
 
     Args:
-        module: Parsed module the call lives in.
-        call: Call expression.
-        counts: Binding counts from :func:`binding_counts`.
+        module (CommentedModule): Parsed module the call lives in.
+        call (Call): Call expression.
+        counts (Mapping[str, int]): Binding counts from :func:`binding_counts`.
 
     Returns:
-        A synthetic binding, or ``None`` when the callee is unknown,
-        shadowed, expanded, or would bind past the known signature.
+        BoundCall | None:
+            A synthetic binding, or ``None`` when the callee is unknown,
+            shadowed, expanded, or would bind past the known signature.
 
     """
-    aliases: dict[str, str] = _aliases(module=module)
+    aliases: dict[str, str] = import_aliases(module=module)
     resolved: tuple[str, str] | None = _callee_key(call=call, aliases=aliases)
     if resolved is None:
         return None

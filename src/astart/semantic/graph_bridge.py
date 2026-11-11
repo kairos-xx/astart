@@ -2,7 +2,8 @@
 
 The two engines own independent identity maps: this bridge exchanges current
 source and immutable type expressions, never foreign mutable graph identities.
-The graph implementation is private to ``astart._graph``.
+The graph implementation is private to ``astart.graph``.
+
 """
 
 from __future__ import annotations
@@ -10,16 +11,16 @@ from __future__ import annotations
 from ast import Module, parse
 from typing import final
 
-from astart._graph.graph.document import AstDocument
-from astart._graph.graph.type_expressions import (
+from astart.graph.graph.document import AstDocument
+from astart.graph.graph.type_expressions import (
     TypeExpression as GraphTypeExpression,
 )
-from astart._graph.graph.type_expressions import (
+from astart.graph.graph.type_expressions import (
     TypeExpressionCodec as GraphTypeExpressionCodec,
 )
-from astart.node_attributes import render_source
 from astart.semantic.type_expressions import TypeExpressionCodec
 from astart.semantic.type_shapes import TypeShape, type_shape
+from astart.source.node_attributes import render_source
 
 
 @final
@@ -36,14 +37,12 @@ class GraphTypeBridge:
             FormatPreservationError: Source patching cannot be safely
                 preserved.
 
-
-
         Args:
-            filename: Filename supplied as str for this operation.
-            tree: Tree supplied as Module for this operation.
+            filename (str): Filename supplied as str for this operation.
+            tree (Module): Tree supplied as Module for this operation.
 
         Returns:
-            AstDocument produced by this operation.
+            AstDocument: AstDocument produced by this operation.
 
         """
         source: str = render_source(tree=tree)
@@ -55,10 +54,11 @@ class GraphTypeBridge:
         """Translate a known shape to the internal immutable type algebra.
 
         Args:
-            shape: Shape supplied as TypeShape for this operation.
+            shape (TypeShape): Shape supplied as TypeShape for this operation.
 
         Returns:
-            GraphTypeExpression produced by this operation.
+            GraphTypeExpression:
+                GraphTypeExpression produced by this operation.
 
         """
         return GraphTypeExpressionCodec.from_ast(
@@ -70,11 +70,12 @@ class GraphTypeBridge:
         """Translate the internal type representation to the native lattice.
 
         Args:
-            expression: The expression examined while translate the internal
-                type representation to the native lattice.
+            expression (GraphTypeExpression): The expression examined while
+                translate the
+                internal type representation to the native lattice.
 
         Returns:
-            TypeShape produced by this operation.
+            TypeShape: TypeShape produced by this operation.
 
         """
         rendered: str = GraphTypeExpressionCodec.to_source(

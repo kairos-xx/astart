@@ -6,6 +6,7 @@ location: the package it belongs to (the chain of ``__init__.py`` files), the
 directories absolute imports start from (the package's parent, a ``src``
 layout, the project root), and its relative imports, which are rewritten
 against the package because the scratch copy is not inside it.
+
 """
 
 from __future__ import annotations
@@ -22,9 +23,11 @@ class Constants:
     """Group module-level constants.
 
     Attributes:
-        package_marker: File that makes a directory a package.
-        source_directory: Conventional directory holding the source tree.
-        path_variable: Environment variable listing extra import roots.
+        package_marker (Final[str]): File that makes a directory a package.
+        source_directory (Final[str]): Conventional directory holding the
+            source tree.
+        path_variable (Final[str]): Environment variable listing extra import
+            roots.
 
     """
 
@@ -39,10 +42,10 @@ class Environment:
     """What a checker needs to resolve a file's imports.
 
     Attributes:
-        roots: Directories absolute imports are resolved from, most specific
-            first, without duplicates.
-        package: Dotted package of the file as names; empty for a module that
-            is not inside a package.
+        roots (tuple[Path, ...]): Directories absolute imports are resolved
+            from, most specific first, without duplicates.
+        package (tuple[str, ...]): Dotted package of the file as names; empty
+            for a module that is not inside a package.
 
     """
 
@@ -54,11 +57,12 @@ def _package_of(*, directory: Path) -> tuple[tuple[str, ...], Path]:
     """Walk up through package directories.
 
     Args:
-        directory: Directory holding the file.
+        directory (Path): Directory holding the file.
 
     Returns:
-        The package names, outermost first, and the directory that contains
-        the outermost package (or ``directory`` itself when it is not one).
+        tuple[tuple[str, ...], Path]: The package names, outermost first, and
+            the directory that contains
+            the outermost package (or ``directory`` itself when it is not one).
 
     """
     names: list[str] = []
@@ -80,12 +84,14 @@ def detect_environment(
     """Work out the import environment of a file.
 
     Args:
-        file: The checked file.
-        project: Project root the checker is configured for.
-        source_roots: Directories the user named explicitly; they come first.
+        file (Path): The checked file.
+        project (Path): Project root the checker is configured for.
+        source_roots (tuple[Path, ...]): Directories the user named explicitly;
+            they come first.
 
     Returns:
-        The package of the file and the roots imports resolve from.
+        Environment:
+            The package of the file and the roots imports resolve from.
 
     """
     directory: Path = file.resolve().parent
@@ -121,11 +127,11 @@ def absolutize_relative_imports(
     and source that does not parse are left as written.
 
     Args:
-        source: Module text.
-        package: Package of the module, outermost first.
+        source (str): Module text.
+        package (tuple[str, ...]): Package of the module, outermost first.
 
     Returns:
-        Text whose imports mean the same but need no package context.
+        str: Text whose imports mean the same but need no package context.
 
     """
     if not package:

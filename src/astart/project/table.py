@@ -6,6 +6,7 @@ module: local definitions first, then import bindings (which may be
 submodules. Anything outside the scanned file set is reported as
 ``external`` rather than unresolvable, so callers can distinguish a
 library reference from an ambiguous one.
+
 """
 
 from __future__ import annotations
@@ -42,15 +43,17 @@ class ResolvedSymbol:
     """Where a name ultimately lives.
 
     Attributes:
-        module: Dotted module owning the definition. For
+        module (str): Dotted module owning the definition. For
             :attr:`SymbolKind.external` this is the library module the name
             was imported from.
-        name: Member name inside ``module``; empty for module bindings.
-        qualified: ``module.name`` in one string.
-        kind: What the name is.
-        external: Whether the definition lies outside the scanned project.
-        via: Intermediate qualified names the resolution passed through
-            (re-export chain), for diagnostics.
+        name (str): Member name inside ``module``; empty for module bindings.
+        qualified (str): ``module.name`` in one string.
+        kind (SymbolKind): What the name is.
+        external (bool): Whether the definition lies outside the scanned
+            project.
+        via (tuple[str, ...]): Intermediate qualified names the resolution
+            passed
+            through (re-export chain), for diagnostics.
 
     """
 
@@ -77,7 +80,7 @@ class SymbolTable:
         """Build the table over a fixed set of scans.
 
         Args:
-            scans: Module scans by dotted name.
+            scans (dict[str, ModuleScan]): Module scans by dotted name.
 
         """
         self.scans: dict[str, ModuleScan] = scans
@@ -94,10 +97,10 @@ class SymbolTable:
         """Return the scan of a module.
 
         Args:
-            name: Dotted module name.
+            name (str): Dotted module name.
 
         Returns:
-            The scan, or ``None``.
+            ModuleScan | None: The scan, or ``None``.
 
         """
         return self.scans.get(name)
@@ -116,12 +119,12 @@ class SymbolTable:
         nor imported may still name a sibling submodule.
 
         Args:
-            module: Dotted module the name is read in.
-            name: Local name to resolve.
+            module (str): Dotted module the name is read in.
+            name (str): Local name to resolve.
 
         Returns:
-            The resolution, or ``None`` when the name is ambiguous or
-            unbound.
+            ResolvedSymbol | None: The resolution, or ``None`` when
+                the name is ambiguous or unbound.
 
         """
         return self._resolve(module=module, name=name, seen=())
@@ -138,11 +141,11 @@ class SymbolTable:
         resolves inside the module or member it resolved to.
 
         Args:
-            module: Module the path is read in.
-            dotted: Attribute path (``"a"`` or ``"a.b.c"``).
+            module (str): Module the path is read in.
+            dotted (str): Attribute path (``"a"`` or ``"a.b.c"``).
 
         Returns:
-            The final symbol, or ``None``.
+            ResolvedSymbol | None: The final symbol, or ``None``.
 
         """
         parts: list[str] = dotted.split(sep=".")
@@ -160,10 +163,10 @@ class SymbolTable:
         """Resolve a fully qualified ``module.name`` path.
 
         Args:
-            qualified: Dotted path such as ``"pkg.mod.func"``.
+            qualified (str): Dotted path such as ``"pkg.mod.func"``.
 
         Returns:
-            The symbol, or ``None``.
+            ResolvedSymbol | None: The symbol, or ``None``.
 
         """
         parts: list[str] = qualified.split(sep=".")
@@ -198,12 +201,13 @@ class SymbolTable:
         the owning module.
 
         Args:
-            current: Symbol the attribute is read off.
-            part: Attribute name.
+            current (ResolvedSymbol): Symbol the attribute is read off.
+            part (str): Attribute name.
 
         Returns:
-            The next symbol, or ``None`` when the attribute cannot be
-            resolved inside a project module.
+            ResolvedSymbol | None:
+                The next symbol, or ``None`` when the attribute
+                cannot be resolved inside a project module.
 
         """
         if current.kind is SymbolKind.module:
@@ -238,10 +242,10 @@ class SymbolTable:
         bound name counts, including names pulled in by star imports.
 
         Args:
-            module: Dotted module name.
+            module (str): Dotted module name.
 
         Returns:
-            The export surface.
+            frozenset[str]: The export surface.
 
         """
         if module in self._exports_cache:
@@ -261,11 +265,11 @@ class SymbolTable:
         """Compute exports with star-import cycle protection.
 
         Args:
-            module: Dotted module name.
-            seen: Modules already on this resolution chain.
+            module (str): Dotted module name.
+            seen (tuple[str, ...]): Modules already on this resolution chain.
 
         Returns:
-            The export surface.
+            frozenset[str]: The export surface.
 
         """
         scan: ModuleScan | None = self.scans.get(module)
@@ -291,11 +295,11 @@ class SymbolTable:
         """Classify a locally defined name.
 
         Args:
-            scan: Module the name is defined in.
-            name: Defined name.
+            scan (ModuleScan): Module the name is defined in.
+            name (str): Defined name.
 
         Returns:
-            The symbol kind.
+            SymbolKind: The symbol kind.
 
         """
         if name in scan.functions:
@@ -315,13 +319,14 @@ class SymbolTable:
         """Follow named-import records binding one local name.
 
         Args:
-            name: Local name being resolved.
-            scan: Module being searched.
-            qualified: The name's qualified path, for ``via`` chains.
-            seen: Qualified names already on this chain.
+            name (str): Local name being resolved.
+            scan (ModuleScan): Module being searched.
+            qualified (str): The name's qualified path, for ``via`` chains.
+            seen (tuple[str, ...]): Qualified names already on this chain.
 
         Returns:
-            The resolution, or ``None`` when no record binds the name.
+            ResolvedSymbol | None:
+                The resolution, or ``None`` when no record binds the name.
 
         """
         for record in scan.imports:
@@ -371,14 +376,14 @@ class SymbolTable:
         """Resolve a name through star-imported modules.
 
         Args:
-            module: Module the name is read in.
-            name: Local name.
-            scan: Module being searched.
-            qualified: The name's qualified path.
-            seen: Modules and names already on this chain.
+            module (str): Module the name is read in.
+            name (str): Local name.
+            scan (ModuleScan): Module being searched.
+            qualified (str): The name's qualified path.
+            seen (tuple[str, ...]): Modules and names already on this chain.
 
         Returns:
-            The resolution, or ``None``.
+            ResolvedSymbol | None: The resolution, or ``None``.
 
         """
         for star in scan.star_modules:
@@ -405,12 +410,12 @@ class SymbolTable:
         """Resolve one name with re-export cycle protection.
 
         Args:
-            module: Module the name is read in.
-            name: Local name.
-            seen: Qualified names already on this chain.
+            module (str): Module the name is read in.
+            name (str): Local name.
+            seen (tuple[str, ...]): Qualified names already on this chain.
 
         Returns:
-            The resolution, or ``None``.
+            ResolvedSymbol | None: The resolution, or ``None``.
 
         """
         scan: ModuleScan | None = self.scans.get(module)

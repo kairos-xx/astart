@@ -1,35 +1,41 @@
-# `docs/`
+# Documentation
 
-Use `from astart import ...`. The `astart.semantic` and `astart._graph` trees are implementation modules; the latter is not a separate distribution.
+Use `from astart import ...` for the supported public API. Internal semantic
+and graph modules are implementation details.
+
+| Topic | Contents |
+| --- | --- |
+| [Planning and status](planning/README.md) | Active tasks, completed work and the machine-readable progress ledger. |
+| [Architecture and inference](architecture/README.md) | System structure, the shared AST, inference evidence and generated naming contracts. |
+| [Usage and reference](guides/README.md) | Public APIs, command-line usage, rule authoring and diagnostic reference. |
+| [Engineering](engineering/README.md) | Continuous integration, security and compatibility policies. |
+| [Analysis and benchmarks](analysis/README.md) | Measured conversion behavior, inference gaps and legacy-project assessments. |
+| [JSON schemas](schema/README.md) | Finding, report and rule schemas. |
+| [Design plans](superpowers/README.md) | Existing specifications, plans and roadmaps. |
+
+Start with the [API guide](guides/API.md), [CLI guide](guides/cli.md), or
+[active backlog](planning/TODO.md).
+
+Generated conversion evidence is maintained by `python -m scripts.compare`:
+
+- [Comparison report](../scripts/compare/artifacts/results/conversion-report.md)
+- [Machine-readable comparison](../scripts/compare/artifacts/results/conversion-report.json)
 
 <!-- exactus:inventory:start -->
 ## Directory contents
 
 ### Files
 
-- [`API.md`](API.md) — Use `from astart import ...`. The `astart.semantic` and `astart._graph` trees are implementation modules; the latter is not a separate distribution.
-- [`CONSOLIDATION.md`](CONSOLIDATION.md) — All code now lives under `src/astart/`, with one installable package and one supported top-level import API. The lexical AST, source editor, semantic solver, and graph converter are components of this distribution. The graph converter is internal to `astart._graph` and contributes verified annotation candidates to `astart.semantic` through `semantic.graph_conversion`.
-- [`TODO-archive.md`](TODO-archive.md) — Done tasks in full and the historical chapters of the old TODO. The living backlog is `docs/TODO.md`.
-- [`TODO.md`](TODO.md) — The living backlog: open work only, in 22 numbered chapters. Done tasks and history are in `docs/TODO-archive.md`.
-- [`architecture.md`](architecture.md) — One paragraph per module, taken verbatim from each module's docstring.
-- [`benchmarks.md`](benchmarks.md) — `astart.rules.recovery` strips the parameter and return annotations from a well-typed module, runs the guarded fixer, and compares what it wrote with the original. Run it with
-- [`conversion-annotated.py.txt`](conversion-annotated.py.txt) — Provide conversion annotated.py txt content.
-- [`conversion-output.py.txt`](conversion-output.py.txt) — Provide conversion output.py txt content.
-- [`conversion-report.json`](conversion-report.json) — Provide conversion report json content.
-- [`conversion-report.md`](conversion-report.md) — *Generated Sun 08 Nov 2026, 19:12 WET by \[`scripts/conversion_report.py`\](../scripts/conversion_report.py). Do not edit; run the script again.*
-- [`evidence-ladder.md`](evidence-ladder.md) — Every fix `astart` offers is backed by a level of evidence, and every guarded fix requires a *combination* of levels — never inference alone. The ladder is defined in `docs/TODO.md` §2 and enforced by `src/astart/rules/hints.py` + `src/astart/rules/confidence.py`.
-- [`hint-propagation.md`](hint-propagation.md) — How `HintIndex` decides which annotations `astart fix` may write. The machinery lives in `src/astart/rules/hints.py`; this page describes what the three core methods do and the order the propagation passes run in. It is a specification, not a change log.
-- [`negotiation.md`](negotiation.md) — `astart.rules.negotiation` types a module by letting evidence travel along a graph, in both directions, until nothing changes. It supplements the older hint index (`rules/hints.py`) and is on by default (`--no-negotiate` turns it off). The idea comes from the author's earlier Semantic Contract Farm project; this page records how it was adapted for a tool whose rule is *zero wrong annotations*.
-- [`refusals.md`](refusals.md) — `astart` refuses rather than guesses. Every skip or refusal uses a closed vocabulary defined in `src/astart/rules/reasons.py`; no fix is ever silently dropped. This catalogue explains each reason, what it means, and what you can do about it.
-- [`rule-authoring.md`](rule-authoring.md) — How to add a rule to `astart`. The ontology is declarative: a rule is data (`Rule`, `Fix`, `Profile`, `Relation`) validated by `verify_catalog`, evaluated by `rules/engine.py`, applied by `rules/runner.py`. Design spec: `docs/TODO.md` §11 (M8) and `src/astart/rules/model.py`.
-- [`rules.md`](rules.md) — One section per catalog rule, generated by ``scripts/generate_rule_docs.py``. Do not edit by hand; regenerate after changing ``src/astart/rules/catalog/``.
-- [`skip-codes.md`](skip-codes.md) — Every value of `SkipCode` in `src/astart/rules/reasons.py` — why the runner did not apply a selected fix. Each line gives the string value and the sentence from the member's docstring.
-- [`skip-reasons.md`](skip-reasons.md) — Every value of `Rejection` in `src/astart/rules/reasons.py` — why a type hint was refused. Each line gives the string value and the sentence from the member's docstring.
-- [`status.json`](status.json) — Provide status json content.
-- [`typing-inference.md`](typing-inference.md) — What `_Typer` in `src/astart/rules/provable.py` can prove from an expression's syntax alone, and which evidence classes a written annotation must pass through before it is applied.
+No direct files besides this README.
 
 ### Subdirectories
 
+- [`analysis/`](analysis/README.md) — Measured conversion behavior, inference gaps and legacy-project assessments.
+- [`architecture/`](architecture/README.md) — System structure, the shared AST, inference evidence and generated naming contracts.
+- [`engineering/`](engineering/README.md) — Continuous integration, security and compatibility policies.
+- [`guides/`](guides/README.md) — Public APIs, command-line usage, rule authoring and diagnostic reference.
+- [`planning/`](planning/README.md) — Active tasks, completed work and the machine-readable progress ledger.
+- [`schema/`](schema/README.md) — Provide finding json content.
 - [`superpowers/`](superpowers/README.md) — > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- \\\[ \\\]`) syntax for tracking.
 
 <!-- exactus:inventory:end -->

@@ -14,7 +14,7 @@ Two-way type negotiation over a graph of contracts.
 - [`containers.py`](containers.py) — Find what is put into a local container that starts out empty.
 - [`graph.py`](graph.py) — The graph of contracts between nodes.
 - [`model.py`](model.py) — Data model of the contract graph: relations, candidates, contracts.
-- [`narrowing.py`](narrowing.py) — Read what an ``if`` test says about a name on each of its arms.
+- [`narrowing.py`](narrowing.py) — Read what tests, patterns and handlers say about names on each arm.
 - [`negotiator.py`](negotiator.py) — Propagate candidates through the contract graph until beliefs settle.
 - [`policy.py`](policy.py) — When a settled belief is good enough to write as an annotation.
 - [`run.py`](run.py) — Negotiate the annotations of a whole module.
